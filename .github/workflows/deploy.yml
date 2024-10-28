@@ -47,8 +47,8 @@ jobs:
           sudo chown -R www-data:www-data /var/www/Stray-Safe/storage /var/www/Stray-Safe/bootstrap/cache
 
           cd /var/www/Stray-Safe
-          git pull origin main
-          
+          sudo git pull origin main
+
           composer install --no-interaction --prefer-dist --optimize-autoloader
       
           npm install
