@@ -36,6 +36,7 @@ jobs:
           chmod 700 ~/.ssh/ # Ensure correct permissions for .ssh directory
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa # Ensure correct permissions for the private key file
+          touch ~/.ssh/known_hosts # Create known_hosts file if it doesn't exist
           ssh-keygen -R "${{ secrets.DO_HOST }}" -f ~/.ssh/known_hosts # Remove any existing entries for the host
           ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts # Add host key
           cat ~/.ssh/known_hosts # Debugging: check if host key is added
