@@ -1,22 +1,43 @@
-<script setup>
-import ApplicationLogo from '@/Components/ApplicationLogo.vue';
-import { Link } from '@inertiajs/vue3';
-</script>
-
 <template>
-    <div
-        class="flex min-h-screen flex-col items-center bg-gray-100 pt-6 sm:justify-center sm:pt-0 dark:bg-gray-900"
-    >
-        <div>
-            <Link href="/">
-                <ApplicationLogo class="h-20 w-20 fill-current text-gray-500" />
-            </Link>
-        </div>
+    <div class="flex min-h-screen items-center justify-center background-website pt-6 sm:pt-0 dark:bg-gray-900">
+        <div class="flex w-full max-w-6xl bg-white rounded-lg shadow-xl overflow-hidden dark:bg-gray-800">
+            <!-- Left side: Slot with its own container -->
+            <div class="flex flex-col ml-10 my-10 justify-center items-center w-full max-w-md p-10 bg-white shadow-xl rounded-xl dark:bg-gray-700">
+                <div class="w-full">
+                    <slot />
+                </div>
+            </div>
 
-        <div
-            class="mt-6 w-full overflow-hidden bg-white px-6 py-4 shadow-md sm:max-w-md sm:rounded-lg dark:bg-gray-800"
-        >
-            <slot />
+            <!-- Right side: Image -->
+            <div class="sm:block w-1/2">
+                <img 
+                    v-if="page === 'register'" 
+                    src="/storage/images/PersonRegistering2.png" 
+                    alt="Person Registering" 
+                    class="object-cover h-full w-full rounded-r-lg ml-10" 
+                />
+                <img 
+                    v-if="page === 'login'" 
+                    src="/storage/images/PersonLearning.png" 
+                    alt="Default Image" 
+                    class="object-cover h-full w-full rounded-r-lg ml-10" 
+                />
+            </div>
         </div>
     </div>
 </template>
+<script setup>
+const props = defineProps({
+    page: {
+        type: String,
+        default: ''
+    }
+});
+</script>
+
+
+<style scoped>
+.background-website{
+    background-color: #F8F3EC;
+}
+</style>
