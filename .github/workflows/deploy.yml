@@ -66,4 +66,6 @@ jobs:
         run: |
           ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts # Ensure host key is present
           cat ~/.ssh/known_hosts # Debugging: check if host key is added
-          rsync -av -e "ssh -v -o UserKnownHostsFile=~/.ssh/known_hosts -p ${{ secrets.SSH_PORT }}" ${{ github.workspace }}/public/build/ ${{ secrets.DO_USERNAME }}@${{ secrets.DO_HOST }}:/var/www/Stray-Safe/public/build/
+          rsync -av -e "ssh -v -o UserKnownHostsFile=~/.ssh/known_hosts -p ${{ secrets.SSH_PORT }}" \
+          --rsync-path="sudo rsync" \
+          ${{ github.workspace }}/public/build/ ${{ secrets.DO_USERNAME }}@${{ secrets.DO_HOST }}:/var/www/Stray-Safe/public/build/
