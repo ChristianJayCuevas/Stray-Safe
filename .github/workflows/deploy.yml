@@ -1,65 +1,60 @@
-name: Deploy to DigitalOcean
+name: DigitalOceanDeploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v2
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.2'
-        extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, mysql, zip
-        coverage: none
-        tools: composer:v2
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
 
-    - name: Copy .env
-      run: php -r "file_exists('.env') || copy('.env.example', '.env');"
-      
-    - name: Install Dependencies
-      run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
 
-    - name: Deploy to DigitalOcean
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.DO_HOST }}
-        username: ${{ secrets.DO_USERNAME }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        port: 22
-        script: |
-          set -e    
-          sudo git config --global --add safe.directory /var/www/Stray-Safe
+      - name: Copy .env
+        run: cp .env.example .env
 
-          sudo chown -R www-data:www-data /var/www/Stray-Safe
-          sudo chown -R www-data:www-data /var/www/Stray-Safe/vendor
-          sudo chown -R www-data:www-data /var/www/Stray-Safe/node_modules
-          sudo chown -R www-data:www-data /var/www/Stray-Safe/.git
-          sudo chmod -R 775 /var/www/Stray-Safe/.git
-          sudo find /var/www/Stray-Safe -type f -exec chmod 664 {} \;
-          sudo find /var/www/Stray-Safe -type d -exec chmod 775 {} \;
-          sudo chmod -R 775 /var/www/Stray-Safe/storage /var/www/Stray-Safe/bootstrap/cache
-          sudo chown -R www-data:www-data /var/www/Stray-Safe/storage /var/www/Stray-Safe/bootstrap/cache
+      - name: Install Composer Dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
 
-          cd /var/www/Stray-Safe
-          sudo git pull origin main
+      - name: Install Node Dependencies and Build Assets
+        run: |
+          npm ci
+          npm run build
 
-          sudo composer install --no-interaction --prefer-dist --optimize-autoloader
-        
-          sudo rm -rf node_modules/
-          sudo npm install
-          sudo chmod -R 775 /var/www/Stray-Safe/node_modules/.bin
-          sudo npm run build
-      
-          sudo php artisan migrate --force
-          sudo php artisan config:cache
-          sudo php artisan route:cache
-          sudo php artisan view:cache
-      
-          sudo systemctl reload nginx
-          sudo systemctl reload php8.2-fpm
+      - name: Deploy to DigitalOcean
+        if: ${{ success() }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            cd /var/www/Stray-Safe
+            git pull origin main
+            composer install --no-interaction --prefer-dist --optimize-autoloader
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+
+      - name: Install SSH Key
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy Build Files to DigitalOcean Server
+        run: |
+          rsync -r -e "ssh -p ${{ secrets.SSH_PORT }}" ${{ github.workspace }}/public/build/ ${{ secrets.DO_USERNAME }}@${{ secrets.DO_HOST }}:/var/www/Stray-Safe/public/build/
