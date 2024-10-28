@@ -27,9 +27,10 @@ const submit = () => {
         <p class="message mb-3">Signup now and get full access to our app. </p>
         <form @submit.prevent="submit">
             <div>
-                <InputLabel for="name" value="Name" />
 
-                <TextInput
+                <q-input
+                    outlined
+                    label="Name"
                     id="name"
                     type="text"
                     class="mt-1 block w-full"
@@ -43,9 +44,9 @@ const submit = () => {
             </div>
 
             <div class="mt-4">
-                <InputLabel for="email" value="Email" />
-
-                <TextInput
+                <q-input
+                    outlined
+                    label="Email"
                     id="email"
                     type="email"
                     class="mt-1 block w-full"
@@ -58,9 +59,9 @@ const submit = () => {
             </div>
 
             <div class="mt-4">
-                <InputLabel for="password" value="Password" />
-
-                <TextInput
+                <q-input
+                    outlined
+                    label="Password"
                     id="password"
                     type="password"
                     class="mt-1 block w-full"
@@ -73,12 +74,9 @@ const submit = () => {
             </div>
 
             <div class="mt-4">
-                <InputLabel
-                    for="password_confirmation"
-                    value="Confirm Password"
-                />
-
-                <TextInput
+                <q-input
+                    outlined
+                    label="Confirm Password"
                     id="password_confirmation"
                     type="password"
                     class="mt-1 block w-full"

@@ -43,31 +43,43 @@ function scrollToSection(sectionId, tabId) {
 
             <div class="tab-container">
                 <input type="radio" name="tab" id="tab1" class="tab tab--1" />
-                <label class="tab_label" for="tab1" @click.prevent="scrollToSection('#home', 'tab1')">Home</label>
+                <label class="tab_label" for="tab1" @click.prevent="scrollToSection('#hero', 'tab1')">Home</label>
                 <input type="radio" name="tab" id="tab2" class="tab tab--2" />
                 <label class="tab_label" for="tab2"
                     @click.prevent="scrollToSection('#features', 'tab2')">Features</label>
                 <div class="indicator"></div>
             </div>
 
-           <div class="flex items-center">
-            <Link href="/login"><q-btn label="Login" padding="xs lg" class="btn-color-2" rounded flat/></Link>
-            <Link href="/register"><q-btn label="Register"  padding="xs lg" class="btn-color" flat rounded /></Link>
+            <div class="flex items-center">
+                <Link href="/login"><q-btn label="Login" padding="xs lg" class="btn-color-2" rounded flat /></Link>
+                <Link href="/register"><q-btn label="Register" padding="xs lg" class="btn-color" flat rounded /></Link>
             </div>
-          
+
         </div>
         <div id="home" class="landing-wrapper overflow-hidden">
-            <div id="hero" class="flex flex-col pt-6 px-6 lg:px-20 overflow-hidden">
-                <div class="mx-6 md:mx-20 mt-0 md:mt-6">
-                    <h1 class="text-6xl font-bold text-gray-900 leading-tight "><span class="font-light block">Stray
-                            Safe</span>Caring for strays and Securing streets</h1>
-                    <p class="font-normal text-2xl leading-normal md:mt-4 text-gray-700">Classifying strays, monitoring
-                        their locations and finding their homes.</p>
-                    <q-btn label="Get Started" push rounded class="btn-color" size="20px"></q-btn>
+            <div id="hero" class="flex flex-col pt-6 px-6 lg:px-20 mt-6 overflow-hidden">
+                <div class="mx-6 md:mx-20 mt-2 md:mt-6 text-center">
+                    <h1 class="text-6xl font-bold text-gray-900 leading-tight">
+                        Caring for strays and Securing streets
+                    </h1>
+                    <p class="font-normal text-2xl leading-normal md:mt-4 text-gray-700">
+                        Detecting strays, monitoring their locations and finding their homes.
+                    </p>
+                    <div class="mt-4">
+                        <q-btn label="Get Started" push rounded class="btn-color" size="20px"></q-btn>
+                    </div>
                 </div>
-                <div class="flex justify-center md:justify-end">
-                    <img src="/storage/images/StrayDog.png" alt="Hero Image" class="w-60 h-60 md:w-auto" />
-                    <img src="/storage/images/StrayCatt.png" alt="Hero Image" class="w-60 h-60 md:w-auto" />
+                <div class="hero-container relative">
+                    <div class="flex justify-center md:justify-end" style="transform: translateY(90px);">
+                        <img src="/storage/images/WebHero.png" alt="Hero Image"
+                            class="w-70 h-70 md:w-auto relative z-10" />
+                    </div>
+                    <div class="custom-shape">
+                        <svg viewBox="0 0 1440 400" xmlns="http://www.w3.org/2000/svg" class="wave"
+                            preserveAspectRatio="none">
+                            <path fill="#91D2CC" fill-opacity="0.2" d="M0,160L1440,64L1440,400L0,400Z"></path>
+                        </svg>
+                    </div>
                 </div>
             </div>
             <div id="features" class="py-6 px-6 lg:px-20 mt-8 mx-0 lg:mx-20">
@@ -147,6 +159,46 @@ function scrollToSection(sectionId, tabId) {
     </div>
 </template>
 <style scoped>
+.hero-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 40px;
+    /* Adjust as needed */
+}
+
+.custom-shape {
+    position: relative;
+    width: 100vw;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+    overflow: hidden;
+    line-height: 0;
+    margin-top: -80px;
+}
+
+.wave {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: clamp(200px, 30vw, 400px);
+    /* Increased height */
+}
+
+/* Responsive adjustments */
+@media (max-width: 767px) {
+    .wave {
+        height: clamp(150px, 25vw, 300px);
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+    .wave {
+        height: clamp(175px, 28vw, 350px);
+    }
+}
+
 .btn-color-2 {
     background-color: transparent;
     color: black;
@@ -156,6 +208,7 @@ function scrollToSection(sectionId, tabId) {
     background-color: #38a3a5;
     color: white;
 }
+
 .transparent-button {
     display: inline-block;
     padding: 8px 16px;
@@ -280,7 +333,7 @@ function scrollToSection(sectionId, tabId) {
 
 .tab-container {
     position: relative;
-    
+
     display: flex;
     flex-direction: row;
     align-items: flex-start;
@@ -295,7 +348,7 @@ function scrollToSection(sectionId, tabId) {
     content: "";
     width: 130px;
     height: 28px;
-    background:  #38a3a5;
+    background: #38a3a5;
     position: absolute;
     top: 2px;
     left: 2px;
