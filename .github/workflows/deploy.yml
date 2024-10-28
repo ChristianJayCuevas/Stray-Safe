@@ -59,4 +59,4 @@ jobs:
 
       - name: Copy Build Files to DigitalOcean Server
         run: |
-          rsync -r -e "ssh -p ${{ secrets.SSH_PORT }}" ${{ github.workspace }}/public/build/ ${{ secrets.DO_USERNAME }}@${{ secrets.DO_HOST }}:/var/www/Stray-Safe/public/build/
+          sudo rsync -r -e "ssh -p ${{ secrets.SSH_PORT }}" ${{ github.workspace }}/public/build/ ${{ secrets.DO_USERNAME }}@${{ secrets.DO_HOST }}:/var/www/Stray-Safe/public/build/
