@@ -50,7 +50,8 @@ jobs:
           sudo git pull origin main
 
           sudo composer install --no-interaction --prefer-dist --optimize-autoloader
-      
+        
+          rm -rf node_modules/
           sudo npm install
           sudo chmod -R 775 /var/www/Stray-Safe/node_modules/.bin
           sudo npm run build
