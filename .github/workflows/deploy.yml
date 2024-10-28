@@ -35,9 +35,6 @@ jobs:
         script: |
           set -e    
           git config --global --add safe.directory /var/www/Stray-Safe
-          
-          cd /var/www/Stray-Safe
-          git pull origin main
 
           sudo chown -R www-data:www-data /var/www/Stray-Safe
           sudo chown -R www-data:www-data /var/www/Stray-Safe/vendor
@@ -48,7 +45,10 @@ jobs:
           sudo find /var/www/Stray-Safe -type d -exec chmod 775 {} \;
           sudo chmod -R 775 /var/www/Stray-Safe/storage /var/www/Stray-Safe/bootstrap/cache
           sudo chown -R www-data:www-data /var/www/Stray-Safe/storage /var/www/Stray-Safe/bootstrap/cache
-      
+
+          cd /var/www/Stray-Safe
+          git pull origin main
+          
           composer install --no-interaction --prefer-dist --optimize-autoloader
       
           npm install
