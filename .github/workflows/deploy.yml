@@ -40,8 +40,9 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script_stop: true
           script: |
+            sudo git config --global --add safe.directory /var/www/Stray-Safe
             cd /var/www/Stray-Safe
-            git pull origin main
+            sudo git pull origin main
             composer install --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
             php artisan config:cache
