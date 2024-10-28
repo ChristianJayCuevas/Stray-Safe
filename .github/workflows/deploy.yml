@@ -52,10 +52,10 @@ jobs:
 
       - name: Install SSH Key
         run: |
-          mkdir -p ~/.ssh/
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
+          sudo mkdir -p ~/.ssh/
+          sudo echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          sudo chmod 600 ~/.ssh/id_rsa
+          sudo ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
 
       - name: Copy Build Files to DigitalOcean Server
         run: |
