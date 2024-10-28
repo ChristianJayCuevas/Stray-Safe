@@ -36,9 +36,10 @@ jobs:
           chmod 700 ~/.ssh/ # Ensure correct permissions for .ssh directory
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa # Ensure correct permissions for the private key file
-          touch ~/.ssh/known_hosts # Create known_hosts file if it doesn't exist
+          touch ~/.ssh/known_hosts # Make sure the known_hosts file exists
           ssh-keygen -R "${{ secrets.DO_HOST }}" -f ~/.ssh/known_hosts # Remove any existing entries for the host
           ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts # Add host key
+          chmod 600 ~/.ssh/known_hosts # Ensure correct permissions for known_hosts file
           cat ~/.ssh/known_hosts # Debugging: check if host key is added
 
       - name: Deploy to DigitalOcean
@@ -65,4 +66,4 @@ jobs:
         run: |
           ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts # Ensure host key is present
           cat ~/.ssh/known_hosts # Debugging: check if host key is added
-          sudo rsync -av -e "ssh -v -p ${{ secrets.SSH_PORT }}" ${{ github.workspace }}/public/build/ ${{ secrets.DO_USERNAME }}@${{ secrets.DO_HOST }}:/var/www/Stray-Safe/public/build/
+          sudo rsync -av -e "ssh -o UserKnownHostsFile=~/.ssh/known_hosts -p ${{ secrets.SSH_PORT }}" ${{ github.workspace }}/public/build/ ${{ secrets.DO_USERNAME }}@${{ secrets.DO_HOST }}:/var/www/Stray-Safe/public/build/
