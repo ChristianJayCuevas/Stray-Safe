@@ -33,15 +33,21 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 22
         script: |
+          set -e    
           git config --global --add safe.directory /var/www/Stray-Safe
-      
+          
+          cd /var/www/Stray-Safe
+          git pull origin main
+
           sudo chown -R www-data:www-data /var/www/Stray-Safe
+          sudo chown -R www-data:www-data /var/www/Stray-Safe/vendor
+          sudo chown -R www-data:www-data /var/www/Stray-Safe/node_modules
+          sudo chown -R www-data:www-data /var/www/Stray-Safe/.git
+          sudo chmod -R 775 /var/www/Stray-Safe/.git
           sudo find /var/www/Stray-Safe -type f -exec chmod 664 {} \;
           sudo find /var/www/Stray-Safe -type d -exec chmod 775 {} \;
           sudo chmod -R 775 /var/www/Stray-Safe/storage /var/www/Stray-Safe/bootstrap/cache
-      
-          cd /var/www/Stray-Safe
-          git pull origin main
+          sudo chown -R www-data:www-data /var/www/Stray-Safe/storage /var/www/Stray-Safe/bootstrap/cache
       
           composer install --no-interaction --prefer-dist --optimize-autoloader
       
@@ -54,3 +60,4 @@ jobs:
           php artisan view:cache
       
           sudo systemctl reload nginx
+          sudo systemctl reload php8.2-fpm
