@@ -1,3 +1,41 @@
+<script setup>
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import Card from '@/Components/Card.vue';
+import Pagination from '@/Components/Pagination.vue';
+import { usePage } from '@inertiajs/vue3';
+import { ref, computed } from 'vue';
+
+const { props } = usePage();
+const posts = ref(props.posts);
+const authUser = ref(props.auth.user || {});
+const search = ref('');
+
+defineProps({
+    posts: Object,
+    comments: Object,
+    isFollowing: Boolean,
+    search: String,
+});
+
+const filteredPosts = computed(() => {
+    if (!search.value.trim()) {
+        return posts.value.data;
+    }
+    const searchTerm = search.value.toLowerCase();
+    return posts.value.data.filter(post => {
+        // Use optional chaining and default values
+        const title = (post.title || '').toLowerCase();
+        const content = (post.description || '').toLowerCase();
+        const username = (post.user.username || '').toLowerCase();
+        return title.includes(searchTerm) || content.includes(searchTerm) || username.includes(searchTerm);
+    });
+});
+
+const clearSearch = () => {
+    search.value = '';
+};
+</script>
+
 <template>
     <AuthenticatedLayout>
         <template #header>
@@ -42,43 +80,7 @@
         </div>
     </AuthenticatedLayout>
 </template>
-<script setup>
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import Card from '@/Components/Card.vue';
-import Pagination from '@/Components/Pagination.vue';
-import { usePage } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
 
-const { props } = usePage();
-const posts = ref(props.posts);
-const authUser = ref(props.auth.user || {});
-const search = ref('');
-
-defineProps({
-    posts: Object,
-    comments: Object,
-    isFollowing: Boolean,
-    search: String,
-});
-
-const filteredPosts = computed(() => {
-    if (!search.value.trim()) {
-        return posts.value.data;
-    }
-    const searchTerm = search.value.toLowerCase();
-    return posts.value.data.filter(post => {
-        // Use optional chaining and default values
-        const title = (post.title || '').toLowerCase();
-        const content = (post.description || '').toLowerCase();
-        const username = (post.user.username || '').toLowerCase();
-        return title.includes(searchTerm) || content.includes(searchTerm) || username.includes(searchTerm);
-    });
-});
-
-const clearSearch = () => {
-    search.value = '';
-};
-</script>
 <style scoped>
 .dashboard-container {
     display: flex;

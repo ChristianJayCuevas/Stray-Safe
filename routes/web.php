@@ -25,6 +25,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('Dashboard');
     })->name('dashboard');
 
+    Route::get('/map', function () {
+        return Inertia::render('StrayMap');
+    })->name('map');
+
     // For the homepage
     Route::get('/home', [PostController::class, 'index'])->name('home');
 

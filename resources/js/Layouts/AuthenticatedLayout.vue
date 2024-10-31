@@ -171,7 +171,7 @@
         >
             <q-scroll-area class="fit" :horizontal-thumb-style="{ opacity: 0 }">
                 <q-list padding>
-                    <Link >
+                    <Link :href="route('dashboard')">
                         <q-item clickable class="GPL__drawer-item">
                             <q-item-section avatar>
                                 <q-icon name="dashboard" />
@@ -182,13 +182,13 @@
                         </q-item>
                     </Link>
 
-                    <Link>
+                    <Link :href="route('map')">
                         <q-item clickable class="GPL__drawer-item">
                             <q-item-section avatar>
-                                <q-icon name="mode_edit" />
+                                <q-icon name="map" />
                             </q-item-section>
                             <q-item-section>
-                                <q-item-label>Draw</q-item-label>
+                                <q-item-label>Stray Map</q-item-label>
                             </q-item-section>
                         </q-item>
                     </Link>
@@ -207,17 +207,25 @@
                     <Link >
                         <q-item clickable class="GPL__drawer-item">
                             <q-item-section avatar>
-                                <q-icon name="compare" />
+                                <q-icon name="crisis_alert" />
                             </q-item-section>
                             <q-item-section>
-                                <q-item-label>Coloring / Collage</q-item-label>
+                                <q-item-label>Stray Alert</q-item-label>
+                            </q-item-section>
+                        </q-item>
+                    </Link>
+                    <Link >
+                        <q-item clickable class="GPL__drawer-item">
+                            <q-item-section avatar>
+                                <q-icon name="videocam" />
+                            </q-item-section>
+                            <q-item-section>
+                                <q-item-label>Barangay CCTV</q-item-label>
                             </q-item-section>
                         </q-item>
                     </Link>
                     <q-separator class="q-my-md" />
-                    <Link
-                        
-                    >
+                    <Link>
                         <q-item clickable class="GPL__drawer-item">
                             <q-item-section avatar>
                                 <q-icon name="fa-solid fa-user"/>
