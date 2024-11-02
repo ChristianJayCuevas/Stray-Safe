@@ -14,7 +14,7 @@ import 'quasar/src/css/index.sass'
 import { Quasar } from 'quasar';
 
 createInertiaApp({
-    title: (title) => `${title} - ${appName}`,
+    title: (title) => `${title} ${appName}`,
     resolve: (name) =>
         resolvePageComponent(
             `./Pages/${name}.vue`,

@@ -33,6 +33,9 @@ function scrollToSection(sectionId, tabId) {
 }
 </script>
 <template>
+    <!-- <Head>
+        <title>Stray Safe</title>
+    </Head> -->
     <div class="background-website dark:bg-surface-900">
         <div class="py-6 mx-0 md:mx-12 lg:mx-0 lg:px-10 flex items-center justify-between navbar-sticky">
             <a class="flex items-center" href="#">

@@ -1,19 +1,66 @@
+/* map.css */
+
+/* Map container styles */
+.map-container-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  margin-bottom: 0px;
+  height: 80vh;
+  position: relative;
+}
+
 .map-container {
-    width: 100%;
-    height: 100vh;
-  }
-  
-  /* Custom marker styles */
-  .custom-marker {
-    width: 30px;
-    height: 30px;
-    background-color: #ff6347; /* Customize color */
-    border-radius: 50%;
-    border: 2px solid white;
-    cursor: pointer;
-  }
-  
-  /* Hover effect for markers */
-  .custom-marker:hover {
-    background-color: #ff4500;
-  }
+  width: 80%;
+  height: 80%;
+  border-style: solid;
+  border-width: 1px;
+  border-color: black;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Pin selector (pill buttons) */
+.pin-selector {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 25px;
+  padding: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  z-index: 1;
+}
+
+.pin-selector button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 10px;
+  margin: 5px 0;
+  border-radius: 50%;
+  transition: background-color 0.3s ease;
+}
+
+.pin-selector button.active,
+.pin-selector button:hover {
+  background-color: #ff6347;
+  color: white;
+  width: 55px;
+}
+
+/* Marker icons based on selected pin */
+.custom-marker {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #ff6347;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}

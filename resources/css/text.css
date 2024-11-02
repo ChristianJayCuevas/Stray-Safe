@@ -1,0 +1,51 @@
+.text-bold {
+font-weight: bold;
+font-size: 1rem;
+color: #333;
+}
+
+.text-light {
+font-weight: 300;
+font-size: 1rem;
+color: #555;
+}
+
+.text-title {
+font-weight: bold;
+font-size: 2rem;
+color: #222;
+}
+
+.text-subtitle {
+font-weight: 500;
+font-size: 1.2rem;
+color: #666;
+}
+
+.text-caption {
+font-size: 0.875rem;
+color: #888;
+}
+
+.text-container {
+width: 80%;
+padding: 5px;
+margin-top: 30px;
+margin-left: auto;
+margin-right: auto;
+background-color: #fff;
+border-radius: 20px;
+box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+text-align: center;
+max-width: 500px; /* Adjusts the width cap */
+}
+
+.text-container-normal {
+width: 80%;
+padding: 5px;
+margin-top: 30px;
+margin-left: auto;
+margin-right: auto;
+text-align: center;
+max-width: 500px;
+}

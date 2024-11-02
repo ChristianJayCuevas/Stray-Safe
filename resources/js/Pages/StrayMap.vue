@@ -4,11 +4,12 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 </script>
 <template>
     <AuthenticatedLayout>
-        <template #header>
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">Dashboard</h2>
-        </template>
-        <div class="dashboard-container py-12">
+        <div class="text-container-normal">
+            <p class="text-title">Barangay Sacred Heart</p>
+        </div>
+        <div>
             <Map />
         </div>
     </AuthenticatedLayout>
 </template>
+<style src="../../css/text.css"></style>
