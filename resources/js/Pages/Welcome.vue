@@ -236,7 +236,7 @@ import ScrollToSection from '@/Components/WelcomeComponents/ScrollToSection.vue'
         </div>
     </div>
 </template>
-<style src="../../css/welcome.css"></style>
+<style src="../../css/welcome.css" lang="css"></style>
 
 
 <!-- Paste it to the top

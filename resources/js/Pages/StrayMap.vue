@@ -12,4 +12,4 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
         </div>
     </AuthenticatedLayout>
 </template>
-<style src="../../css/text.css"></style>
+<style src="../../css/text.css" lang="css"></style>

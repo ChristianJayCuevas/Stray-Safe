@@ -267,4 +267,4 @@ async function handleFileUpload2(event) {
     </q-dialog>
 </template>
 
-<style src="../../css/cctvmonitor.css"></style>
+<style src="../../css/cctvmonitor.css" lang="css"></style>

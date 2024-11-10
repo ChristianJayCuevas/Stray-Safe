@@ -51,5 +51,5 @@ const updateFilteredPosts = (newFilteredPosts) => {
     </AuthenticatedLayout>
 </template>
 
-<style src="../../css/home.css"></style>
-<style src="../../css/text.css"></style>
+<style src="../../css/home.css" lang="css"></style>
+<style src="../../css/text.css" lang="css"></style>
