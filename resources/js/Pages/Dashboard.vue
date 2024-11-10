@@ -1,30 +1,162 @@
 <script setup>
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { ref, onMounted } from 'vue';
+import { QCard, QCardSection } from 'quasar';
 import { Head } from '@inertiajs/vue3';
+import VueApexCharts from 'vue3-apexcharts';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import HeatMap from '@/Components/HeatMap.vue';
+const authUser = ref({ name: 'User' }); // Replace with actual user data
+const strayAnimalsData = ref({
+    totalSightings: 120,
+    captured: 75,
+    strayDogs: 70,
+    strayCats: 40,
+    otherAnimals: 10
+});
+
+// Line chart for detected animals over time
+const lineChartOptions = ref({
+    chart: {
+        type: 'line',
+        height: 350
+    },
+    xaxis: {
+        categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'] // Example months
+    },
+    title: {
+        text: 'Detected Stray Animals Over Time',
+        align: 'left'
+    }
+});
+const lineChartSeries = ref([{
+    name: 'Detected Stray Animals',
+    data: [10, 20, 15, 25, 30, 18, 27] // Example data for each month
+}]);
+
+// Pie chart for stray animal types
+const pieChartOptions = ref({
+    chart: {
+        type: 'pie'
+    },
+    labels: ['Stray Dogs', 'Stray Cats', 'Other Animals'],
+    title: {
+        text: 'Distribution of Stray Animal Types',
+        align: 'left'
+    }
+});
+const pieChartSeries = ref([strayAnimalsData.value.strayDogs, strayAnimalsData.value.strayCats, strayAnimalsData.value.otherAnimals]);
+
+onMounted(() => {
+    console.log('Line Chart Options:', lineChartOptions.value);
+    console.log('Pie Chart Options:', pieChartOptions.value);
+});
 </script>
 
 <template>
     <Head title="Dashboard" />
 
     <AuthenticatedLayout>
-        <template #header>
-            <h2
-                class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200"
-            >
-                Dashboard
-            </h2>
-        </template>
+        <!-- Header -->
+        <q-card class="welcome-card mt-5 mx-10">
+                <q-card-section>
+                    <h3 class="text-2xl font-bold mb-2">Welcome back, {{ authUser.name }}!</h3>
+                </q-card-section>
+        </q-card>
 
-        <div class="py-12">
-            <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
-                <div
-                    class="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800"
-                >
-                    <div class="p-6 text-gray-900 dark:text-gray-100">
-                        You're logged in!
-                    </div>
-                </div>
+        <!-- Main Dashboard Content -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                <!-- Total Stray Sightings Card -->
+                <q-card class="info-card total-sightings-card ml-10">
+                    <q-card-section class="flex flex-col items-center justify-center h-full">
+                        <h3 class="text-lg font-semibold mb-2">Total Stray Sightings</h3>
+                        <p class="text-8xl font-bold text-primary">{{ strayAnimalsData.totalSightings }}</p>
+                    </q-card-section>
+                </q-card>
+
+                <!-- Captured Animals Card -->
+                <q-card class="info-card captured-animals-card">
+                    <q-card-section class="flex flex-col items-center justify-center h-full">
+                        <h3 class="text-lg font-semibold mb-2">Captured Animals</h3>
+                        <p class="text-8xl font-bold text-primary">{{ strayAnimalsData.captured }}</p>
+                        <p class="text-sm text-gray-600">({{ ((strayAnimalsData.captured / strayAnimalsData.totalSightings) * 100).toFixed(2) }}%)</p>
+                    </q-card-section>
+                </q-card>
+
+                <!-- Animal Type Breakdown Card -->
+                <q-card class="info-card animal-type-breakdown-card mr-10">
+                    <q-card-section class="flex flex-col items-center justify-center h-full">
+                        <h3 class="text-lg font-semibold mb-2">Animal Type Breakdown</h3>
+                        <p class="text-2xl font-medium">Dogs: <span class="text-primary font-bold text-2xl">{{ strayAnimalsData.strayDogs }}</span></p>
+                        <p class="text-2xl font-medium">Cats: <span class="text-primary font-bold text-2xl">{{ strayAnimalsData.strayCats }}</span></p>
+                        <p class="text-2xl font-medium">Other: <span class="text-primary font-bold text-2xl">{{ strayAnimalsData.otherAnimals }}</span></p>
+                    </q-card-section>
+                </q-card>
             </div>
-        </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <!-- Line Chart for Stray Animals Over Time -->
+                <q-card class="line-chart-card ml-10">
+                    <q-card-section>
+                        <VueApexCharts :series="lineChartSeries" :options="lineChartOptions" type="line" height="350" />
+                    </q-card-section>
+                </q-card>
+
+                <!-- Pie Chart for Stray Animal Types -->
+                <q-card class="pie-chart-card mr-10">
+                    <q-card-section>
+                        <VueApexCharts :series="pieChartSeries" :options="pieChartOptions" type="pie" height="350" />
+                    </q-card-section>
+                </q-card>
+            </div>
+            <q-card class="heatmap-card mt-6 mb-10 mx-10">
+                <q-card-section>
+                    <h3 class="text-4xl font-semibold mb-2 flex justify-center">Stray Animal Sightings Heatmap</h3>
+                    <HeatMap />
+                </q-card-section>
+            </q-card>
     </AuthenticatedLayout>
 </template>
+
+<style scoped>
+.dashboard-container {
+    padding-top: 20px;
+}
+
+.welcome-card,
+.info-card,
+.chart-card {
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    background-color: white;
+    border-radius: 8px;
+    overflow: hidden;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.heatmap-card,
+.total-sightings-card,
+.captured-animals-card,
+.animal-type-breakdown-card,
+.line-chart-card,
+.pie-chart-card {
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    background-color: white;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.q-card-section {
+    padding: 16px;
+}
+
+.text-gray-800 {
+    color: #333;
+}
+
+.text-gray-200 {
+    color: #ccc;
+}
+</style>

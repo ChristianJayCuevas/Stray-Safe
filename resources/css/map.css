@@ -21,6 +21,27 @@
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
+.heat-map-container-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  height: 80vh;
+  position: relative;
+  padding: 20px;
+}
+
+.heat-map-container {
+  width: 80%;
+  height: 100%;
+  border-style: solid;
+  border-width: 1px;
+  border-color: black;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  padding-bottom:20px;
+
+}
 /* Pin selector (pill buttons) */
 .pin-selector {
   position: absolute;

@@ -214,7 +214,7 @@
                             </q-item-section>
                         </q-item>
                     </Link>
-                    <Link >
+                    <Link :href="route('cctv.monitor')">
                         <q-item clickable class="GPL__drawer-item">
                             <q-item-section avatar>
                                 <q-icon name="videocam" />

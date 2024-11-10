@@ -4,11 +4,18 @@ use App\Http\Controllers\{
     PostController,
     UploadTemporaryImageController,
     DeleteTemporaryImageController,
-    CommentController
+    CommentController,
+    CCTVController,
 };
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Http\Controllers\VideoProcessingController;
+
+Route::post('/process-video', [VideoProcessingController::class, 'processVideo']);
+Route::post('/process-video1', [VideoProcessingController::class, 'processVideo1']);
+Route::post('/process-video2', [VideoProcessingController::class, 'processVideo2']);
 
 
 Route::get('/', function () {
@@ -37,6 +44,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/revert/{folder}', [DeleteTemporaryImageController::class, 'delete']);
     Route::post('/post-upload', [PostController::class, 'uploadPost'])->name('post.uploadPost');
     Route::post('/post/comment', [CommentController::class, 'createComment'])->name('createComment');
+
+    Route::get('/cctv-monitor', [CCTVController::class, 'monitor'])->name('cctv.monitor');
+    Route::get('/cctv', [CCTVController::class, 'view'])->name('cctv.view');
+    Route::get('/cctv/detect', [CCTVController::class, 'detect'])->name('cctv.detect');
+    
+    Route::post('/upload-video', [VideoController::class, 'uploadVideo']);
+    Route::post('/store-snapshot', [VideoController::class, 'storeSnapshot']);
+    Route::get('/snapshots', [VideoController::class, 'getSnapshots']);
 
     //For the profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

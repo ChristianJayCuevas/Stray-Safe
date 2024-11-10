@@ -8,10 +8,12 @@ import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 import '@quasar/extras/material-icons/material-icons.css'
 import '@quasar/extras/fontawesome-v6/fontawesome-v6.css'
-
+import VueVideoPlayer from '@videojs-player/vue'
+import 'video.js/dist/video-js.css'
 // Import Quasar css
 import 'quasar/src/css/index.sass'
 import { Quasar } from 'quasar';
+import VueApexCharts from "vue3-apexcharts";
 
 createInertiaApp({
     title: (title) => `${title} ${appName}`,
@@ -27,6 +29,8 @@ createInertiaApp({
             .use(Quasar, {
                 plugins: {},
             })
+            .use(VueVideoPlayer)
+            .use(VueApexCharts)
             .mount(el);
     },
     progress: {

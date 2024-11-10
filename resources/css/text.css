@@ -16,10 +16,23 @@ font-size: 2rem;
 color: #222;
 }
 
+.text-title-small {
+    font-weight: bold;
+    font-size: 1.5rem;
+    color: #222;
+}
+
 .text-subtitle {
 font-weight: 500;
 font-size: 1.2rem;
 color: #666;
+}
+
+.text-subtitle-center {
+font-weight: 500;
+font-size: 1.2rem;
+color: #666;
+text-align: center;
 }
 
 .text-caption {
