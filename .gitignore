@@ -22,3 +22,5 @@ yarn-error.log
 /.zed
 /venv
 /model
+/runs
+/public/hls

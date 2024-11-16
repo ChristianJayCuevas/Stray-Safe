@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CCTVView from '@/Components/CCTVView.vue';
 import { ref, computed } from 'vue';
 const cctvs = ref([
     { 
@@ -143,12 +144,7 @@ async function handleFileUpload2(event) {
                                 <p class="title">Recording</p>
                             </div>
                             <q-card-section>
-                                <video-player 
-                                    :src="cctv.videoSrc" 
-                                    :loop="true" 
-                                    :autoplay="true" 
-                                    muted
-                                ></video-player>
+                                <CCTVView></CCTVView>
                             </q-card-section>
                             <q-card-section>
                                 <q-item>
@@ -160,72 +156,7 @@ async function handleFileUpload2(event) {
                         </q-card>
                     </div>
                 </q-page>
-                <q-page class="q-pa-md">
-                    <div class="q-gutter-md row justify-center">
-    
-                        <q-card 
-                            class="cctv-card" 
-                        >
-                            <q-card-section>
-                                <q-item>
-                                    <q-item-section>
-                                        <input type="file" @change="handleFileUpload" accept="video/mp4" />
-                                        <div v-if="loading">Processing...</div>
-                                        <video v-if="videoUrl" controls>
-                                        <source :src="videoUrl" type="video/mp4" />
-                                        </video>
-                                    </q-item-section>
-                                </q-item>
-                                <q-item>
-                                    <q-item-section>
-                                        <q-item-label class="normal-text">Real-Time Detection Transformer (RT-DETR)</q-item-label>
-                                    </q-item-section>
-                                </q-item>
-                            </q-card-section>
-                        </q-card>
-                        <q-card 
-                            class="cctv-card" 
-                        >
-                            <q-card-section>
-                                <q-item>
-                                    <q-item-section>
-                                        <input type="file" @change="handleFileUpload1" accept="video/mp4" />
-                                        <div v-if="loading1">Processing...</div>
-                                        <video v-if="videoUrl1" controls>
-                                            <source :src="videoUrl1" type="video/mp4" />
-                                        </video>
-                                    </q-item-section>
-                                </q-item>
-                                <q-item>
-                                    <q-item-section>
-                                        <q-item-label class="normal-text">You Only Look Once V8 (YOLO V8)</q-item-label>
-                                    </q-item-section>
-                                </q-item>
-                            </q-card-section>
-                        </q-card>
-                        <q-card 
-                            class="cctv-card" 
-                        >
-                            <q-card-section>
-                                <q-item>
-                                    <q-item-section>
-                                        <input type="file" @change="handleFileUpload2" accept="video/mp4" />
-                                        <div v-if="loading2">Processing...</div>
-                                        <video v-if="videoUrl2" controls>
-                                        <source :src="videoUrl2" type="video/mp4" />
-                                        </video>
-                                    </q-item-section>
-                                </q-item>
-                                <q-item>
-                                    <q-item-section>
-                                        <q-item-label class="normal-text">Real-Time Model for object Detection (RTMDet)</q-item-label>
-                                    </q-item-section>
-                                </q-item>
-                            </q-card-section>
-                        </q-card>
-                    </div>
-                </q-page>
-                
+
             </q-page-container>
         </q-layout>
 

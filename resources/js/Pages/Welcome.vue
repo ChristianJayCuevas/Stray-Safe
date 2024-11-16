@@ -4,9 +4,6 @@ import ScrollToSection from '@/Components/WelcomeComponents/ScrollToSection.vue'
 </script>
 <template>
 
-    <Head>
-        <title>Stray Safe</title>
-    </Head>
     <div class="background-website">
         <div class="custom-navbar">
             <a class="generic-container" href="#">

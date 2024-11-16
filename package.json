@@ -27,6 +27,7 @@
         "apexcharts": "^4.0.0",
         "filepond": "^4.31.4",
         "filepond-plugin-image-preview": "^4.6.12",
+        "hls.js": "^1.5.17",
         "leaflet": "^1.9.4",
         "mapbox-gl": "^3.7.0",
         "moment": "^2.30.1",

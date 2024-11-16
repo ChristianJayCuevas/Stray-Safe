@@ -1,27 +1,38 @@
 <template>
-    <div>
-      <h1>CCTV View</h1>
-      <input type="file" @change="uploadVideo" />
-      <video v-if="videoUrl" :src="videoUrl" controls autoplay></video>
-    </div>
-  </template>
-  
-  <script setup>
-  import { ref } from 'vue';
-  
-  const videoUrl = ref(null);
-  
-  const uploadVideo = async (event) => {
-    const file = event.target.files[0];
-    const formData = new FormData();
-    formData.append('video', file);
-  
-    const response = await fetch('/cctv/detect', {
-      method: 'POST',
-      body: formData,
+  <div>
+    <video ref="video" muted autoplay style="width: 100%; height: auto;"></video>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import Hls from 'hls.js';
+
+const video = ref(null);
+
+onMounted(() => {
+  const hlsUrl = '/hls/stream.m3u8';
+
+  if (Hls.isSupported()) {
+    const hls = new Hls();
+    hls.loadSource(hlsUrl);
+    hls.attachMedia(video.value);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.value.play();
     });
-  
-    const data = await response.json();
-    videoUrl.value = data.video_url;
-  };
-  </script>
+  } else if (video.value.canPlayType('application/vnd.apple.mpegurl')) {
+    // Fallback for Safari
+    video.value.src = hlsUrl;
+    video.value.addEventListener('loadedmetadata', () => {
+      video.value.play();
+    });
+  }
+});
+</script>
+
+<style scoped>
+video {
+  max-width: 100%;
+  border: 1px solid #ddd;
+}
+</style>

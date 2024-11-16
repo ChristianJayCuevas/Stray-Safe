@@ -13,9 +13,6 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Http\Controllers\VideoProcessingController;
 
-Route::post('/process-video', [VideoProcessingController::class, 'processVideo']);
-Route::post('/process-video1', [VideoProcessingController::class, 'processVideo1']);
-Route::post('/process-video2', [VideoProcessingController::class, 'processVideo2']);
 
 
 Route::get('/', function () {
@@ -43,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/upload-image', [UploadTemporaryImageController::class, 'upload']);
     Route::delete('/revert/{folder}', [DeleteTemporaryImageController::class, 'delete']);
     Route::post('/post-upload', [PostController::class, 'uploadPost'])->name('post.uploadPost');
+    Route::delete('/post-delete/{id}', [PostController::class, 'deletePost'])->name("deletePost");
     Route::post('/post/comment', [CommentController::class, 'createComment'])->name('createComment');
 
     Route::get('/cctv-monitor', [CCTVController::class, 'monitor'])->name('cctv.monitor');

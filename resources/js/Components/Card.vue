@@ -3,7 +3,7 @@ import axios from "axios";
 import { ref, computed, defineProps, defineEmits, watch, toRef, onMounted } from "vue";
 import { Head, Link, usePage, useForm, router } from "@inertiajs/vue3";
 import HeartButton from "@/Components/HeartButton.vue";
-import moment from "moment"; 
+import moment from "moment";
 
 const errorMessage = ref("");
 const successMessage = ref("");
@@ -204,39 +204,21 @@ const leave = (el, done) => {
         <div class="flex items-center justify-between p-4">
             <div class="flex items-center gap-2">
                 <q-avatar size="40px">
-                    <img
-                        style="background: white; border-radius: 20px"
-                        :src="
-                            post.user.profile_image_url
-                                ? `/storage/images/${post.user.profile_image_url}`
-                                : '/storage/images/TEMPPROFILE.png'
-                        "
-                        alt="Profile Image"
-                    />
+                    <img style="background: white; border-radius: 20px" :src="post.user.profile_image_url
+                            ? `/storage/images/${post.user.profile_image_url}`
+                            : '/storage/images/TEMPPROFILE.png'
+                        " alt="Profile Image" />
                 </q-avatar>
                 <div>
-                    <a
-                        @click.stop
-                        class="font-medium text-lg hover:underline"
-                        >{{ post.user.name }}</a
-                    >
+                    <a @click.stop class="font-medium text-lg hover:underline">{{ post.user.name }}</a>
                     <br />
                     <span class="text-xs text-gray-500">{{
                         formattedDate
-                    }}</span>
+                        }}</span>
                 </div>
-                <template v-if="$page.props.auth?.user && post.user.id !== $page.props.auth.user.id">
-</template>
             </div>
 
-            <q-btn-dropdown
-                dropdown-icon="fa-solid fa-ellipsis-h"
-                @click.stop
-                flat
-                round
-                
-                v-if="canEditOrDelete"
-            >
+            <q-btn-dropdown dropdown-icon="fa-solid fa-ellipsis-h" @click.stop flat round >
                 <q-list style="min-width: 150px">
                     <!-- <q-item
                         clickable
@@ -252,34 +234,24 @@ const leave = (el, done) => {
                             </div>
                         </q-item-section>
                     </q-item> -->
-
-                    <template v-if="canEditOrDelete">
                         <q-item clickable v-close-popup @click="thepost = true">
                             <q-item-section>
                                 <div class="flex items-center">
                                     <q-icon name="fa-solid fa-pencil-alt" />
-                                    <q-item-label class="ml-2" color="warning"
-                                        >Edit Post</q-item-label
-                                    >
+                                    <q-item-label class="ml-2" color="warning">Edit Post</q-item-label>
                                 </div>
                             </q-item-section>
                         </q-item>
 
-                        <q-item
-                            clickable
-                            v-close-popup
-                            @click="destroy(post.id)"
-                        >
+                        <q-item clickable v-close-popup @click="destroy(post.id)">
                             <q-item-section>
                                 <div class="flex items-center">
                                     <q-icon name="fa-solid fa-trash-alt" />
-                                    <q-item-label class="ml-2"
-                                        >Delete Post</q-item-label
-                                    >
+                                    <q-item-label class="ml-2">Delete Post</q-item-label>
                                 </div>
                             </q-item-section>
                         </q-item>
-                    </template>
+                 
                 </q-list>
             </q-btn-dropdown>
         </div>
@@ -288,61 +260,31 @@ const leave = (el, done) => {
         <!-- Image container with fixed aspect ratio -->
         <div class="carousel-container" @click.stop v-if="postImages.length > 0">
             <!-- Conditionally rendered prev button -->
-            <button
-                v-if="showArrows"
-                class="carousel-control prev"
-                @click="prevImage"
-            >
+            <button v-if="showArrows" class="carousel-control prev" @click="prevImage">
                 ❮
             </button>
             <div class="carousel-images">
-                <transition
-                    name="fade"
-                    @before-enter="beforeEnter"
-                    @enter="enter"
-                    @leave="leave"
-                >
-                    <img
-                        :key="currentImage"
-                        :src="`/storage/images/${currentImage}`"
-                        alt="Post Image"
-                        class="carousel-image"
-                    />
+                <transition name="fade" @before-enter="beforeEnter" @enter="enter" @leave="leave">
+                    <img :key="currentImage" :src="`/storage/images/${currentImage}`" alt="Post Image"
+                        class="carousel-image" />
                 </transition>
             </div>
             <!-- Conditionally rendered next button -->
-            <button
-                v-if="showArrows"
-                class="carousel-control next"
-                @click="nextImage"
-            >
+            <button v-if="showArrows" class="carousel-control next" @click="nextImage">
                 ❯
             </button>
         </div>
         <!-- Actions and details -->
         <div class="flex flex-row p-4 justify-between items-center">
             <div class="flex gap-4">
-                <Link
-                    @click.stop
-                    :href="`/post/${post.id}/like`"
-                    method="post"
-                    as="button"
-                    type="button"
-                    preserve-scroll
-                    class="flex items-center text-blue-500 hover:text-blue-700"
-                >
-                    <HeartButton
-                        class="w-4 h-4"
-                        :name="post.liked ? 'heart' : 'heart-outline'"
-                        @click="handleLikeToggle"
-                    />
-                    <span class="ml-2 text-black" style="font-weight: bold">{{
-                        post.likes_count
-                    }}</span>
+                <Link @click.stop :href="`/post/${post.id}/like`" method="post" as="button" type="button"
+                    preserve-scroll class="flex items-center text-blue-500 hover:text-blue-700">
+                <HeartButton class="w-4 h-4" :name="post.liked ? 'heart' : 'heart-outline'" @click="handleLikeToggle" />
+                <span class="ml-2 text-black" style="font-weight: bold">{{
+                    post.likes_count
+                }}</span>
                 </Link>
-                <div
-                    class="flex items-center text-gray-500 hover:text-gray-700"
-                >
+                <div class="flex items-center text-gray-500 hover:text-gray-700">
                     <q-btn flat round icon="comment" color="gray" />
                     <span class="mr-1" style="color: black">Comment</span>
                 </div>
@@ -355,19 +297,8 @@ const leave = (el, done) => {
         </div>
         <form @submit.prevent="submit">
             <div class="flex items-center p-4 border-t" @click.stop>
-                <q-input
-                    filled
-                    placeholder="Add a comment..."
-                    class="flex-grow"
-                    v-model="form.comment"
-                />
-                <q-btn
-                    rounded
-                    flat
-                    label="Post"
-                    icon="fa-solid fa-paper-plane"
-                    type="submit"
-                />
+                <q-input filled placeholder="Add a comment..." class="flex-grow" v-model="form.comment" />
+                <q-btn rounded flat label="Post" icon="fa-solid fa-paper-plane" type="submit" />
             </div>
             <div v-if="errorMessage" class="q-pa-md text-red-500">
                 {{ errorMessage }}
@@ -379,198 +310,142 @@ const leave = (el, done) => {
     </div>
 
     <q-dialog v-model="card" backdrop-filter="blur(4px) saturate(150%)">
-    <q-card class="instagram-dialog my-card row no-wrap">
-        <!-- Left side: Image (3/4) -->
-        <div v-if="postImages.length > 0" class="carousel-container" style="background: black" @click.stop>
-            <!-- Conditionally rendered prev button -->
-            <button v-if="showArrows" class="carousel-control prev" @click="prevImage">
-                ❮
-            </button>
-            <div class="carousel-images">
-                <transition name="fade" @before-enter="beforeEnter" @enter="enter" @leave="leave">
-                    <div class="carousel-image-wrapper">
-                        <img v-if="currentImage" :key="currentImage" :src="`/storage/images/${currentImage}`" alt="Post Image" class="carousel-image"/>
-                    </div>
-                </transition>
+        <q-card class="instagram-dialog my-card row no-wrap">
+            <!-- Left side: Image (3/4) -->
+            <div v-if="postImages.length > 0" class="carousel-container" style="background: black" @click.stop>
+                <!-- Conditionally rendered prev button -->
+                <button v-if="showArrows" class="carousel-control prev" @click="prevImage">
+                    ❮
+                </button>
+                <div class="carousel-images">
+                    <transition name="fade" @before-enter="beforeEnter" @enter="enter" @leave="leave">
+                        <div class="carousel-image-wrapper">
+                            <img v-if="currentImage" :key="currentImage" :src="`/storage/images/${currentImage}`"
+                                alt="Post Image" class="carousel-image" />
+                        </div>
+                    </transition>
+                </div>
+                <!-- Conditionally rendered next button -->
+                <button v-if="showArrows" class="carousel-control next" @click="nextImage">
+                    ❯
+                </button>
             </div>
-            <!-- Conditionally rendered next button -->
-            <button v-if="showArrows" class="carousel-control next" @click="nextImage">
-                ❯
-            </button>
-        </div>
 
-        <!-- Right side: Post details (1/4) -->
-        <div class="col-3 flex flex-col post-details">
-            <!-- User details -->
-            <div class="flex items-center p-4 border-b">
-                <q-avatar size="42px">
-                    <img
-                        style="
+            <!-- Right side: Post details (1/4) -->
+            <div class="col-3 flex flex-col post-details">
+                <!-- User details -->
+                <div class="flex items-center p-4 border-b">
+                    <q-avatar size="42px">
+                        <img style="
                             background: white;
                             border-radius: 50%;
                             width: 42px;
                             height: 42px;
-                        "
-                        :src="
-                            post.user.profile_image_url
+                        " :src="post.user.profile_image_url
                                 ? `/storage/images/${post.user.profile_image_url}`
                                 : '/storage/images/TEMPPROFILE.png'
-                        "
-                        alt="Profile Image"
-                    />
-                </q-avatar>
-                <div class="ml-3">
-                    <span class="font-medium text-sm">{{ post.user.name }}</span><br />
-                    <span class="text-xs text-gray-500">{{ formattedDate }}</span>
-                </div>
-                <template v-if="post.user.id !== $page.props.auth.user.id">
-                
-                </template>
-            </div>
+                            " alt="Profile Image" />
+                    </q-avatar>
+                    <div class="ml-3">
+                        <span class="font-medium text-sm">{{ post.user.name }}</span><br />
+                        <span class="text-xs text-gray-500">{{ formattedDate }}</span>
+                    </div>
+                    <template v-if="post.user.id !== $page.props.auth.user.id">
 
-            <!-- Post content -->
-            <div class="flex-grow p-4 overflow-auto comments-section">
-                <h2 class="text-xl font-bold text-black mb-2">{{ post.title }}</h2>
-                <div class="text-caption text-black mb-2">{{ post.description }}</div>
-                <q-separator class="mb-4" />
-                <div class="instagram-comments">
-                    <template v-if="comments && comments.length">
-                        <div v-for="(comment, index) in displayedComments" :key="comment.id" class="comment-item mt-2 mb-1">
-                            <div class="comment-content">
-                                <p class="font-semibold text-black mr-2">{{ comment.user.name }}:</p>
-                                <p class="text-gray-700">{{ comment.comments }}</p>
+                    </template>
+                </div>
+
+                <!-- Post content -->
+                <div class="flex-grow p-4 overflow-auto comments-section">
+                    <h2 class="text-xl font-bold text-black mb-2">{{ post.title }}</h2>
+                    <div class="text-caption text-black mb-2">{{ post.description }}</div>
+                    <q-separator class="mb-4" />
+                    <div class="instagram-comments">
+                        <template v-if="comments && comments.length">
+                            <div v-for="(comment, index) in displayedComments" :key="comment.id"
+                                class="comment-item mt-2 mb-1">
+                                <div class="comment-content">
+                                    <p class="font-semibold text-black mr-2">{{ comment.user.name }}:</p>
+                                    <p class="text-gray-700">{{ comment.comments }}</p>
+                                </div>
                             </div>
-                        </div>
-                        <template v-if="comments.length > maxComments">
-                            <button @click="toggleComments" class="text-blue-500 mt-2">
-                                {{ showAll ? "See Less..." : "See More..." }}
-                            </button>
+                            <template v-if="comments.length > maxComments">
+                                <button @click="toggleComments" class="text-blue-500 mt-2">
+                                    {{ showAll ? "See Less..." : "See More..." }}
+                                </button>
+                            </template>
                         </template>
-                    </template>
-                    <template v-else>
-                        <p class="text-gray-500">No comments yet.</p>
-                    </template>
+                        <template v-else>
+                            <p class="text-gray-500">No comments yet.</p>
+                        </template>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Actions -->
-            <div class="flex items-center p-4 border-t actions-section">
-                <Link @click.stop :href="`/post/${post.id}/like`" method="post" as="button" type="button" preserve-scroll class="flex items-center text-blue-500 hover:text-blue-700">
-                    <HeartButton class="w-4 h-4" :name="post.liked ? 'heart' : 'heart-outline'" @click="handleLikeToggle"/>
+                <!-- Actions -->
+                <div class="flex items-center p-4 border-t actions-section">
+                    <Link @click.stop :href="`/post/${post.id}/like`" method="post" as="button" type="button"
+                        preserve-scroll class="flex items-center text-blue-500 hover:text-blue-700">
+                    <HeartButton class="w-4 h-4" :name="post.liked ? 'heart' : 'heart-outline'"
+                        @click="handleLikeToggle" />
                     <span class="ml-2 text-black" style="font-weight: bold">{{ post.likes_count }}</span>
-                </Link>
-            </div>
+                    </Link>
+                </div>
 
-            <!-- Add a comment -->
-            <form @submit.prevent="submit">
-            <div class="flex items-center p-4 border-t" @click.stop>
-                <q-input
-                    filled
-                    placeholder="Add a comment..."
-                    class="flex-grow"
-                    v-model="form.comment"
-                />
-                <q-btn
-                    rounded
-                    flat
-                    label="Post"
-                    icon="fa-solid fa-paper-plane"
-                    type="submit"
-                />
+                <!-- Add a comment -->
+                <form @submit.prevent="submit">
+                    <div class="flex items-center p-4 border-t" @click.stop>
+                        <q-input filled placeholder="Add a comment..." class="flex-grow" v-model="form.comment" />
+                        <q-btn rounded flat label="Post" icon="fa-solid fa-paper-plane" type="submit" />
+                    </div>
+                    <div v-if="errorMessage" class="q-pa-md text-red-500">
+                        {{ errorMessage }}
+                    </div>
+                    <div v-if="successMessage" class="q-pa-md text-green-500">
+                        {{ successMessage }}
+                    </div>
+                </form>
             </div>
-            <div v-if="errorMessage" class="q-pa-md text-red-500">
-                {{ errorMessage }}
-            </div>
-            <div v-if="successMessage" class="q-pa-md text-green-500">
-                {{ successMessage }}
-            </div>
-        </form>
-        </div>
-    </q-card>
-</q-dialog>
-    <q-dialog
-        v-model="thepost"
-        backdrop-filter="blur(4px) saturate(150%)"
-        persistent
-    >
-        <div
-            class="instagram-card bg-white rounded-lg shadow-lg overflow-hidden"
-            style="max-width: 90vw; max-height: 90vh; width: 80vw; height: 80vh"
-        >
+        </q-card>
+    </q-dialog>
+    <q-dialog v-model="thepost" backdrop-filter="blur(4px) saturate(150%)" persistent>
+        <div class="instagram-card bg-white rounded-lg shadow-lg overflow-hidden"
+            style="max-width: 90vw; max-height: 90vh; width: 80vw; height: 80vh">
             <div class="flex justify-start p-8 bg-gray-100">
                 <h4 class="text-2xl font-bold">Update Post</h4>
             </div>
 
-            <div
-                class="flex flex-col gap-8 p-8 overflow-y-auto"
-                style="height: calc(100% - 64px)"
-            >
+            <div class="flex flex-col gap-8 p-8 overflow-y-auto" style="height: calc(100% - 64px)">
                 <form @submit.prevent="submit2">
                     <!-- File input for image upload -->
-                    <input
-                        type="file"
-                        class="ml-5 bg-base-200 file-input file-input-bordered w-half mb-8"
-                        @change="handleFileUpload"
-                        accept="image/*"
-                    />
+                    <input type="file" class="ml-5 bg-base-200 file-input file-input-bordered w-half mb-8"
+                        @change="handleFileUpload" accept="image/*" />
 
                     <div v-if="imageUrl" class="q-pa-md">
-                        <img
-                            :src="imageUrl"
-                            class="rounded-lg max-w-full mx-auto"
-                            alt="Uploaded Image"
-                            style="max-height: 300px"
-                        />
+                        <img :src="imageUrl" class="rounded-lg max-w-full mx-auto" alt="Uploaded Image"
+                            style="max-height: 300px" />
                     </div>
 
                     <!-- Title input -->
                     <div class="q-pa-md">
-                        <q-input
-                            v-model="form2.title"
-                            rounded
-                            outlined
-                            type="text"
-                            label="Title"
-                            class="w-full text-lg"
-                        />
+                        <q-input v-model="form2.title" rounded outlined type="text" label="Title"
+                            class="w-full text-lg" />
                     </div>
 
                     <!-- Description input -->
                     <div class="q-pa-md">
-                        <q-input
-                            v-model="form2.description"
-                            rounded
-                            outlined
-                            type="textarea"
-                            label="Description"
-                            class="w-full text-lg"
-                        />
+                        <q-input v-model="form2.description" rounded outlined type="textarea" label="Description"
+                            class="w-full text-lg" />
                     </div>
 
                     <!-- Error message display -->
-                    <div
-                        v-if="errorMessage"
-                        class="q-pa-md text-red-500 text-lg"
-                    >
+                    <div v-if="errorMessage" class="q-pa-md text-red-500 text-lg">
                         {{ errorMessage }}
                     </div>
 
                     <!-- Submit button -->
                     <div class="q-pa-md flex justify-end gap-4">
-                        <q-btn
-                            color="positive"
-                            label="Submit"
-                            type="submit"
-                            v-close-popup
-                            class="text-lg"
-                        />
-                        <q-btn
-                            flat
-                            color="negative"
-                            label="Cancel"
-                            v-close-popup
-                            class="text-lg"
-                        />
+                        <q-btn color="positive" label="Submit" type="submit" v-close-popup class="text-lg" />
+                        <q-btn flat color="negative" label="Cancel" v-close-popup class="text-lg" />
                     </div>
                 </form>
             </div>
@@ -602,8 +477,10 @@ const leave = (el, done) => {
 .aspect-ratio-container {
     position: relative;
     width: 100%;
-    padding-top: 56.25%; /* 16:9 aspect ratio */
-    background-color: black; /* Black filler */
+    padding-top: 56.25%;
+    /* 16:9 aspect ratio */
+    background-color: black;
+    /* Black filler */
 }
 
 .aspect-ratio-img {
@@ -619,6 +496,7 @@ const leave = (el, done) => {
 .instagram-card:hover {
     border: 1px solid black;
 }
+
 .instagram-card-header,
 .instagram-card-footer {
     display: flex;
@@ -732,7 +610,8 @@ const leave = (el, done) => {
 
 .comment-content {
     display: flex;
-    flex-direction: row; /* Ensures items are aligned horizontally */
+    flex-direction: row;
+    /* Ensures items are aligned horizontally */
 }
 
 .carousel-container {
@@ -762,7 +641,8 @@ const leave = (el, done) => {
 .carousel-image {
     max-width: 100%;
     max-height: 100%;
-    object-fit: contain; /* Maintains aspect ratio and fits within the container */
+    object-fit: contain;
+    /* Maintains aspect ratio and fits within the container */
 }
 
 
@@ -776,7 +656,8 @@ const leave = (el, done) => {
     padding: 10px;
     cursor: pointer;
     z-index: 1000;
-    font-size: 24px; /* Adjust size of the arrows */
+    font-size: 24px;
+    /* Adjust size of the arrows */
 }
 
 .prev {
@@ -796,12 +677,14 @@ const leave = (el, done) => {
 .carousel-enter,
 .carousel-leave-to {
     opacity: 0;
-    transform: scale(0.95); /* Optional: Scale down during the transition */
+    transform: scale(0.95);
+    /* Optional: Scale down during the transition */
 }
 
 /* Optional: Add additional scale effect for entering */
 .carousel-enter {
     opacity: 0;
-    transform: scale(1.05); /* Optional: Scale up during the transition */
+    transform: scale(1.05);
+    /* Optional: Scale up during the transition */
 }
 </style>
