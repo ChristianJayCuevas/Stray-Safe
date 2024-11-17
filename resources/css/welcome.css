@@ -42,7 +42,6 @@
     font-weight: 500; /* font-medium */
     font-size: 1.5rem; /* text-2xl */
     line-height: 2rem; /* leading-normal */
-    margin-right: 5rem; /* mr-20 */
 }
 
 .dark .custom-text {
@@ -221,19 +220,6 @@
     text-align: center;
 }
 
-.tab-container {
-    position: relative;
-
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-
-    padding: 2px;
-
-    background-color: transparent;
-    border-radius: 9px;
-}
-
 .indicator {
     content: "";
     width: 130px;
@@ -314,7 +300,6 @@
     }
 }
 
-
 /*navpill*/
 
 .tab {
@@ -326,40 +311,61 @@
     opacity: 0;
 }
 
+.tab-container {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 2px;
+    background-color: #d3cfc8;
+    border-radius: 9px;
+}
+
 .tab_label {
     width: 130px;
     height: 28px;
-    color: black;
+    color: black; /* Default color for unselected tab */
     position: relative;
     z-index: 999;
-
     display: flex;
     align-items: center;
     justify-content: center;
-
     border: 0;
-
-    font-size: 0.75rem;
-    opacity: 0.6;
-
+    font-size: 1rem;
     cursor: pointer;
+    transition: color 0.3s ease; /* Smooth transition for color change */
 }
 
-.tab--1:checked~.indicator {
+/* Style for checked label */
+.tab:checked + label {
+    color: white; /* Selected tab text color */
+}
+
+.indicator {
+    content: "";
+    width: 130px;
+    height: 28px;
+    background: #38a3a5;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    z-index: 9;
+    border-radius: 7px;
+    transition: all 0.2s ease-out;
+}
+
+.tab--1:checked ~ .indicator {
     left: 2px;
 }
 
-.tab--2:checked~.indicator {
+.tab--2:checked ~ .indicator {
     left: calc(130px + 2px);
 }
 
-.tab--3:checked~.indicator {
+.tab--3:checked ~ .indicator {
     left: calc(130px * 2 + 2px);
 }
 
-.tab--4:checked~.indicator {
-    left: calc(130px * 3 + 2px);
-}
 
 /*features*/
 #features {

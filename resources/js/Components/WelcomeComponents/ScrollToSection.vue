@@ -1,6 +1,4 @@
 <script setup>
-import { ref } from 'vue';
-
 const props = defineProps({
     sectionId: {
         type: String,
@@ -39,10 +37,14 @@ function scrollToSection(sectionId, tabId) {
 
     window.requestAnimationFrame(step);
 
+    // Set the corresponding radio button as checked
     const tab = document.getElementById(tabId);
-    tab.checked = true;
+    if (tab) {
+        tab.checked = true;
+    }
 }
 </script>
+
 <template>
     <button @click="scrollToSection(sectionId, tabId)">
         <slot></slot>

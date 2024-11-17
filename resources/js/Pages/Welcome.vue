@@ -1,6 +1,39 @@
 <script setup>
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import {Link} from '@inertiajs/vue3';
 import ScrollToSection from '@/Components/WelcomeComponents/ScrollToSection.vue';
+function scrollToSection(sectionId, tabId) {
+    const targetElement = document.querySelector(sectionId);
+    const targetPosition = targetElement.getBoundingClientRect().top + window.scrollY;
+    const startPosition = window.scrollY;
+    const distance = targetPosition - startPosition;
+    const duration = 800;
+    let start = null;
+
+    function step(timestamp) {
+        if (!start) start = timestamp;
+        const progress = timestamp - start;
+        const percentage = Math.min(progress / duration, 1);
+        const ease = easeInOutQuad(percentage);
+
+        window.scrollTo(0, startPosition + distance * ease);
+
+        if (progress < duration) {
+            window.requestAnimationFrame(step);
+        }
+    }
+
+    function easeInOutQuad(t) {
+        return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    }
+
+    window.requestAnimationFrame(step);
+
+    // Set the corresponding radio button as checked
+    const tab = document.getElementById(tabId);
+    if (tab) {
+        tab.checked = true;
+    }
+}
 </script>
 <template>
 
@@ -11,16 +44,23 @@ import ScrollToSection from '@/Components/WelcomeComponents/ScrollToSection.vue'
                 <span class="custom-text">StraySafe</span>
             </a>
             <div class="tab-container">
-                <input type="radio" name="tab" id="tab1" class="tab tab--1" />
-                <ScrollToSection sectionId="#hero" tabId="tab1">
-                    <label class="tab_label" for="tab1">Home</label>
-                </ScrollToSection>
-                <input type="radio" name="tab" id="tab2" class="tab tab--2" />
-                <ScrollToSection sectionId="#features" tabId="tab2">
-                    <label class="tab_label" for="tab2">Features</label>
-                </ScrollToSection>
-                <div class="indicator"></div>
-            </div>
+    <input type="radio" name="tab" id="tab1" class="tab tab--1" />
+    <label class="tab_label" for="tab1" @click="scrollToSection('#hero')">Home</label>
+
+    <input type="radio" name="tab" id="tab2" class="tab tab--2" />
+    <label class="tab_label" for="tab2" @click="scrollToSection('#features')">Features</label>
+
+    <input type="radio" name="tab" id="tab3" class="tab tab--3" />
+    <label class="tab_label" for="tab3" @click="scrollToSection('#highlights')">Highlights</label>
+
+    <div class="indicator"></div>
+</div>
+
+
+
+
+
+
             <div class="generic-container">
                 <Link href="/login"><q-btn label="Log in" padding="xs md" class="btn-color-login" rounded flat /></Link>
                 <Link href="/register"><q-btn label="Sign Up" padding="xs md" class="btn-color-register" flat rounded />
