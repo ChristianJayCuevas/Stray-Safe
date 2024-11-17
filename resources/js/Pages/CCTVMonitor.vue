@@ -5,7 +5,7 @@ import { ref, computed } from 'vue';
 const cctvs = ref([
     { 
         name: 'Scout Rallos Street', 
-        videoSrc: 'http://100.89.19.38:5000/video',
+        videoSrc: 'https://100.89.19.38:5000/video',
         snapshots: [
             { src: 'http://178.128.48.126/videos/snapshot1.png', time: '10:00 AM', classification: 'Stray' },
             { src: 'http://178.128.48.126/videos/snapshot2.png', time: '10:01 AM', classification: 'Stray' },
@@ -14,7 +14,7 @@ const cctvs = ref([
     },
     { 
         name: 'Scout Limbaga Street', 
-        videoSrc: 'http://100.89.19.38:5000/video',
+        videoSrc: 'https://100.89.19.38:5000/video',
         snapshots: [
             { src: 'http://178.128.48.126/snapshots/leasheddog_09:00.jpg', time: '9:00 AM', classification: 'Leashed' },
             { src: 'http://178.128.48.126/snapshots/leasheddog_09:30.jpg', time: '9:30 AM', classification: 'Leashed' },
