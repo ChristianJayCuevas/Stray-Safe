@@ -17,6 +17,6 @@ class CommentController extends Controller
             'user_id' => $userID->id
         ]
         );
-        return redirect()->route('dashboard', ['post' => $request->post_id]);
+        return redirect()->route('home', ['post' => $request->post_id]);
     }
 }

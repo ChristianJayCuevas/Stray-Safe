@@ -1,3 +1,101 @@
+
+<script setup>
+import { ref, computed, onMounted, defineEmits } from "vue";
+import { Link, usePage, router } from "@inertiajs/vue3";
+import { Head, useForm } from "@inertiajs/vue3";
+import { useQuasar } from 'quasar';
+
+//FilePond imports for multiple file upload
+import vueFilePond from "vue-filepond";
+import FilePondPluginImagePreview from "filepond-plugin-image-preview";
+import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
+import 'filepond/dist/filepond.min.css';
+
+//Create an Instance of FilePond
+const FilePond = vueFilePond(FilePondPluginImagePreview);
+
+const { auth } = usePage().props;
+const authUser = computed(() => auth.user || null);
+console.log("auth.user:", auth.user);
+
+const drawer = ref(false);
+const miniState = ref(true);
+const thepost = ref(false);
+const leftDrawerOpen = ref(false);
+const search = ref('');
+const filteredResults = ref({ posts: [], users: [] });
+const $q = useQuasar()
+
+function submitLogout() {
+    Inertia.post(route("logout"));
+}
+
+function toggleLeftDrawer() {
+    leftDrawerOpen.value = !leftDrawerOpen.value;
+}
+
+// Perform search
+const emit = defineEmits();
+
+const updateSearch = () => {
+    emit('search-updated', search.value);
+};
+
+const clearSearch = () => {
+    search.value = '';
+    emit('search-updated', search.value);
+};
+const uploader = ref(null);
+const form = useForm({
+    title: "",
+    description: "",
+    image_url: [],
+});
+
+const errorMessage = ref("");
+
+function handleFilePondRevert(uniqueId, load, error){
+    form.image_url = form.image_url.filter((image) => image !== uniqueId);
+    router.delete('/revert/' + uniqueId);
+    load();
+}
+
+function handleFilePondLoad(response){
+    form.image_url.push(response); 
+    return response;
+}
+
+const submit = () => {
+    errorMessage.value = ""; // Clear any previous error messages
+
+    // Print the form data for debugging purposes
+    console.log("Form Data:", {
+        title: form.title,
+        description: form.description,
+        image_url: form.image_url,
+    });
+
+    // Check if all required fields are filled
+    if (!form.title || !form.description || !form.image_url) {
+        errorMessage.value = "Image, Title and Description are required.";
+        return;
+    }
+
+    form.post(route("post.uploadPost"), {
+        onSuccess: () => {
+            // Handle successful form submission
+            console.log("Form submitted successfully!");
+            localStorage.setItem('notification', 'successPost');
+            window.location.reload();
+        },
+        onError: (errors) => {
+            // Handle errors from the server
+            console.error("Form submission error:", errors);
+            errorMessage.value = "An error occurred while submitting the form.";
+        },
+    });
+};
+</script>
 <template>
     <div class="bg-website">
     <q-layout view="hHh lpR fFf">
@@ -283,7 +381,7 @@
     >
         <div
             class="instagram-card-2 bg-white rounded-lg shadow-lg overflow-hidden max-w-half"
-            style="width: 80vw; height: 80vh"
+            style="width: 90vw; height: 70vh"
         >
             <div class="flex justify-start p-8 bg-gray-100">
                 <h4 class="text-2xl font-bold">Create Post</h4>
@@ -376,104 +474,6 @@
     </q-layout>
 </div>
 </template>
-
-<script setup>
-import { ref, computed, onMounted, defineEmits } from "vue";
-import { Link, usePage, router } from "@inertiajs/vue3";
-import { Head, useForm } from "@inertiajs/vue3";
-import { useQuasar } from 'quasar';
-
-//FilePond imports for multiple file upload
-import vueFilePond from "vue-filepond";
-import FilePondPluginImagePreview from "filepond-plugin-image-preview";
-import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
-import 'filepond/dist/filepond.min.css';
-
-//Create an Instance of FilePond
-const FilePond = vueFilePond(FilePondPluginImagePreview);
-
-const { auth } = usePage().props;
-const authUser = computed(() => auth.user || null);
-console.log("auth.user:", auth.user);
-
-const drawer = ref(false);
-const miniState = ref(true);
-const thepost = ref(false);
-const leftDrawerOpen = ref(false);
-const search = ref('');
-const filteredResults = ref({ posts: [], users: [] });
-const $q = useQuasar()
-
-function submitLogout() {
-    Inertia.post(route("logout"));
-}
-
-function toggleLeftDrawer() {
-    leftDrawerOpen.value = !leftDrawerOpen.value;
-}
-
-// Perform search
-const emit = defineEmits();
-
-const updateSearch = () => {
-    emit('search-updated', search.value);
-};
-
-const clearSearch = () => {
-    search.value = '';
-    emit('search-updated', search.value);
-};
-const uploader = ref(null);
-const form = useForm({
-    title: "",
-    description: "",
-    image_url: [],
-});
-
-const errorMessage = ref("");
-
-function handleFilePondRevert(uniqueId, load, error){
-    form.image_url = form.image_url.filter((image) => image !== uniqueId);
-    router.delete('/revert/' + uniqueId);
-    load();
-}
-
-function handleFilePondLoad(response){
-    form.image_url.push(response); 
-    return response;
-}
-
-const submit = () => {
-    errorMessage.value = ""; // Clear any previous error messages
-
-    // Print the form data for debugging purposes
-    console.log("Form Data:", {
-        title: form.title,
-        description: form.description,
-        image_url: form.image_url,
-    });
-
-    // Check if all required fields are filled
-    if (!form.title || !form.description || !form.image_url) {
-        errorMessage.value = "Image, Title and Description are required.";
-        return;
-    }
-
-    form.post(route("post.uploadPost"), {
-        onSuccess: () => {
-            // Handle successful form submission
-            console.log("Form submitted successfully!");
-            localStorage.setItem('notification', 'successPost');
-            window.location.reload();
-        },
-        onError: (errors) => {
-            // Handle errors from the server
-            console.error("Form submission error:", errors);
-            errorMessage.value = "An error occurred while submitting the form.";
-        },
-    });
-};
-</script>
 
 <style lang="sass">
 .GPL

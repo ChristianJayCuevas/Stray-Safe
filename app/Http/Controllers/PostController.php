@@ -56,7 +56,6 @@ class PostController extends Controller
             if (Storage::exists('images/' . $imagePath)) {
                 Storage::delete('images/' . $imagePath);
                 
-        
                 $directory = dirname($imagePath);
                 if (!in_array($directory, $directoriesToDelete)) {
                     $directoriesToDelete[] = $directory;
@@ -111,56 +110,39 @@ class PostController extends Controller
         return to_route('home');
     }
 
-    public function sharePost(Request $request)
-    {   
-        $userID = Auth::user();
-    
-        // Validate request data
-        $request->validate([
-            'title' => ['required', 'string', 'max:255'],
-            'description' => ['required'],
-        ]);
-    
-        $imageUrl = $request->image_url;
-    
-        // Extract filename from the URL
-        $filename = basename(parse_url($imageUrl, PHP_URL_PATH));
-    
-        // Create a new post
-        $post = Post::create([
-            'title' => $request->title,
-            'description' => $request->description,
-            'user_id' => $userID->id,
-        ]);
-    
-        // Create a new PostImage record
-        PostImage::create([
-            'post_id' => $post->id,
-            'post_image_caption' => $filename, // Store the filename for caption
-            'post_image_path' => $filename, // Store the filename for path
-        ]);
-    
-        return to_route('home');
-    }
-
-
     //Show Edit Post Page
     public function updatePost(Request $request, $id)
     {
+        $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['required'],
+            'images.*' => ['image', 'mimes:jpeg,png,jpg,gif', 'max:2048'], // Validation for multiple images
+        ]);
+
         $post = Post::findOrFail($id);
 
-        $data = $request->only(['title', 'description']);
+        // Update the post details
+        $post->update([
+            'title' => $request->title,
+            'description' => $request->description,
+        ]);
 
-        // Preserve existing image URL if no new image is uploaded
-        if ($request->hasFile('image_url')) {
-            $file = $request->file('image_url');
-            $path = $file->store('images', 'public');
-            $data['image_url'] = $path;
-        } else {
-            $data['image_url'] = $post->image_url;
+        // Handle updating images
+        $temporaryImages = TemporaryImage::whereIn('folder', $request->image_url)->get();
+        PostImage::where('post_id', $id)->delete();
+
+        foreach($temporaryImages as $temporaryImage) {
+            Storage::copy('images/tmp/' . $temporaryImage->folder . '/' . $temporaryImage->file, 'images/' . $temporaryImage->folder . '/' . $temporaryImage->file);
+            PostImage::create(
+                [
+                    'post_id' => $post->id,
+                    'post_image_caption' => $temporaryImage->file,
+                    'post_image_path' => $temporaryImage->folder . '/' . $temporaryImage->file
+                ]
+            );
+            Storage::deleteDirectory('images/tmp/' . $temporaryImage->folder);
+            $temporaryImage->delete();
         }
-
-        $post->update($data);
 
         return to_route('home');
     }

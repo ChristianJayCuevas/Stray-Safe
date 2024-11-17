@@ -4,6 +4,13 @@ import { ref, computed, defineProps, defineEmits, watch, toRef, onMounted } from
 import { Head, Link, usePage, useForm, router } from "@inertiajs/vue3";
 import HeartButton from "@/Components/HeartButton.vue";
 import moment from "moment";
+import vueFilePond from "vue-filepond";
+import FilePondPluginImagePreview from "filepond-plugin-image-preview";
+import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
+import 'filepond/dist/filepond.min.css';
+
+// Create an Instance of FilePond
+const FilePond = vueFilePond(FilePondPluginImagePreview);
 
 const errorMessage = ref("");
 const successMessage = ref("");
@@ -32,7 +39,7 @@ const form2 = useForm({
     id: props.post.id,
     title: props.post.title,
     description: props.post.description,
-    image_url: props.post.image_url,
+    image_url: [],
 });
 
 const submit = () => {
@@ -62,40 +69,38 @@ const submit = () => {
 };
 
 const thepost = ref(false);
-const imageUrl = ref(
-    props.post.image_url ? `/storage/${props.post.image_url}` : null
-);
+const imageUrl = ref(props.post.postImages.length ? `/storage/images/${props.post.postImages[0].post_image_path}` : null);
 
-const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-        form2.image_url = file; // Set the file in form2
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            imageUrl.value = e.target.result; // Set the preview URL
-        };
-        reader.readAsDataURL(file);
-    } else {
-        form2.image_url = null;
-        imageUrl.value = `/storage/${props.post.image_url}`; // Fallback to existing image URL
-    }
+const handleFilePondRevert = (uniqueId, load, error) => {
+    form2.image_url = form2.image_url.filter((image) => image !== uniqueId);
+    axios.delete(`/revert/${uniqueId}`).then(() => {
+        load();
+    }).catch((err) => {
+        console.error("Error reverting file:", err);
+        if (error) error();
+    });
+};
+
+const handleFilePondLoad = (response) => {
+    form2.image_url.push(response);
+    return response;
 };
 
 const submit2 = () => {
-    // Ensure form2.image_url is correctly set before submission
-    form2.image_url = imageUrl.value.includes("data:image")
-        ? imageUrl.value
-        : form2.image_url;
+    errorMessage.value = "";
+    successMessage.value = "";
 
     form2.patch(route("updatePost", form2.id), {
         preserveScroll: true,
         onSuccess: () => {
-            console.log("Form submitted successfully!");
+            console.log("Post updated successfully!");
+            successMessage.value = "Post updated successfully!";
+            thepost.value = false;
             window.location.reload();
         },
         onError: (errors) => {
             console.error("Form submission error:", errors);
-            errorMessage.value = "An error occurred while submitting the form.";
+            errorMessage.value = "An error occurred while updating the post.";
         },
     });
 };
@@ -220,37 +225,23 @@ const leave = (el, done) => {
 
             <q-btn-dropdown dropdown-icon="fa-solid fa-ellipsis-h" @click.stop flat round >
                 <q-list style="min-width: 150px">
-                    <!-- <q-item
-                        clickable
-                        v-close-popup
-                        @click="onItemClick('Save Post')"
-                    >
+                    <q-item clickable v-close-popup @click="thepost = true">
                         <q-item-section>
                             <div class="flex items-center">
-                                <q-icon name="fa-solid fa-box-archive" />
-                                <q-item-label class="ml-2"
-                                    >Save Post</q-item-label
-                                >
+                                <q-icon name="fa-solid fa-pencil-alt" />
+                                <q-item-label class="ml-2" color="warning">Edit Post</q-item-label>
                             </div>
                         </q-item-section>
-                    </q-item> -->
-                        <q-item clickable v-close-popup @click="thepost = true">
-                            <q-item-section>
-                                <div class="flex items-center">
-                                    <q-icon name="fa-solid fa-pencil-alt" />
-                                    <q-item-label class="ml-2" color="warning">Edit Post</q-item-label>
-                                </div>
-                            </q-item-section>
-                        </q-item>
+                    </q-item>
 
-                        <q-item clickable v-close-popup @click="destroy(post.id)">
-                            <q-item-section>
-                                <div class="flex items-center">
-                                    <q-icon name="fa-solid fa-trash-alt" />
-                                    <q-item-label class="ml-2">Delete Post</q-item-label>
-                                </div>
-                            </q-item-section>
-                        </q-item>
+                    <q-item clickable v-close-popup @click="destroy(post.id)">
+                        <q-item-section>
+                            <div class="flex items-center">
+                                <q-icon name="fa-solid fa-trash-alt" />
+                                <q-item-label class="ml-2">Delete Post</q-item-label>
+                            </div>
+                        </q-item-section>
+                    </q-item>
                  
                 </q-list>
             </q-btn-dropdown>
@@ -409,7 +400,7 @@ const leave = (el, done) => {
     </q-dialog>
     <q-dialog v-model="thepost" backdrop-filter="blur(4px) saturate(150%)" persistent>
         <div class="instagram-card bg-white rounded-lg shadow-lg overflow-hidden"
-            style="max-width: 90vw; max-height: 90vh; width: 80vw; height: 80vh">
+            style="max-width: 50vw; max-height: 90vh; width: 50vw; height: 70vh">
             <div class="flex justify-start p-8 bg-gray-100">
                 <h4 class="text-2xl font-bold">Update Post</h4>
             </div>
@@ -417,13 +408,27 @@ const leave = (el, done) => {
             <div class="flex flex-col gap-8 p-8 overflow-y-auto" style="height: calc(100% - 64px)">
                 <form @submit.prevent="submit2">
                     <!-- File input for image upload -->
-                    <input type="file" class="ml-5 bg-base-200 file-input file-input-bordered w-half mb-8"
-                        @change="handleFileUpload" accept="image/*" />
-
-                    <div v-if="imageUrl" class="q-pa-md">
-                        <img :src="imageUrl" class="rounded-lg max-w-full mx-auto" alt="Uploaded Image"
-                            style="max-height: 300px" />
-                    </div>
+                    <file-pond 
+                        name="image"
+                        ref="pond"
+                        class-name="my-pond"
+                        label-idle="Drop files here or click to upload"
+                        allow-multiple="true"
+                        credits="false"
+                        accepted-file-types="image/jpeg, image/png"
+                        :server="{
+                            url:'',
+                            process: {
+                                url:'/upload-image',
+                                method: 'POST',
+                                onload: handleFilePondLoad
+                            },
+                            revert: handleFilePondRevert,
+                            headers:{
+                                'X-CSRF-TOKEN': $page.props.csrf_token
+                            }
+                        }"
+                    ></file-pond>
 
                     <!-- Title input -->
                     <div class="q-pa-md">
@@ -452,6 +457,7 @@ const leave = (el, done) => {
         </div>
     </q-dialog>
 </template>
+
 
 <style scoped>
 .instagram-card {
@@ -629,21 +635,23 @@ const leave = (el, done) => {
 
 .carousel-image-wrapper {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
+    height: 100%;
 }
 
 .carousel-image {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    /* Maintains aspect ratio and fits within the container */
+    margin: auto; /* Ensure image stays in the center */
 }
+
 
 
 .carousel-control {

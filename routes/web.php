@@ -41,6 +41,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/revert/{folder}', [DeleteTemporaryImageController::class, 'delete']);
     Route::post('/post-upload', [PostController::class, 'uploadPost'])->name('post.uploadPost');
     Route::delete('/post-delete/{id}', [PostController::class, 'deletePost'])->name("deletePost");
+    Route::patch('/post-update/{id}', [PostController::class, 'updatePost'])->middleware(['auth', 'verified'])
+    ->name("updatePost");
+
     Route::post('/post/comment', [CommentController::class, 'createComment'])->name('createComment');
 
     Route::get('/cctv-monitor', [CCTVController::class, 'monitor'])->name('cctv.monitor');
