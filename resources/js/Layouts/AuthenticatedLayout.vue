@@ -95,6 +95,7 @@ const submit = () => {
         },
     });
 };
+
 </script>
 <template>
     <div class="bg-website">
@@ -269,6 +270,17 @@ const submit = () => {
         >
             <q-scroll-area class="fit" :horizontal-thumb-style="{ opacity: 0 }">
                 <q-list padding>
+                    <Link :href="route('home')">
+                        <q-item clickable class="GPL__drawer-item">
+                            <q-item-section avatar>
+                                <q-icon name="home" />
+                            </q-item-section>
+                            <q-item-section>
+                                <q-item-label>Home</q-item-label>
+                            </q-item-section>
+                        </q-item>
+                    </Link>
+
                     <Link :href="route('dashboard')">
                         <q-item clickable class="GPL__drawer-item">
                             <q-item-section avatar>
@@ -318,7 +330,7 @@ const submit = () => {
                                 <q-icon name="videocam" />
                             </q-item-section>
                             <q-item-section>
-                                <q-item-label>Barangay CCTV</q-item-label>
+                                <q-item-label>CCTV</q-item-label>
                             </q-item-section>
                         </q-item>
                     </Link>

@@ -35,17 +35,49 @@ class RoleSeeder extends Seeder
 
         // Create roles and assign existing permissions
         $superAdminRole = Role::create(['name' => 'super_admin']);
-        $superAdminRole->givePermissionTo(['view analytics, view maps, view cctv, view notifications', 
-        'create posts, create cctv, create maps', 'edit posts, edit cctv, edit maps', 'delete posts, 
-        delete cctv, delete maps', 'view users', 'edit users', 'delete users', 'ban users']);
+        $superAdminRole->givePermissionTo([
+            'view analytics',
+            'view maps',
+            'view cctv',
+            'view notifications',
+            'create posts',
+            'create cctv',
+            'create maps',
+            'edit posts',
+            'edit cctv',
+            'edit maps',
+            'delete posts',
+            'delete cctv',
+            'delete maps',
+            'view users',
+            'edit users',
+            'delete users',
+            'ban users',
+        ]);
 
         $barangayOfficialRole = Role::create(['name' => 'barangay_official']);
-        $barangayOfficialRole->givePermissionTo(['view analytics, view maps, view cctv, view notifications', 
-        'create posts, create cctv, create maps', 'edit posts, edit cctv, edit maps', 'delete posts, 
-        delete cctv, delete maps']);
+        $barangayOfficialRole->givePermissionTo([
+            'view analytics',
+            'view maps',
+            'view cctv',
+            'view notifications',
+            'create posts',
+            'create cctv',
+            'create maps',
+            'edit posts',
+            'edit cctv',
+            'edit maps',
+            'delete posts',
+            'delete cctv',
+            'delete maps',
+        ]);
 
         $animalPoundRole = Role::create(['name' => 'animal_pound']);
-        $animalPoundRole->givePermissionTo(['view analytics, view maps, view notifications']);
+        $animalPoundRole->givePermissionTo([
+            'view analytics',
+            'view maps',
+            'view notifications',
+        ]);
 
         // Create roles for user types without assigning permissions
         Role::create(['name' => 'user']);

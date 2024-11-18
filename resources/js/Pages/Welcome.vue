@@ -1,5 +1,5 @@
 <script setup>
-import {Link} from '@inertiajs/vue3';
+import { Link } from '@inertiajs/vue3';
 import ScrollToSection from '@/Components/WelcomeComponents/ScrollToSection.vue';
 function scrollToSection(sectionId, tabId) {
     const targetElement = document.querySelector(sectionId);
@@ -44,17 +44,17 @@ function scrollToSection(sectionId, tabId) {
                 <span class="custom-text">StraySafe</span>
             </a>
             <div class="tab-container">
-    <input type="radio" name="tab" id="tab1" class="tab tab--1" />
-    <label class="tab_label" for="tab1" @click="scrollToSection('#hero')">Home</label>
+                <input type="radio" name="tab" id="tab1" class="tab tab--1" />
+                <label class="tab_label" for="tab1" @click="scrollToSection('#hero')">Home</label>
 
-    <input type="radio" name="tab" id="tab2" class="tab tab--2" />
-    <label class="tab_label" for="tab2" @click="scrollToSection('#features')">Features</label>
+                <input type="radio" name="tab" id="tab2" class="tab tab--2" />
+                <label class="tab_label" for="tab2" @click="scrollToSection('#features')">Features</label>
 
-    <input type="radio" name="tab" id="tab3" class="tab tab--3" />
-    <label class="tab_label" for="tab3" @click="scrollToSection('#highlights')">Highlights</label>
+                <input type="radio" name="tab" id="tab3" class="tab tab--3" />
+                <label class="tab_label" for="tab3" @click="scrollToSection('#highlights')">Highlights</label>
 
-    <div class="indicator"></div>
-</div>
+                <div class="indicator"></div>
+            </div>
 
 
 
@@ -93,117 +93,145 @@ function scrollToSection(sectionId, tabId) {
                 </div>
             </div>
             <div id="features">
-                <div class="feature-grid">
-                    <div class="feature-heading">
-                        <div class="feature-title">Marvelous Features
-                        </div>
-                        <span class="feature-subtitle">Useful in building smart cities</span>
-                    </div>
+    <div class="feature-grid spaced-grid">
+        <div class="feature-heading">
+            <div class="feature-title">Marvelous Features</div>
+            <span class="feature-subtitle">Empowering smart city solutions</span>
+        </div>
 
-                    <div class="feature-card">
-                        <div class="feature-card-inner">
-                            <div class="feature-card-content">
-                                <div class="feature-icon-container">
-                                    <i class="pi pi-fw pi-shopping-cart !text-2xl text-teal-700"></i>
-                                </div>
-                                <div class="feature-card-title">
-                                    Classifying Stray Animals</div>
-                                <span class="feature-card-description">It can classify stray animals in a
-                                    footage.</span>
-                            </div>
-                        </div>
+        <!-- Feature 1: Classifying Stray Animals -->
+        <div class="feature-card">
+            <div class="feature-card-inner">
+                <div class="feature-card-content">
+                    <div class="feature-icon-container">
+                        <i class="fa-solid fa-dog text-4xl text-teal-700"></i>
                     </div>
-
-                    <div class="feature-card">
-                        <div class="feature-card-inner">
-                            <div class="feature-card-content">
-                                <div class="feature-icon-container">
-                                    <i class="pi pi-fw pi-shopping-cart !text-2xl text-teal-700"></i>
-                                </div>
-                                <div class="feature-card-title">
-                                    Classifying Stray Animals</div>
-                                <span class="feature-card-description">It can classify stray animals in a
-                                    footage.</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="feature-card">
-                        <div class="feature-card-inner">
-                            <div class="feature-card-content">
-                                <div class="feature-icon-container">
-                                    <i class="pi pi-fw pi-shopping-cart !text-2xl text-teal-700"></i>
-                                </div>
-                                <div class="feature-card-title">
-                                    Classifying Stray Animals</div>
-                                <span class="feature-card-description">It can classify stray animals in a
-                                    footage.</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="team-section">
-                        <div class="team-content">
-                            <div class="team-title">StraySafe Team</div>
-                            <span class="team-subtitle">T.I.P. Quezon City</span>
-                            <p class="team-description">
-                                “A group of 4th year Computer Engineering students that wants to start
-                                a change within the barangays. By equipping the barangays with a smart
-                                city capability, we can revolutionize the way communities manage
-                                essential services and enhance the overall quality of life. ”
-                            </p>
-                        </div>
-                    </div>
+                    <div class="feature-card-title">Classifying Stray Animals</div>
+                    <span class="feature-card-description">Instantly identifies strays based on collar or leash detection.</span>
                 </div>
             </div>
+        </div>
+
+        <!-- Feature 2: Real-Time Detection -->
+        <div class="feature-card">
+            <div class="feature-card-inner">
+                <div class="feature-card-content">
+                    <div class="feature-icon-container">
+                        <i class="fa-solid fa-video text-4xl text-teal-700"></i>
+                    </div>
+                    <div class="feature-card-title">Real-Time Detection</div>
+                    <span class="feature-card-description">Live CCTV feed for immediate stray identification.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature 3: Location Pinning -->
+        <div class="feature-card">
+            <div class="feature-card-inner">
+                <div class="feature-card-content">
+                    <div class="feature-icon-container">
+                        <i class="fa-solid fa-map-pin text-4xl text-teal-700"></i>
+                    </div>
+                    <div class="feature-card-title">Location Pinning</div>
+                    <span class="feature-card-description">Maps stray locations for quick tracking and response.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature 4: Notification System -->
+        <div class="feature-card">
+            <div class="feature-card-inner">
+                <div class="feature-card-content">
+                    <div class="feature-icon-container">
+                        <i class="fa-solid fa-bell text-4xl text-teal-700"></i>
+                    </div>
+                    <div class="feature-card-title">Notification System</div>
+                    <span class="feature-card-description">Alerts animal pound and pet owners instantly.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature 5: Web and Mobile Application -->
+        <div class="feature-card">
+            <div class="feature-card-inner">
+                <div class="feature-card-content">
+                    <div class="feature-icon-container">
+                        <i class="fa-solid fa-globe text-4xl text-teal-700"></i>
+                        <i class="fa-solid fa-mobile-alt text-4xl text-teal-700"></i>
+                    </div>
+                    <div class="feature-card-title">Web & Mobile App</div>
+                    <span class="feature-card-description">Monitor strays and register pets on any device.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature 6: Feature Matching -->
+        <div class="feature-card">
+            <div class="feature-card-inner">
+                <div class="feature-card-content">
+                    <div class="feature-icon-container">
+                        <i class="fa-solid fa-check-double text-4xl text-teal-700"></i>
+                    </div>
+                    <div class="feature-card-title">Feature Matching</div>
+                    <span class="feature-card-description">Smart matching to identify registered pets swiftly.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
             <!-- Paste here -->
             <div id="highlights">
-                <div class="text-center">
-                    <div class="highlight-title">Powerful Everywhere
-                    </div>
-                    <span class="highlight-subtitle">Web application and Mobile application</span>
-                </div>
+    <div class="text-center">
+        <div class="highlight-title">Powerful Everywhere</div>
+        <span class="highlight-subtitle">Web application and Mobile application</span>
+    </div>
 
-                <div class="grid-container">
-                    <div class="grid-item">
-                        <img src="/demo/images/landing/mockup.svg" class="w-11/12" alt="mockup mobile" />
-                    </div>
+    <!-- First Section with Violet Box -->
+    <div class="grid-container">
+        <div class="grid-item">
+            <img src="/storage/images/Mockup.png" class="w-11/12" alt="mockup mobile" />
+        </div>
 
-                    <div class="grid-item-content">
-                        <div class="icon-container">
-                            <i class="icon"></i>
-                        </div>
-                        <div class="text-large">Wide compatibility</div>
-                        <span class="text-medium">It can be used on web and also on mobile. We offer both web
-                            application and mobile application</span>
-                    </div>
-                </div>
-
-                <div class="grid-container-2">
-                    <div class="grid-item-2">
-                        <div class="icon-box">
-                            <i class="pi pi-fw pi-desktop"></i>
-                        </div>
-                        <div class="title-text">Celerisque</div>
-                        <span class="description-text"></span>
-                    </div>
-                    <div class="right-section">
-                        <img src="/demo/images/landing/mockup-desktop.svg" class="image" alt="mockup" />
-                    </div>
-                </div>
-
+        <div class="grid-item-content">
+            <div class="icon-container">
+                <i class="material-icons text-4xl">devices</i>
             </div>
+            <div class="text-large">Wide Compatibility</div>
+            <span class="text-medium">Works seamlessly on both web and mobile platforms for maximum reach.</span>
+        </div>
+    </div>
+
+    <!-- New Section with Yellow Box (Fixed and Aligned Text) -->
+    <div class="grid-container">
+        <div class="grid-item">
+    <img src="/storage/images/userfriendly.png" class="w-11/12" alt="Pet and User Friendly Mockup" />
+</div>
+<div class="grid-item-content">
+    <div class="icon-container">
+        <i class="fa-solid fa-heart text-2xl text-red-600"></i>
+    </div>
+    <div class="text-large">Pet and User Friendly</div>
+    <span class="text-medium">Designed for ease of use, making it simple for owners and effective for identifying lost pets.</span>
+</div>
+
+    </div>
+</div>
+
             <div class="py-6 px-6 mx-0 mt-20 lg:mx-20">
                 <div class="grid grid-cols-12 gap-4">
-                    <div class="col-span-12 md:col-span-2">
+                    <!-- <div class="col-span-12 md:col-span-2">
                         <a class="generic-container" href="#">
                             <img src="/storage/images/FinalLogoStray.png" alt="Logo" class="logo-size" />
                             <span class="custom-text">StraySafe</span>
                         </a>
-                    </div>
+                    </div> -->
 
                     <div class="col-span-12 md:col-span-10">
-                        <div class="grid grid-cols-12 gap-8 text-center md:text-left">
+                        <!-- <div class="grid grid-cols-12 gap-8 text-center md:text-left">
                             <div class="col-span-12 md:col-span-3">
                                 <h4
                                     class="font-medium text-2xl leading-normal mb-4 text-surface-900 dark:text-surface-0">
@@ -266,7 +294,7 @@ function scrollToSection(sectionId, tabId) {
                                     class="leading-normal text-xl block cursor-pointer text-surface-700 dark:text-surface-100">Terms
                                     of Service</a>
                             </div>
-                        </div>
+                        </div> -->
                     </div>
                 </div>
             </div>
