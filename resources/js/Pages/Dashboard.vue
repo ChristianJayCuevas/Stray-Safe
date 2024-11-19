@@ -11,7 +11,6 @@ const strayAnimalsData = ref({
     totalSightings: 120,
     strayDogs: 70,
     strayCats: 40,
-    otherAnimals: 10,
 });
 
 // Data for Recent Sightings Feed
@@ -58,7 +57,7 @@ const pieChartOptions = ref({
     chart: {
         type: 'pie',
     },
-    labels: ['Stray Dogs', 'Stray Cats', 'Other Animals'],
+    labels: ['Stray Dogs', 'Stray Cats'],
     title: {
         text: 'Distribution of Stray Animal Types',
         align: 'left',
@@ -67,7 +66,6 @@ const pieChartOptions = ref({
 const pieChartSeries = ref([
     strayAnimalsData.value.strayDogs,
     strayAnimalsData.value.strayCats,
-    strayAnimalsData.value.otherAnimals,
 ]);
 </script>
 
@@ -99,13 +97,13 @@ const pieChartSeries = ref([
                     <h3 class="text-lg font-semibold mb-2">Animal Type Breakdown</h3>
                     <p class="text-2xl font-medium">Dogs: <span class="text-primary font-bold text-2xl">{{ strayAnimalsData.strayDogs }}</span></p>
                     <p class="text-2xl font-medium">Cats: <span class="text-primary font-bold text-2xl">{{ strayAnimalsData.strayCats }}</span></p>
-                    <p class="text-2xl font-medium">Other: <span class="text-primary font-bold text-2xl">{{ strayAnimalsData.otherAnimals }}</span></p>
+        
                 </q-card-section>
             </q-card>
         </div>
 
         <!-- Charts Section -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 mb-10">
             <q-card class="line-chart-card ml-10">
                 <q-card-section>
                     <VueApexCharts :series="lineChartSeries" :options="lineChartOptions" type="line" height="350" />
@@ -120,7 +118,7 @@ const pieChartSeries = ref([
         </div>
 
         <!-- Recent Sightings Feed -->
-        <q-card class="recent-sightings-card mt-6 mx-10">
+        <!-- <q-card class="recent-sightings-card mt-6 mx-10">
             <q-card-section>
                 <h3 class="text-2xl font-bold mb-4">Recent Sightings Feed</h3>
                 <q-table
@@ -138,7 +136,7 @@ const pieChartSeries = ref([
                     </template>
                 </q-table>
             </q-card-section>
-        </q-card>
+        </q-card> -->
     </AuthenticatedLayout>
 </template>
 

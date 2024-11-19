@@ -36,7 +36,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // For the homepage
     Route::get('/home', [PostController::class, 'index'])->name('home');
-
+    Route::get('/registeredpets', function () {
+        return Inertia::render('RegisteredPets');
+    })->name('registeredpets');
     //For the uploading logic
     Route::post('/upload-image', [UploadTemporaryImageController::class, 'upload']);
     Route::delete('/revert/{folder}', [DeleteTemporaryImageController::class, 'delete']);

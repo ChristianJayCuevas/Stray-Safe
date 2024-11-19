@@ -93,7 +93,7 @@ function closeDialog() {
 }
 </script>
 
-<template>
+<template> 
     <AuthenticatedLayout>
         <q-layout>
             <q-page-container>

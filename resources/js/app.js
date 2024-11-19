@@ -5,16 +5,22 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
-import '@quasar/extras/material-icons/material-icons.css'
-import '@quasar/extras/fontawesome-v6/fontawesome-v6.css'
-import VueVideoPlayer from '@videojs-player/vue'
-import 'video.js/dist/video-js.css'
-// Import Quasar css
-import 'quasar/src/css/index.sass'
-import { Quasar } from 'quasar';
+
+// Import Quasar and Notify plugin
+import { Quasar, Notify } from 'quasar'; 
+import '@quasar/extras/material-icons/material-icons.css';
+import '@quasar/extras/fontawesome-v6/fontawesome-v6.css';
+
+// Import additional libraries
+import VueVideoPlayer from '@videojs-player/vue';
+import 'video.js/dist/video-js.css';
+import 'quasar/src/css/index.sass'; // Quasar core styles
 import VueApexCharts from "vue3-apexcharts";
 
+// Get app name from environment variables
+const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+// Create the app
 createInertiaApp({
     title: (title) => `${title} ${appName}`,
     resolve: (name) =>
@@ -27,7 +33,9 @@ createInertiaApp({
             .use(plugin)
             .use(ZiggyVue)
             .use(Quasar, {
-                plugins: {},
+                plugins: {
+                    Notify, // Ensure Notify is registered here
+                },
             })
             .use(VueVideoPlayer)
             .use(VueApexCharts)

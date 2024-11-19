@@ -149,7 +149,7 @@ const submit = () => {
                 </template>
             </q-input> -->
 
-                <q-btn
+                <!-- <q-btn
                     @click="thepost = true"
                     v-if="$q.screen.gt.xs && authUser"
                     flat
@@ -163,7 +163,7 @@ const submit = () => {
                     
                 >
                     Create
-                </q-btn>
+                </q-btn> -->
                 <div class="q-gutter-sm row items-center no-wrap">
                     <!-- <Link v-if="authUser" >
                         <q-btn
@@ -178,12 +178,12 @@ const submit = () => {
                             <q-tooltip>Message</q-tooltip>
                         </q-btn>
                     </Link> -->
-                    <q-btn round dense flat color="grey-8" icon="notifications" >
+                    <!-- <q-btn round dense flat color="grey-8" icon="notifications" >
                         <q-badge color="red" text-color="white" floating>
                             2
                         </q-badge>
                         <q-tooltip>Notifications</q-tooltip>
-                    </q-btn>
+                    </q-btn> -->
                     <q-btn dense flat no-wrap v-if="authUser">
                         <q-avatar rounded size="35px">
                             <img
@@ -270,7 +270,7 @@ const submit = () => {
         >
             <q-scroll-area class="fit" :horizontal-thumb-style="{ opacity: 0 }">
                 <q-list padding>
-                    <Link :href="route('home')">
+                    <!-- <Link :href="route('home')">
                         <q-item clickable class="GPL__drawer-item">
                             <q-item-section avatar>
                                 <q-icon name="home" />
@@ -279,7 +279,7 @@ const submit = () => {
                                 <q-item-label>Home</q-item-label>
                             </q-item-section>
                         </q-item>
-                    </Link>
+                    </Link> -->
 
                     <Link :href="route('dashboard')">
                         <q-item clickable class="GPL__drawer-item">
@@ -314,13 +314,13 @@ const submit = () => {
                         </q-item>
                     </Link> -->
 
-                    <Link >
+                    <Link :href="route('registeredpets')">
                         <q-item clickable class="GPL__drawer-item">
                             <q-item-section avatar>
-                                <q-icon name="crisis_alert" />
+                                <q-icon name="pets" />
                             </q-item-section>
                             <q-item-section>
-                                <q-item-label>Stray Alert</q-item-label>
+                                <q-item-label>Registered Pets</q-item-label>
                             </q-item-section>
                         </q-item>
                     </Link>
@@ -330,7 +330,7 @@ const submit = () => {
                                 <q-icon name="videocam" />
                             </q-item-section>
                             <q-item-section>
-                                <q-item-label>CCTV</q-item-label>
+                                <q-item-label>Surveillance Camera</q-item-label>
                             </q-item-section>
                         </q-item>
                     </Link>
