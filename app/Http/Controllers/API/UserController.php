@@ -34,13 +34,49 @@ class UserController extends Controller
             'token' => $token,
         ]);
     }
-public function fetchUsers()
-{
-    $users = User::select('id', 'name', 'email', 'created_at', 'updated_at')->get();
 
-    return response()->json([
-        'status' => 'success',
-        'data' => $users,
-    ]);
-}
+    public function register(Request $request)
+    {
+        // Validate the incoming request data
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'password' => 'required|string|min:8|confirmed', // Ensure passwords match
+            'contact_number' => 'nullable|string|max:15',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $validator->errors(),
+            ], 422);
+        }
+
+        // Create the user
+        $user = User::create([
+            'name' => $request->username,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'contact_number' => $request->contact_number,
+        ]);
+
+        // Generate a Sanctum token
+        $token = $user->createToken('mobile')->plainTextToken;
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'User created successfully',
+            'user' => $user,
+            'token' => $token,
+        ], 201);
+    }
+    public function fetchUsers()
+    {
+        $users = User::select('id', 'name', 'email', 'created_at', 'updated_at')->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $users,
+        ]);
+    }
 }
