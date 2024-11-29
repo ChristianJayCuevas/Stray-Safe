@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\MapPinController;
 use App\Http\Controllers\API\RegisteredUsersAPI;
 use App\Http\Controllers\API\UserController;
-
+use App\Http\Middleware\ValidateStaticToken;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
@@ -23,6 +23,6 @@ Route::delete('/registered-animals/{id}', [RegisteredAnimalController::class, 'd
 
 /*Mobile API*/
 
-Route::middleware(['auth:sanctum', \App\Http\Middleware\ValidateStaticToken::class])->group(function () {
+Route::middleware([ValidateStaticToken::class])->group(function () {
     Route::get('/mobileusers', [UserController::class, 'fetchUsers']);
 });
