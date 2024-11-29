@@ -1,14 +1,13 @@
 <?php
 
-namespace App\Http\Controllers\API;
+namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Sanctum\HasApiTokens;
-class UserController extends Controller
+
+class LoginController extends Controller
 {
     public function login(Request $request)
     {
@@ -34,13 +33,4 @@ class UserController extends Controller
             'token' => $token,
         ]);
     }
-public function fetchUsers()
-{
-    $users = User::select('id', 'name', 'email', 'created_at', 'updated_at')->get();
-
-    return response()->json([
-        'status' => 'success',
-        'data' => $users,
-    ]);
-}
 }
