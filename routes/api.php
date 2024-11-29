@@ -25,6 +25,6 @@ Route::delete('/registered-animals/{id}', [RegisteredAnimalController::class, 'd
 /*Mobile API*/
 
 Route::middleware([ValidateStaticToken::class])->group(function () {
-    Route::post('/login', [UserController::class, 'login']);
+    Route::post('/mobilelogin', [UserController::class, 'login']);
     Route::get('/mobileusers', [UserController::class, 'fetchUsers']);
 });
