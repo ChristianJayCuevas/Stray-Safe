@@ -11,7 +11,6 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use App\Http\Controllers\VideoProcessingController;
 
 use App\Http\Controllers\MapPinController;
 
@@ -53,9 +52,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/cctv', [CCTVController::class, 'view'])->name('cctv.view');
     Route::get('/cctv/detect', [CCTVController::class, 'detect'])->name('cctv.detect');
     
-    Route::post('/upload-video', [VideoController::class, 'uploadVideo']);
-    Route::post('/store-snapshot', [VideoController::class, 'storeSnapshot']);
-    Route::get('/snapshots', [VideoController::class, 'getSnapshots']);
 
     //For the profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
