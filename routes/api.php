@@ -3,6 +3,9 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\MapPinController;
+use App\Http\Controllers\API\RegisteredUsersAPI;
+
+
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
@@ -17,3 +20,7 @@ Route::get('/registered-animals', [RegisteredAnimalController::class, 'index']);
 Route::post('/registered-animals', [RegisteredAnimalController::class, 'store']);
 Route::put('/registered-animals/{id}', [RegisteredAnimalController::class, 'update']);
 Route::delete('/registered-animals/{id}', [RegisteredAnimalController::class, 'destroy']);
+
+/*Mobile API*/
+
+Route::get('/mobileusers', [RegisteredUsersAPI::class, 'fetchUsers']);

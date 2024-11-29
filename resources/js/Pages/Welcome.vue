@@ -56,11 +56,6 @@ function scrollToSection(sectionId, tabId) {
                 <div class="indicator"></div>
             </div>
 
-
-
-
-
-
             <div class="generic-container">
                 <Link href="/login"><q-btn label="Log in" padding="xs md" class="btn-color-login" rounded flat /></Link>
                 <Link href="/register"><q-btn label="Sign Up" padding="xs md" class="btn-color-register" flat rounded />
