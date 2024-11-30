@@ -15,6 +15,7 @@ class RegisteredAnimal extends Model
         'animal_type',
         'picture',
         'status',
+        'breed',
     ];
     public function images()
     {

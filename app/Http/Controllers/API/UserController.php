@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Support\Facades\Validator;
+
 class UserController extends Controller
 {
     public function login(Request $request)
@@ -73,11 +74,28 @@ class UserController extends Controller
     }
     public function fetchUsers()
     {
-        $users = User::select('id', 'name', 'email', 'created_at', 'updated_at')->get();
+        $users = User::select('id', 'name', 'email', 'created_at', 'updated_at', 'contact_number')->get();
 
         return response()->json([
             'status' => 'success',
             'data' => $users,
         ]);
     }
+    public function fetchLoggedInUser()
+{
+    $user = Auth::user();
+
+    if ($user) {
+        return response()->json([
+            'status' => 'success',
+            'data' => $user,
+        ]);
+    } else {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'User not authenticated',
+        ], 401);
+    }
+}
+
 }
