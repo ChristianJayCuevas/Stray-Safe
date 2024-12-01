@@ -11,7 +11,7 @@ class MobileRegisteredAnimalController extends Controller
     public function fetchRegisteredAnimals()
     {
         // Retrieve all registered animals from the database
-        $animals = RegisteredAnimal::select('id', 'owner', 'contact', 'animal_type', 'picture', 'status', 'created_at', 'updated_at', 'breed')->get();
+        $animals = RegisteredAnimal::select('id', 'owner', 'contact', 'animal_type', 'picture', 'status', 'created_at', 'updated_at', 'breed', 'pet_name')->get();
 
         return response()->json([
             'status' => 'success',
@@ -25,7 +25,7 @@ class MobileRegisteredAnimalController extends Controller
         $validator = Validator::make($request->all(), [
             'owner' => 'required|string|max:255',
             'contact' => 'required|string|max:255',
-            'animal_type' => 'required|in:dog,cat',
+            'animal_type' => 'required|in:dog,cat,Dog,Cat,DOG,CAT',
             'picture' => 'required|url', // Expecting a URL from a CDN
             'status' => 'in:caught,free,claimed',
             'breed' => 'nullable|string|max:255',
