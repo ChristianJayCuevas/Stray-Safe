@@ -9,7 +9,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Support\Facades\Validator;
-
+use Illuminate\Support\Facades\Log;
 class UserController extends Controller
 {
     public function login(Request $request)
@@ -102,8 +102,11 @@ class UserController extends Controller
         }
     }
 
-    public function updateProfileImage(Request $request)
+   public function updateProfileImage(Request $request)
 {
+    // Log the incoming request data
+    \Log::info('Update Profile Image Request:', $request->all());
+
     // Validate the request
     $validator = Validator::make($request->all(), [
         'profile_image_link' => 'required|url',
@@ -111,6 +114,7 @@ class UserController extends Controller
     ]);
 
     if ($validator->fails()) {
+        \Log::error('Validation failed:', $validator->errors()->toArray());
         return response()->json([
             'status' => 'error',
             'message' => $validator->errors(),
@@ -121,15 +125,22 @@ class UserController extends Controller
     $user = User::where('email', $request->email)->first();
 
     if (!$user) {
+        \Log::error('User not found for email:', ['email' => $request->email]);
         return response()->json([
             'status' => 'error',
             'message' => 'User not found',
         ], 404);
     }
 
+    // Log the found user
+    \Log::info('Found User:', $user->toArray());
+
     // Update the profile image link
     $user->profile_image_link = $request->profile_image_link;
     $user->save();
+
+    // Log successful update
+    \Log::info('Profile image updated successfully for user:', ['email' => $user->email]);
 
     return response()->json([
         'status' => 'success',
@@ -137,5 +148,6 @@ class UserController extends Controller
         'data' => $user,
     ]);
 }
+
 
 }
