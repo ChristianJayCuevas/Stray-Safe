@@ -29,6 +29,7 @@ class MobileRegisteredAnimalController extends Controller
             'picture' => 'required|url', // Expecting a URL from a CDN
             'status' => 'in:caught,free,claimed',
             'breed' => 'nullable|string|max:255',
+            'pet_name' => 'required|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -46,6 +47,7 @@ class MobileRegisteredAnimalController extends Controller
             'picture' => $request->picture,
             'status' => $request->status ?? 'free',
             'breed' => $request->breed,
+            'pet_name' => $request->pet_name,
         ]);
 
         return response()->json([
