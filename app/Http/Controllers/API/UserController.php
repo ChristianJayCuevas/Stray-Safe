@@ -103,37 +103,39 @@ class UserController extends Controller
     }
 
     public function updateProfileImage(Request $request)
-    {
-        // Validate the request
-        $validator = Validator::make($request->all(), [
-            'profile_image_link' => 'required|url',
-        ]);
+{
+    // Validate the request
+    $validator = Validator::make($request->all(), [
+        'profile_image_link' => 'required|url',
+        'email' => 'required|email', // Ensure email is included in the request
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => $validator->errors(),
-            ], 422);
-        }
-
-        // Get the authenticated user
-        $user = Auth::user();
-
-        if (!$user) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'User not authenticated',
-            ], 401);
-        }
-
-        // Update the profile image link
-        $user->profile_image_link = $request->profile_image_link;
-        $user->save();
-
+    if ($validator->fails()) {
         return response()->json([
-            'status' => 'success',
-            'message' => 'Profile image updated successfully',
-            'data' => $user,
-        ]);
+            'status' => 'error',
+            'message' => $validator->errors(),
+        ], 422);
     }
+
+    // Find the user by email
+    $user = User::where('email', $request->email)->first();
+
+    if (!$user) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'User not found',
+        ], 404);
+    }
+
+    // Update the profile image link
+    $user->profile_image_link = $request->profile_image_link;
+    $user->save();
+
+    return response()->json([
+        'status' => 'success',
+        'message' => 'Profile image updated successfully',
+        'data' => $user,
+    ]);
+}
+
 }
