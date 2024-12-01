@@ -31,5 +31,5 @@ Route::middleware([ValidateStaticToken::class])->group(function () {
     Route::get('/mobileusers', [UserController::class, 'fetchUsers']);
     Route::get('mobileuser/me', [UserController::class, 'fetchLoggedInUser']);
     Route::get('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'fetchRegisteredAnimals']);
-    Route::post('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'storeRegisteredAnimals']);
+    Route::post('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'storeRegisteredAnimal']);
 });
