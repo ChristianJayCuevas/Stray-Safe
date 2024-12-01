@@ -45,6 +45,7 @@ class UserController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed', // Ensure passwords match
             'contact_number' => 'nullable|string|max:15',
+            'profile_image_link' => 'nullable|url', // Optional profile image link
         ]);
 
         if ($validator->fails()) {
@@ -60,6 +61,7 @@ class UserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'contact_number' => $request->contact_number,
+            'profile_image_link' => $request->profile_image_link,
         ]);
 
         // Generate a Sanctum token
@@ -72,30 +74,66 @@ class UserController extends Controller
             'token' => $token,
         ], 201);
     }
+
     public function fetchUsers()
     {
-        $users = User::select('id', 'name', 'email', 'created_at', 'updated_at', 'contact_number')->get();
+        $users = User::select('id', 'name', 'email', 'created_at', 'updated_at', 'contact_number', 'profile_image_link')->get();
 
         return response()->json([
             'status' => 'success',
             'data' => $users,
         ]);
     }
-    public function fetchLoggedInUser()
-{
-    $user = Auth::user();
 
-    if ($user) {
+    public function fetchLoggedInUser()
+    {
+        $user = Auth::user();
+
+        if ($user) {
+            return response()->json([
+                'status' => 'success',
+                'data' => $user,
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+    }
+
+    public function updateProfileImage(Request $request)
+    {
+        // Validate the request
+        $validator = Validator::make($request->all(), [
+            'profile_image_link' => 'required|url',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $validator->errors(),
+            ], 422);
+        }
+
+        // Get the authenticated user
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+
+        // Update the profile image link
+        $user->profile_image_link = $request->profile_image_link;
+        $user->save();
+
         return response()->json([
             'status' => 'success',
+            'message' => 'Profile image updated successfully',
             'data' => $user,
         ]);
-    } else {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'User not authenticated',
-        ], 401);
     }
-}
-
 }
