@@ -91,10 +91,18 @@ const notificationResponse = ref('');
 
 async function sendMockNotification() {
     try {
-        const response = await axios.post('https://straysafe.me/api/send-notification', {
-            title: notificationTitle.value,
-            body: notificationBody.value,
-        });
+        const response = await axios.post(
+            'https://straysafe.me/api/send-notification',
+            {
+                title: notificationTitle.value,
+                body: notificationBody.value,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer StraySafeTeam3`, // Replace with your valid token
+                },
+            }
+        );
 
         notificationResponse.value = `Notification sent successfully: ${response.data.message}`;
         notificationTitle.value = '';
