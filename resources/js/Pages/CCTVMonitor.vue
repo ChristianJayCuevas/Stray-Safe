@@ -84,6 +84,28 @@ async function fetchRecentSnapshots() {
     }
 }
 
+// Notification sending component state
+const notificationTitle = ref('');
+const notificationBody = ref('');
+const notificationResponse = ref('');
+
+async function sendMockNotification() {
+    try {
+        const response = await axios.post('https://straysafe.me/api/send-notification', {
+            title: notificationTitle.value,
+            body: notificationBody.value,
+        });
+
+        notificationResponse.value = `Notification sent successfully: ${response.data.message}`;
+        notificationTitle.value = '';
+        notificationBody.value = '';
+    } catch (error) {
+        console.error('Failed to send notification:', error);
+        notificationResponse.value = 'Failed to send notification. Check console for details.';
+    }
+}
+
+
 // Fetch the recent snapshots when the component is mounted
 onMounted(fetchRecentSnapshots);
 
@@ -123,6 +145,22 @@ function closeDialog() {
                     </div>
                 </q-page>
             </q-page-container>
+
+            <!-- Mock Notification Sender -->
+            <q-page-container>
+                <div class="text-container-normal">
+                    <p class="header">Send Mock Notification</p>
+                </div>
+                <q-page class="q-pa-md">
+                    <q-form @submit.prevent="sendMockNotification">
+                        <q-input v-model="notificationTitle" label="Notification Title" outlined dense />
+                        <q-input v-model="notificationBody" label="Notification Body" outlined dense />
+                        <q-btn label="Send Notification" color="primary" @click="sendMockNotification" />
+                    </q-form>
+                    <p class="q-mt-md">{{ notificationResponse }}</p>
+                </q-page>
+            </q-page-container>
+
             <q-page-container>
                 <div class="text-container-normal">
                     <p class="header">Barangay Sacred Heart - Recent Snapshots</p>
@@ -150,7 +188,6 @@ function closeDialog() {
                 </q-page>
             </q-page-container>
         </q-layout>
-
     </AuthenticatedLayout>
     <q-dialog v-model="dialogVisible" backdrop-filter="blur(4px) saturate(150%)">
         <q-card class="cctv-dialog">

@@ -7,7 +7,7 @@ use App\Http\Controllers\API\UserController;
 use App\Http\Middleware\ValidateStaticToken;
 use App\Http\Controllers\API\MobileRegisteredAnimalController;
 use App\Http\Controllers\RegisteredAnimalController;
-
+use App\Http\Controllers\PushTokenController;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
@@ -24,6 +24,8 @@ Route::put('/registered-animals/{id}', [RegisteredAnimalController::class, 'upda
 Route::delete('/registered-animals/{id}', [RegisteredAnimalController::class, 'destroy']);
 
 /*Mobile API*/
+Route::post('/save-push-token', [PushTokenController::class, 'saveToken']);
+Route::post('/send-notification', [PushTokenController::class, 'sendNotification']);
 
 Route::middleware([ValidateStaticToken::class])->group(function () {
     Route::post('/user/image', [UserController::class, 'updateProfileImage']);
