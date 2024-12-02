@@ -1,16 +1,14 @@
-namespace App\Http\Controllers;
+<?php
 
-use App\Models\PushToken;
-use Illuminate\Http\Request;
+namespace App\Models;
 
-class PushTokenController extends Controller
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class PushToken extends Model
 {
-    public function saveToken(Request $request)
-    {
-        $request->validate(['token' => 'required|string|unique:push_tokens']);
+    use HasFactory;
 
-        PushToken::create(['token' => $request->token]);
-
-        return response()->json(['message' => 'Push token saved successfully']);
-    }
+    protected $table = 'push_tokens'; // Ensure this matches your table name
+    protected $fillable = ['token']; // Add fields that can be mass assigned
 }
