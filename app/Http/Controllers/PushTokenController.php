@@ -10,9 +10,15 @@ class PushTokenController extends Controller
 {
     public function saveToken(Request $request)
     {
-        $request->validate(['token' => 'required|string|unique:push_tokens']);
+        $request->validate([
+            'token' => 'required|string|unique:push_tokens,token',
+        ]);
 
-        PushToken::create(['token' => $request->token]);
+        PushToken::create([
+            'token' => $request->token,
+        ]);
+
+        \Log::info('Push token saved:', ['token' => $request->token]);
 
         return response()->json(['message' => 'Push token saved successfully']);
     }

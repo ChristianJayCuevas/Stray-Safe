@@ -14,15 +14,12 @@ class RegisteredAnimalController extends Controller
      */
     public function index()
     {
-        $today = now()->toDateString();
-        $animals = RegisteredAnimal::all();
-        $total = $animals->count();
-        $todayCount = RegisteredAnimal::whereDate('created_at', $today)->count();
+        // Retrieve all registered animals from the database
+        $animals = RegisteredAnimal::select('id', 'owner', 'contact', 'animal_type', 'picture', 'status', 'created_at', 'updated_at', 'breed', 'pet_name')->get();
 
         return response()->json([
-            'animals' => $animals,
-            'total' => $total,
-            'today' => $todayCount,
+            'status' => 'success',
+            'data' => $animals,
         ]);
     }
 

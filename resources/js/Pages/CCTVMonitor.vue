@@ -155,7 +155,7 @@ function closeDialog() {
             </q-page-container>
 
             <!-- Mock Notification Sender -->
-            <q-page-container>
+            <!-- <q-page-container>
                 <div class="text-container-normal">
                     <p class="header">Send Mock Notification</p>
                 </div>
@@ -167,7 +167,7 @@ function closeDialog() {
                     </q-form>
                     <p class="q-mt-md">{{ notificationResponse }}</p>
                 </q-page>
-            </q-page-container>
+            </q-page-container> -->
 
             <q-page-container>
                 <div class="text-container-normal">
