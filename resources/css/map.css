@@ -1,5 +1,3 @@
-/* map.css */
-
 /* Map container styles */
 .map-container-wrapper {
   display: flex;
@@ -39,9 +37,9 @@
   border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-  padding-bottom:20px;
-
+  padding-bottom: 20px;
 }
+
 /* Pin selector (pill buttons) */
 .pin-selector {
   position: absolute;
@@ -84,4 +82,107 @@
   align-items: center;
   justify-content: center;
   font-size: 1.2rem;
+}
+
+/* Sidebar styles */
+.sidebar {
+  width: 250px;
+  background-color: #f9f9f9;
+  padding: 20px;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar h3 {
+  margin-bottom: 20px;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.sidebar button {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.sidebar button.active,
+.sidebar button:hover {
+  background-color: #007bff;
+  color: white;
+  border-color: #0056b3;
+}
+
+/* Pin details container */
+.pin-details {
+  width: 80%;
+  margin-top: 20px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  padding: 15px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.pin-details h3 {
+  margin: 0 0 10px;
+  text-align: center;
+}
+
+/* Paw icon inside markers */
+.paw-icon {
+  width: 20px;
+  height: 20px;
+  background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Paw-print.svg/512px-Paw-print.svg.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+.custom-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #007bff;
+  padding: 10px;
+}
+
+.custom-marker.Paw {
+  background-color: #007bff;
+  padding: 10px;
+}
+
+.custom-marker.CCTV {
+  background-color: #ff0000;
+  padding: 10px;
 }

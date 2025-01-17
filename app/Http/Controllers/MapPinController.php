@@ -57,19 +57,21 @@ class MapPinController extends Controller
     }
     
     /**
-     * Get all pins from the database.
+     * Get all pins from the database with randomized coordinates.
      */
     public function index()
     {
         try {
             $pins = MapPin::all();
 
-            // Format the response data
+            // Format the response data with randomized coordinates
             $response = $pins->map(function ($pin) {
+                [$randomLatitude, $randomLongitude] = $this->randomizeCoordinates($pin->latitude, $pin->longitude);
+
                 return [
                     'animal_type' => $pin->animal_type,
-                    'stray_status' => $pin->stray_status, // Include stray status
-                    'coordinates' => [$pin->longitude, $pin->latitude],
+                    'stray_status' => $pin->stray_status,
+                    'coordinates' => [$randomLongitude, $randomLatitude], // Randomized coordinates
                 ];
             });
 
@@ -81,73 +83,105 @@ class MapPinController extends Controller
     }
 
     /**
-     * Get recent sightings from the database.
+     * Get recent sightings with randomized locations.
      */
     public function recentSightings()
     {
-        $sightings = MapPin::orderBy('created_at', 'desc')
-            ->take(10)
-            ->get(['created_at', 'animal_type', 'stray_status', 'latitude', 'longitude', 'snapshot_path']);
+        try {
+            $sightings = MapPin::orderBy('created_at', 'desc')
+                ->take(10)
+                ->get(['created_at', 'animal_type', 'stray_status', 'latitude', 'longitude', 'snapshot_path']);
 
-        $sightings->transform(function ($sighting) {
-            return [
-                'timestamp' => $sighting->created_at->format('Y-m-d H:i:s'),
-                'animal_type' => ucfirst($sighting->animal_type),
-                'stray_status' => ucfirst($sighting->stray_status),
-                'location' => "{$sighting->latitude}, {$sighting->longitude}",
-                'snapshot' => url('storage/' . $sighting->snapshot_path),
-            ];
-        });
+            $sightings->transform(function ($sighting) {
+                [$randomLatitude, $randomLongitude] = $this->randomizeCoordinates($sighting->latitude, $sighting->longitude);
 
-        return response()->json($sightings);
+                return [
+                    'timestamp' => $sighting->created_at->format('Y-m-d H:i:s'),
+                    'animal_type' => ucfirst($sighting->animal_type),
+                    'stray_status' => ucfirst($sighting->stray_status),
+                    'location' => "{$randomLatitude}, {$randomLongitude}",
+                    'snapshot' => url('storage/' . $sighting->snapshot_path),
+                ];
+            });
+
+            return response()->json($sightings, 200);
+        } catch (\Exception $e) {
+            Log::error("Failed to fetch recent sightings: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch recent sightings'], 500);
+        }
     }
+
+    /**
+     * Get snapshots with randomized locations.
+     */
     public function getSnapshots(Request $request)
-{
-    $cctvName = $request->input('cctvName');
+    {
+        $cctvName = $request->input('cctvName');
 
-    try {
-        $snapshots = MapPin::where('animal_type', 'like', '%' . $cctvName . '%')
-            ->orderBy('created_at', 'desc')
-            ->take(10)
-            ->get(['created_at', 'stray_status', 'snapshot_path']);
+        try {
+            $snapshots = MapPin::where('animal_type', 'like', '%' . $cctvName . '%')
+                ->orderBy('created_at', 'desc')
+                ->take(10)
+                ->get(['created_at', 'stray_status', 'snapshot_path', 'latitude', 'longitude']);
 
-        $snapshots->transform(function ($snapshot) {
-            return [
-                'timestamp' => $snapshot->created_at->format('Y-m-d H:i:s'),
-                'stray_status' => ucfirst($snapshot->stray_status),
-                'image_url' => url('storage/' . $snapshot->snapshot_path),
-            ];
-        });
+            $snapshots->transform(function ($snapshot) {
+                [$randomLatitude, $randomLongitude] = $this->randomizeCoordinates($snapshot->latitude, $snapshot->longitude);
 
-        return response()->json(['snapshots' => $snapshots], 200);
-    } catch (\Exception $e) {
-        Log::error("Failed to fetch snapshots: " . $e->getMessage());
-        return response()->json(['success' => false, 'message' => 'Failed to fetch snapshots'], 500);
+                return [
+                    'timestamp' => $snapshot->created_at->format('Y-m-d H:i:s'),
+                    'stray_status' => ucfirst($snapshot->stray_status),
+                    'image_url' => url('storage/' . $snapshot->snapshot_path),
+                    'location' => "{$randomLatitude}, {$randomLongitude}",
+                ];
+            });
+
+            return response()->json(['snapshots' => $snapshots], 200);
+        } catch (\Exception $e) {
+            Log::error("Failed to fetch snapshots: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch snapshots'], 500);
+        }
     }
-}
-public function getRecentSnapshots()
-{
-    try {
-        $snapshots = MapPin::orderBy('created_at', 'desc')
-            ->take(10)
-            ->get(['created_at', 'stray_status', 'snapshot_path', 'latitude', 'longitude']);
 
-        $snapshots->transform(function ($snapshot) {
-            return [
-                'timestamp' => $snapshot->created_at->format('Y-m-d H:i:s'),
-                'stray_status' => ucfirst($snapshot->stray_status),
-                'image_url' => url($snapshot->snapshot_path), // Use the direct URL from the public directory
-                'location' => "{$snapshot->latitude}, {$snapshot->longitude}",
-            ];
-        });
+    /**
+     * Get recent snapshots with randomized locations.
+     */
+    public function getRecentSnapshots()
+    {
+        try {
+            $snapshots = MapPin::orderBy('created_at', 'desc')
+                ->take(10)
+                ->get(['created_at', 'stray_status', 'snapshot_path', 'latitude', 'longitude']);
 
-        return response()->json(['snapshots' => $snapshots], 200);
-    } catch (\Exception $e) {
-        Log::error("Failed to fetch recent snapshots: " . $e->getMessage());
-        return response()->json(['success' => false, 'message' => 'Failed to fetch snapshots'], 500);
+            $snapshots->transform(function ($snapshot) {
+                [$randomLatitude, $randomLongitude] = $this->randomizeCoordinates($snapshot->latitude, $snapshot->longitude);
+
+                return [
+                    'timestamp' => $snapshot->created_at->format('Y-m-d H:i:s'),
+                    'stray_status' => ucfirst($snapshot->stray_status),
+                    'image_url' => url('storage/' . $snapshot->snapshot_path),
+                    'location' => "{$randomLatitude}, {$randomLongitude}",
+                ];
+            });
+
+            return response()->json(['snapshots' => $snapshots], 200);
+        } catch (\Exception $e) {
+            Log::error("Failed to fetch recent snapshots: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch recent snapshots'], 500);
+        }
     }
-}
 
+    /**
+     * Generate randomized coordinates.
+     */
+    private function randomizeCoordinates($latitude, $longitude, $radius = 0.0005)
+    {
+        // Randomly adjust latitude and longitude within the given radius
+        $latOffset = (rand(-1000, 1000) / 1000) * $radius;
+        $lngOffset = (rand(-1000, 1000) / 1000) * $radius;
 
-
+        return [
+            $latitude + $latOffset,
+            $longitude + $lngOffset,
+        ];
+    }
 }

@@ -6,7 +6,7 @@ import axios from 'axios';
 const cctvs = ref([
     {
         name: 'Dog Demonstration Video',
-        videoSrc: ['https://100.89.19.38:5000/video'],
+        videoSrc: ['https://127.0.0.1:5000/video'],
         snapshots: []
     },
     {
@@ -46,6 +46,9 @@ async function openDialog(cctv) {
         const response = await axios.get(`http://127.0.0.1:8000/api/snapshots`, {
             params: {
                 cctvName: cctv.name
+            },
+            headers: {
+                Authorization: 'Bearer StraySafeTeam3'
             }
         });
 
