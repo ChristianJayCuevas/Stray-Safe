@@ -1,5 +1,5 @@
 import defaultTheme from 'tailwindcss/defaultTheme';
-import forms from '@tailwindcss/forms';
+
 /** @type {import('tailwindcss').Config} */
 export default {
     content: [
@@ -13,6 +13,8 @@ export default {
         extend: {
             fontFamily: {
                 sans: ['Questrial', ...defaultTheme.fontFamily.sans],
+                poppins: ['Poppins', ...defaultTheme.fontFamily.sans],
+                abril: ['"Abril Fatface"', ...defaultTheme.fontFamily.sans], // Add Abril Fatface
             },
         },
     },

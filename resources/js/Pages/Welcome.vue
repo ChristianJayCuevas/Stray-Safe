@@ -1,8 +1,26 @@
 <script setup>
 import { Link } from '@inertiajs/vue3';
-import ScrollToSection from '@/Components/WelcomeComponents/ScrollToSection.vue';
+import { ref, computed, onMounted, onUnmounted } from "vue";
+
+const selectedTab = ref("tab1"); // Default selected tab
+
+onMounted(() => {
+    selectedTab.value = "tab1"; // Ensures 'Home' is selected initially
+});
+const isScrolled = ref(false);
+
+const indicatorStyle = computed(() => {
+    let position = 2; // Default position for tab1
+    if (selectedTab.value === "tab2") position = 110 + 2;
+    if (selectedTab.value === "tab3") position = 110 * 2 + 2;
+    if (selectedTab.value === "tab4") position = 110 * 3 + 2;
+    return { left: `${position}px` };
+});
+
 function scrollToSection(sectionId, tabId) {
     const targetElement = document.querySelector(sectionId);
+    if (!targetElement) return;
+
     const targetPosition = targetElement.getBoundingClientRect().top + window.scrollY;
     const startPosition = window.scrollY;
     const distance = targetPosition - startPosition;
@@ -28,193 +46,241 @@ function scrollToSection(sectionId, tabId) {
 
     window.requestAnimationFrame(step);
 
-    // Set the corresponding radio button as checked
-    const tab = document.getElementById(tabId);
-    if (tab) {
-        tab.checked = true;
-    }
+    // Update selected tab in Vue state
+    selectedTab.value = tabId;
 }
+const handleScroll = () => {
+    isScrolled.value = window.scrollY > 50; // Change navbar when scrolled past 50px
+};
+
+onMounted(() => {
+    window.addEventListener("scroll", handleScroll);
+});
+
+onUnmounted(() => {
+    window.removeEventListener("scroll", handleScroll);
+});
 </script>
 <template>
-
     <div class="background-website">
-        <div class="custom-navbar">
+        <div :class="['custom-navbar', { 'glassmorphism': isScrolled, 'ellipse-shape': isScrolled }]">
             <a class="generic-container" href="#">
-                <img src="/storage/images/FinalLogoStray.png" alt="Logo" class="logo-size" />
-                <span class="custom-text">StraySafe</span>
+                <img src="/storage/images/NEWLOGO.png" alt="Logo" class="logo-size" />
+                <span class="custom-text font-poppins">Stray<span class="custom-color">Safe</span></span>
             </a>
+
             <div class="tab-container">
-                <input type="radio" name="tab" id="tab1" class="tab tab--1" />
-                <label class="tab_label" for="tab1" @click="scrollToSection('#hero')">Home</label>
+                <input type="radio" name="tab" id="tab1" class="tab tab--1" v-model="selectedTab" value="tab1" />
+                <label :class="{ active: selectedTab === 'tab1' }" class="tab_label font-poppins" for="tab1"
+                    @click="scrollToSection('#hero', 'tab1')">Home</label>
 
-                <input type="radio" name="tab" id="tab2" class="tab tab--2" />
-                <label class="tab_label" for="tab2" @click="scrollToSection('#features')">Features</label>
+                <input type="radio" name="tab" id="tab2" class="tab tab--2" v-model="selectedTab" value="tab2" />
+                <label :class="{ active: selectedTab === 'tab2' }" class="tab_label font-poppins" for="tab2"
+                    @click="scrollToSection('#features', 'tab2')">Features</label>
 
-                <input type="radio" name="tab" id="tab3" class="tab tab--3" />
-                <label class="tab_label" for="tab3" @click="scrollToSection('#highlights')">Highlights</label>
+                <input type="radio" name="tab" id="tab3" class="tab tab--3" v-model="selectedTab" value="tab3" />
+                <label :class="{ active: selectedTab === 'tab3' }" class="tab_label font-poppins" for="tab3"
+                    @click="scrollToSection('#highlights', 'tab3')">Demo</label>
 
-                <div class="indicator"></div>
+                <input type="radio" name="tab" id="tab4" class="tab tab--4" v-model="selectedTab" value="tab4" />
+                <label :class="{ active: selectedTab === 'tab4' }" class="tab_label font-poppins" for="tab4"
+                    @click="scrollToSection('#highlights', 'tab4')">About Us</label>
+
+                <div class="indicator" :style="indicatorStyle"></div>
             </div>
 
-            <div class="generic-container">
-                <Link href="/login"><q-btn label="Log in" padding="xs md" class="btn-color-login" rounded flat /></Link>
-                <Link href="/register"><q-btn label="Sign Up" padding="xs md" class="btn-color-register" flat rounded />
+            <div class="generic-container2">
+                <Link href="/login"><q-btn label="Log in" padding="xs md" class="font-poppins btn-color-login" rounded
+                    flat /></Link>
+                <Link href="/register"><q-btn label="Sign Up" padding="xs md" class="font-poppins btn-color-login" flat
+                    rounded />
                 </Link>
             </div>
         </div>
-        <div id="home" class="landing-wrapper overflow-hidden">
-            <div id="hero">
-                <div class="hero-text-container">
-                    <h1 class="hero-text-heading">
-                        Caring for strays and Securing streets
-                    </h1>
-                    <p class="hero-text-subheading">
-                        Detecting strays, monitoring their locations and finding their homes.
-                    </p>
-                    <div class="mt-4">
-                        <q-btn label="Get Started" push rounded class="btn-color-register" size="20px"></q-btn>
+        <div id="home" class="landing-wrapper overflow-hidden flex justify-center">
+            <div id="hero" class="hero-card">
+                <div class="hero-container">
+                    <img src="/storage/images/HERO.png">
+                </div>
+                <div class="hero-content">
+                    <div class="hero-text-container">
+                        <p class="font-abril hero-text">Care for Strays,<br> Secure Streets</p>
+                        <p class="font-poppins hero-normal">
+                            Monitoring strays, Securing streets - <br>
+                            Using technology to create safer, more<br> compassionate communities.
+                        </p>
+                    </div>
+                    <div class="hero-button font-poppins">
+                        <button>Get Started</button>
+                        <img class="ml-7 mb-1" src="/storage/images/PAW.png">
                     </div>
                 </div>
-                <div class="hero-container relative">
-                    <div class="hero-image-container">
-                        <img src="/storage/images/WebHero.png" alt="Hero Image" class="hero-image" />
-                    </div>
-                    <div class="custom-shape">
-                        <svg viewBox="0 0 1440 400" xmlns="http://www.w3.org/2000/svg" class="wave"
-                            preserveAspectRatio="none">
-                            <path fill="#91D2CC" fill-opacity="0.2" d="M0,160L1440,64L1440,400L0,400Z"></path>
-                        </svg>
-                    </div>
-                </div>
+
             </div>
             <div id="features">
-    <div class="feature-grid spaced-grid">
-        <div class="feature-heading">
-            <div class="feature-title">Marvelous Features</div>
-            <span class="feature-subtitle">Empowering smart city solutions</span>
-        </div>
-
-        <!-- Feature 1: Classifying Stray Animals -->
-        <div class="feature-card">
-            <div class="feature-card-inner">
-                <div class="feature-card-content">
-                    <div class="feature-icon-container">
-                        <i class="fa-solid fa-dog text-4xl text-teal-700"></i>
+                <div class="feature-grid spaced-grid">
+                    <div class="feature-heading">
+                        <div class="feature-title font-poppins text-bold">Marvelous Features</div>
+                        <span class="feature-subtitle font-poppins">Empowering smart city solutions</span>
                     </div>
-                    <div class="feature-card-title">Classifying Stray Animals</div>
-                    <span class="feature-card-description">Instantly identifies strays based on collar or leash detection.</span>
+
+                    <div class="feature-card relative overflow-hidden">
+                        <!-- Custom Semi-Circle -->
+                        <div class="custom-semi-circle">
+                            <span class="ml-7 text-4xl font-bold">01</span>
+                        </div>
+
+                        <div class="feature-card-inner">
+                            <div class="feature-card-content">
+                                <div class="feature-icon-container">
+                                    <i class="fa-solid fa-shield-dog ml-4 text-9xl text-[#1f3623]"></i>
+                                </div>
+                                <div class="feature-card-title font-poppins">Classifying Stray Animals</div>
+                                <span class="feature-card-description">Instantly identifies strays based on collar or
+                                    leash detection.</span>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="feature-card relative overflow-hidden">
+                        <!-- Custom Semi-Circle -->
+                        <div class="custom-semi-circle">
+                            <span class="ml-7 text-4xl font-bold">02</span>
+                        </div>
+
+                        <div class="feature-card-inner">
+                            <div class="feature-card-content">
+                                <div class="feature-icon-container">
+                                    <i class="fa-solid fa-video ml-4 text-9xl text-[#1f3623]"></i>
+                                </div>
+                                <div class="feature-card-title font-poppins">Real-Time Detection</div>
+                                <span class="feature-card-description">Live CCTV feed for immediate stray
+                                    identification.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="feature-card relative overflow-hidden">
+                        <!-- Custom Semi-Circle -->
+                        <div class="custom-semi-circle">
+                            <span class="ml-7 text-4xl font-bold">03</span>
+                        </div>
+
+                        <div class="feature-card-inner">
+                            <div class="feature-card-content">
+                                <div class="feature-icon-container">
+                                    <i class="fa-solid fa-map-pin ml-4 text-9xl text-[#1f3623]"></i>
+                                </div>
+                                <div class="feature-card-title font-poppins">Location Pinning</div>
+                                <span class="feature-card-description">Maps stray locations for quick tracking and
+                                    response.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    
+
+                    <div class="feature-card relative overflow-hidden">
+                        <!-- Custom Semi-Circle -->
+                        <div class="custom-semi-circle">
+                            <span class="ml-7 text-4xl font-bold">04</span>
+                        </div>
+
+                        <div class="feature-card-inner">
+                            <div class="feature-card-content">
+                                <div class="feature-icon-container">
+                                    <i class="fa-solid fa-bell ml-4 text-9xl text-[#1f3623]"></i>
+                                </div>
+                                <div class="feature-card-title font-poppins">Notification System</div>
+                                <span class="feature-card-description">Alerts animal pound and pet owners
+                                    instantly.</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Feature 4: Notification System -->
+                    <div class="feature-card relative overflow-hidden">
+                        <!-- Custom Semi-Circle -->
+                        <div class="custom-semi-circle">
+                            <span class="ml-7 text-4xl font-bold">05</span>
+                        </div>
+
+                        <div class="feature-card-inner">
+                            <div class="feature-card-content">
+                                <div class="feature-icon-container">
+                                    <i class="fa-solid fa-mobile-alt ml-4 text-9xl text-[#1f3623]"></i>
+                                </div>
+                                <div class="feature-card-title font-poppins">Web & Mobile App</div>
+                                <span class="feature-card-description">Monitor strays and register pets on any
+                                    device.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="feature-card relative overflow-hidden">
+                        <!-- Custom Semi-Circle -->
+                        <div class="custom-semi-circle">
+                            <span class="ml-7 text-4xl font-bold">06</span>
+                        </div>
+
+                        <div class="feature-card-inner">
+                            <div class="feature-card-content">
+                                <div class="feature-icon-container">
+                                    <i class="fa-solid fa-check-double ml-4 text-9xl text-[#1f3623]"></i>
+                                </div>
+                                <div class="feature-card-title font-poppins">Feature Matching</div>
+                                <span class="feature-card-description">Smart matching to identify registered pets
+                                    swiftly.</span>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
-        </div>
-
-        <!-- Feature 2: Real-Time Detection -->
-        <div class="feature-card">
-            <div class="feature-card-inner">
-                <div class="feature-card-content">
-                    <div class="feature-icon-container">
-                        <i class="fa-solid fa-video text-4xl text-teal-700"></i>
-                    </div>
-                    <div class="feature-card-title">Real-Time Detection</div>
-                    <span class="feature-card-description">Live CCTV feed for immediate stray identification.</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Feature 3: Location Pinning -->
-        <div class="feature-card">
-            <div class="feature-card-inner">
-                <div class="feature-card-content">
-                    <div class="feature-icon-container">
-                        <i class="fa-solid fa-map-pin text-4xl text-teal-700"></i>
-                    </div>
-                    <div class="feature-card-title">Location Pinning</div>
-                    <span class="feature-card-description">Maps stray locations for quick tracking and response.</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Feature 4: Notification System -->
-        <div class="feature-card">
-            <div class="feature-card-inner">
-                <div class="feature-card-content">
-                    <div class="feature-icon-container">
-                        <i class="fa-solid fa-bell text-4xl text-teal-700"></i>
-                    </div>
-                    <div class="feature-card-title">Notification System</div>
-                    <span class="feature-card-description">Alerts animal pound and pet owners instantly.</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Feature 5: Web and Mobile Application -->
-        <div class="feature-card">
-            <div class="feature-card-inner">
-                <div class="feature-card-content">
-                    <div class="feature-icon-container">
-                        <i class="fa-solid fa-globe text-4xl text-teal-700"></i>
-                        <i class="fa-solid fa-mobile-alt text-4xl text-teal-700"></i>
-                    </div>
-                    <div class="feature-card-title">Web & Mobile App</div>
-                    <span class="feature-card-description">Monitor strays and register pets on any device.</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Feature 6: Feature Matching -->
-        <div class="feature-card">
-            <div class="feature-card-inner">
-                <div class="feature-card-content">
-                    <div class="feature-icon-container">
-                        <i class="fa-solid fa-check-double text-4xl text-teal-700"></i>
-                    </div>
-                    <div class="feature-card-title">Feature Matching</div>
-                    <span class="feature-card-description">Smart matching to identify registered pets swiftly.</span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 
 
 
             <!-- Paste here -->
             <div id="highlights">
-    <div class="text-center">
-        <div class="highlight-title">Powerful Everywhere</div>
-        <span class="highlight-subtitle">Web application and Mobile application</span>
-    </div>
+                <div class="text-center">
+                    <div class="highlight-title">Powerful Everywhere</div>
+                    <span class="highlight-subtitle">Web application and Mobile application</span>
+                </div>
 
-    <!-- First Section with Violet Box -->
-    <div class="grid-container">
-        <div class="grid-item">
-            <img src="/storage/images/Mockup.png" class="w-11/12" alt="mockup mobile" />
-        </div>
+                <!-- First Section with Violet Box -->
+                <div class="grid-container">
+                    <div class="grid-item">
+                        <img src="/storage/images/Mockup.png" class="w-11/12" alt="mockup mobile" />
+                    </div>
 
-        <div class="grid-item-content">
-            <div class="icon-container">
-                <i class="material-icons text-4xl">devices</i>
+                    <div class="grid-item-content">
+                        <div class="icon-container">
+                            <i class="material-icons text-4xl">devices</i>
+                        </div>
+                        <div class="text-large">Wide Compatibility</div>
+                        <span class="text-medium">Works seamlessly on both web and mobile platforms for maximum
+                            reach.</span>
+                    </div>
+                </div>
+
+                <!-- New Section with Yellow Box (Fixed and Aligned Text) -->
+                <div class="grid-container">
+                    <div class="grid-item">
+                        <img src="/storage/images/userfriendly.png" class="w-11/12"
+                            alt="Pet and User Friendly Mockup" />
+                    </div>
+                    <div class="grid-item-content">
+                        <div class="icon-container">
+                            <i class="fa-solid fa-heart text-2xl text-red-600"></i>
+                        </div>
+                        <div class="text-large">Pet and User Friendly</div>
+                        <span class="text-medium">Designed for ease of use, making it simple for owners and effective
+                            for identifying lost pets.</span>
+                    </div>
+
+                </div>
             </div>
-            <div class="text-large">Wide Compatibility</div>
-            <span class="text-medium">Works seamlessly on both web and mobile platforms for maximum reach.</span>
-        </div>
-    </div>
-
-    <!-- New Section with Yellow Box (Fixed and Aligned Text) -->
-    <div class="grid-container">
-        <div class="grid-item">
-    <img src="/storage/images/userfriendly.png" class="w-11/12" alt="Pet and User Friendly Mockup" />
-</div>
-<div class="grid-item-content">
-    <div class="icon-container">
-        <i class="fa-solid fa-heart text-2xl text-red-600"></i>
-    </div>
-    <div class="text-large">Pet and User Friendly</div>
-    <span class="text-medium">Designed for ease of use, making it simple for owners and effective for identifying lost pets.</span>
-</div>
-
-    </div>
-</div>
 
             <div class="py-6 px-6 mx-0 mt-20 lg:mx-20">
                 <div class="grid grid-cols-12 gap-4">

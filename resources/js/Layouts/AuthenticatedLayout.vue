@@ -118,7 +118,7 @@ const submit = () => {
                             class="btn btn-ghost flex items-center gap-2 text-2xl text-black"
                         >
                             <img
-                                src='/storage/images/FinalLogoStray.png'
+                                src='/storage/images/NEWLOGO.png'
                                 alt="Logo"
                                 class="w-8 h-8"
                             />

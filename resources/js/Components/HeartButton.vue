@@ -58,6 +58,6 @@ function toggleLike() {
 
 .fade-enter-from,
 .fade-leave-to {
-  opacity: 1;
+  opacity: 0;
 }  
 </style>  
