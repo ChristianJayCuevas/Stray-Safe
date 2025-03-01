@@ -241,7 +241,6 @@ onUnmounted(() => {
 
 
 
-            <!-- Paste here -->
             <div id="highlights">
                 <div class="text-center">
                     <div class="highlight-title">Powerful Everywhere</div>
