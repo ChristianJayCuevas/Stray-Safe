@@ -1,6 +1,6 @@
 <template>
     <div class="flex min-h-screen items-center justify-center background-website pt-6 sm:pt-0 dark:bg-gray-900">
-        <div class="flex w-full max-w-6xl bg-white rounded-lg shadow-xl overflow-hidden dark:bg-gray-800">
+        <div style="background: rgba(79, 102, 66, 0.2);" class="flex w-full max-w-6xl rounded-lg shadow-xl overflow-hidden dark:bg-gray-800">
             <!-- Left side: Slot with its own container -->
             <div class="flex flex-col ml-10 my-10 justify-center items-center w-full max-w-md p-10 bg-white shadow-xl rounded-xl dark:bg-gray-700">
                 <div class="w-full">
@@ -38,6 +38,6 @@ const props = defineProps({
 
 <style scoped>
 .background-website{
-    background-color: #F8F3EC;
+    background-color: #F5F5DC;
 }
 </style>

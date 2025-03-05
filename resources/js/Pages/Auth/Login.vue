@@ -113,7 +113,7 @@ const submit = () => {
     flex-direction: column;
     gap: 10px;
     max-width: 350px;
-    background-color: #fff;
+    background: rgba(79, 102, 66, 0.2);
     padding: 20px;
     border-radius: 20px;
     position: relative;

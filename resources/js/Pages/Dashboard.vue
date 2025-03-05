@@ -5,8 +5,9 @@ import { Head } from '@inertiajs/vue3';
 import VueApexCharts from 'vue3-apexcharts';
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import Swal from 'sweetalert2';
 
-const authUser = ref({ name: 'User' });
+const authUser = ref({ name: 'User', isNewUser: true }); // Assuming isNewUser flag to check if it's the user's first visit
 const strayAnimalsData = ref({
     totalSightings: 120,
     strayDogs: 70,
@@ -29,6 +30,30 @@ async function fetchRecentSightings() {
 // Fetch data on component mount
 onMounted(() => {
     fetchRecentSightings();
+    
+    // Show Swal2 popup if the user is new
+    if (authUser.value.isNewUser) {
+        Swal.fire({
+            title: 'Welcome to StraySafe!',
+            text: 'Please select your barangay or create your own map.',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: 'Select Barangay',
+            cancelButtonText: 'Create Own Map',
+            allowOutsideClick: false,  // Prevent clicking outside to close
+            allowEscapeKey: false,  
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Redirect or open barangay selection
+                console.log('User selected barangay');
+                // You can redirect or show barangay selection component here
+            } else if (result.dismiss === Swal.DismissReason.cancel) {
+                // Open MapBox or create your own map logic
+                console.log('User wants to create their own map');
+                // You can open the map creation logic or redirect to the map creation page
+            }
+        });
+    }
 });
 
 // Line chart for detected animals over time
@@ -45,12 +70,10 @@ const lineChartOptions = ref({
         align: 'left',
     },
 });
-const lineChartSeries = ref([
-    {
-        name: 'Detected Stray Animals',
-        data: [10, 20, 15, 25, 30, 18, 27],
-    },
-]);
+const lineChartSeries = ref([{
+    name: 'Detected Stray Animals',
+    data: [10, 20, 15, 25, 30, 18, 27],
+}]);
 
 // Pie chart for stray animal types
 const pieChartOptions = ref({
@@ -63,12 +86,8 @@ const pieChartOptions = ref({
         align: 'left',
     },
 });
-const pieChartSeries = ref([
-    strayAnimalsData.value.strayDogs,
-    strayAnimalsData.value.strayCats,
-]);
+const pieChartSeries = ref([strayAnimalsData.value.strayDogs, strayAnimalsData.value.strayCats]);
 </script>
-
 
 <template>
     <Head title="Dashboard" />
@@ -97,7 +116,6 @@ const pieChartSeries = ref([
                     <h3 class="text-lg font-semibold mb-2">Animal Type Breakdown</h3>
                     <p class="text-2xl font-medium">Dogs: <span class="text-primary font-bold text-2xl">{{ strayAnimalsData.strayDogs }}</span></p>
                     <p class="text-2xl font-medium">Cats: <span class="text-primary font-bold text-2xl">{{ strayAnimalsData.strayCats }}</span></p>
-        
                 </q-card-section>
             </q-card>
         </div>
@@ -123,10 +141,10 @@ const pieChartSeries = ref([
                 <h3 class="text-2xl font-bold mb-4">Recent Sightings Feed</h3>
                 <q-table
                     :rows="recentSightings"
-                    :columns="[
-                        { name: 'timestamp', label: 'Timestamp', align: 'left' },
-                        { name: 'animal_type', label: 'Animal Type', align: 'left' },
-                        { name: 'location', label: 'Location', align: 'left' },
+                    :columns="[ 
+                        { name: 'timestamp', label: 'Timestamp', align: 'left' }, 
+                        { name: 'animal_type', label: 'Animal Type', align: 'left' }, 
+                        { name: 'location', label: 'Location', align: 'left' }, 
                         { name: 'snapshot', label: 'Snapshot', align: 'center' },
                     ]"
                     row-key="timestamp"
