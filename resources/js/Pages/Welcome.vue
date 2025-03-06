@@ -97,8 +97,8 @@ onUnmounted(() => {
                 </Link>
             </div>
         </div>
-        <div id="home" class="landing-wrapper overflow-hidden flex justify-center">
-            <div id="hero" class="hero-card">
+        <div class="landing-wrapper overflow-hidden flex justify-center">
+            <div id="hero" class="hero-card landing-wrapper overflow-hidden flex justify-center">
                 <div class="hero-container">
                     <img src="/storage/images/HERO.png">
                 </div>
@@ -361,7 +361,7 @@ onUnmounted(() => {
         </div>
     </div>
 </template>
-<style src="../../css/welcome.css"></style>
+<style src="../../css/welcome2.css"></style>
 
 
 <!-- Paste it to the top
