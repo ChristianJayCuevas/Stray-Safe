@@ -1,6 +1,6 @@
 
 <script setup>
-import { ref, computed, onMounted, defineEmits } from "vue";
+import { ref, computed, onMounted, defineEmits, provide } from "vue";
 import { Link, usePage, router } from "@inertiajs/vue3";
 import { Head, useForm } from "@inertiajs/vue3";
 import { useQuasar } from 'quasar';
@@ -24,7 +24,30 @@ const thepost = ref(false);
 const leftDrawerOpen = ref(false);
 const search = ref('');
 const filteredResults = ref({ posts: [], users: [] });
-const $q = useQuasar()
+const $q = useQuasar();
+
+// Dark mode state
+const isDarkMode = ref(localStorage.getItem('darkMode') === 'true');
+
+// Initialize dark mode on component mount
+onMounted(() => {
+  applyDarkMode(isDarkMode.value);
+});
+
+// Toggle dark mode
+function toggleDarkMode() {
+  isDarkMode.value = !isDarkMode.value;
+  localStorage.setItem('darkMode', isDarkMode.value);
+  applyDarkMode(isDarkMode.value);
+}
+
+// Apply dark mode to Quasar
+function applyDarkMode(isDark) {
+  $q.dark.set(isDark);
+}
+
+// Provide dark mode state to child components
+provide('isDarkMode', isDarkMode);
 
 function submitLogout() {
     Inertia.post(route("logout"));
@@ -98,441 +121,155 @@ const submit = () => {
 
 </script>
 <template>
-    <div class="bg-website">
-    <q-layout view="hHh lpR fFf">
-        <q-header
-            elevated
-            class="bg-navbar text-grey-8 q-py-xs z-10"
-            height-hint="80"
-        >
-            <q-toolbar>
-                <q-btn flat @click="drawer = !drawer" round dense icon="menu" />
-
-                <Link :href="route('dashboard')">
-                    <q-toolbar-title
-                        v-if="$q.screen.gt.sm"
-                        shrink
-                        class="ml-5 row items-center no-wrap"
-                    >
-                        <button
-                            class="btn btn-ghost flex items-center gap-2 text-2xl text-black"
-                        >
-                            <img
-                                src='/storage/images/NEWLOGO.png'
-                                alt="Logo"
-                                class="w-8 h-8"
-                            />
-                            StraySafe
-                        </button>
-                    </q-toolbar-title>
-                </Link>
-
-                <q-space />
-
-                <!-- <q-input
-                class="GPL__toolbar-input"
-                dense
-                standout="bg-primary"
-                v-model="search"
-                @input="updateSearch"
-                placeholder="Search"
-            >
-                <template v-slot:prepend>
-                    <q-icon v-if="search === ''" name="search" :style="{ color: siteSettings.icon_color }" />
-                    <q-icon
-                        v-else
-                        name="clear"
-                        class="cursor-pointer"
-                        @click="clearSearch"
-                        :style="{ color: siteSettings.icon_color }" 
-                    />
-                </template>
-            </q-input> -->
-
-                <!-- <q-btn
-                    @click="thepost = true"
-                    v-if="$q.screen.gt.xs && authUser"
-                    flat
-                    rounded
-                    dense
-                    no-wrap
-                    color="black"
-                    icon="add"
-                    no-caps
-                    class="q-ml-sm q-px-md"
-                    
-                >
-                    Create
-                </q-btn> -->
-                <div class="q-gutter-sm row items-center no-wrap">
-                    <!-- <Link v-if="authUser" >
-                        <q-btn
-                            round
-                            dense
-                            flat
-                            color="text-grey-7"
-                            icon="message"
-                            class="mr-2"
-                            :style="{ color: siteSettings.icon_color }" 
-                        >
-                            <q-tooltip>Message</q-tooltip>
-                        </q-btn>
-                    </Link> -->
-                    <!-- <q-btn round dense flat color="grey-8" icon="notifications" >
-                        <q-badge color="red" text-color="white" floating>
-                            2
-                        </q-badge>
-                        <q-tooltip>Notifications</q-tooltip>
-                    </q-btn> -->
-                    <q-btn dense flat no-wrap v-if="authUser">
-                        <q-avatar rounded size="35px">
-                            <img
-                                style="background: white; border-radius: 20px"
-                                :src="authUser.profile_image_url
-                                    ? `/storage/images/${authUser.profile_image_url}`
-                                    : '/storage/images/TEMPPROFILE.png'"
-                                alt="Profile Image"
-                            />
-                        </q-avatar>
-                        <q-icon name="arrow_drop_down" size="19px"  />
-
-                        <q-menu auto-close>
-                            <q-list dense>
-                                <q-item class="GL__menu-link-signed-in">
-                                    <q-item-section>
-                                        <div>
-                                            Signed in as
-                                            <strong>{{ authUser.name }}</strong>
-                                        </div>
-                                    </q-item-section>
-                                </q-item>
-                                <q-separator />
-                                <q-separator />
-                                <q-item clickable class="GL__menu-link">
-                                    <q-item-section
-                                        ><Link
-                                            :href="route('profile.edit')"
-                                            >Your profile</Link
-                                        ></q-item-section
-                                    >
-                                </q-item>
-                                <q-item clickable class="GL__menu-link">
-                                      <q-item-section
-                                        ><Link
-                                            :href="route('profile.edit')"
-                                            >Edit profile</Link
-                                        ></q-item-section>
-                                </q-item>
-
-                                <q-item clickable class="GL__menu-link">
-                                    <q-item-section
-                                        ><Link
-                                            :href="route('logout')"
-                                            method="post"
-                                            as="button"
-                                            >Logout
-                                        </Link></q-item-section
-                                    >
-                                </q-item>
-                            </q-list>
-                        </q-menu>
-                    </q-btn>
-
-                    <!-- Guest view -->
-                    <div v-else>
-                        <Link :href="route('login')">
-                            <q-btn flat rounded dense no-wrap color="black">
-                                Login
-                            </q-btn>
-                        </Link>
-                        <Link :href="route('register')">
-                            <q-btn flat rounded dense no-wrap color="black">
-                                Register
-                            </q-btn>
-                        </Link>
-                    </div>
-                </div>
-            </q-toolbar>
-        </q-header>
-
+    <div :class="{'bg-website': !isDarkMode, 'bg-dark': isDarkMode}">
+      <q-layout view="hHh lpR fFf">
         <q-drawer
-            v-model="drawer"
-            show-if-above
-            :mini="miniState"
-            @mouseover="miniState = false"
-            @mouseout="miniState = true"
-            mini-to-overlay
-            :width="250"
-            :breakpoint="500"
-            bordered
-            elevated
-            color="primary"
+          v-model="drawer"
+          show-if-above
+          :mini="miniState"
+          @mouseover="miniState = false"
+          @mouseout="miniState = true"
+          :width="220"
+          :breakpoint="500"
+          :class="['custom-drawer', {'dark-drawer': isDarkMode}]"
+          behavior="desktop"
         >
-            <q-scroll-area class="fit" :horizontal-thumb-style="{ opacity: 0 }">
-                <q-list padding>
-                    <!-- <Link :href="route('home')">
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="home" />
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Home</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link> -->
+          <q-scroll-area class="fit drawer-content" :horizontal-thumb-style="{ opacity: 0 }">
+            <q-list padding>
+            <!-- Logo and Name -->
+            <q-item class="q-pa-md">
+              <q-item-section avatar>
+                <img src="/storage/images/NEWLOGO.png" alt="Logo" class="w-10 h-10" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label class="text-2xl custom-text font-bold font-poppins">Stray<span class="custom-color">Safe</span></q-item-label>
+              </q-item-section>
+            </q-item>
+            <q-separator class="q-my-md" />
+  
+              <!-- Navigation Links -->
+              <Link :href="route('dashboard')">
+                <q-item clickable class="GPL__drawer-item">
+                  <q-item-section avatar>
+                    <q-icon name="dashboard" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>Dashboard</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </Link>
+  
+              <Link :href="route('map')">
+                <q-item clickable class="GPL__drawer-item">
+                  <q-item-section avatar>
+                    <q-icon name="map" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>Stray Map</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </Link>
+  
+              <Link :href="route('registeredpets')">
+                <q-item clickable class="GPL__drawer-item">
+                  <q-item-section avatar>
+                    <q-icon name="pets" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>Registered Pets</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </Link>
+  
+              <Link :href="route('cctv.monitor')">
+                <q-item clickable class="GPL__drawer-item">
+                  <q-item-section avatar>
+                    <q-icon name="videocam" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>Surveillance Camera</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </Link>
+              <q-separator class="q-my-md" />
+  
+              <Link :href="route('profile.edit')">
+                <q-item clickable class="GPL__drawer-item">
+                  <q-item-section avatar>
+                    <q-icon name="fa-solid fa-user" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>Profile Page</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </Link>
 
-                    <Link :href="route('dashboard')">
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="dashboard" />
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Dashboard</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link>
-
-                    <Link :href="route('map')">
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="map" />
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Stray Map</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link>
-
-                    <!-- <Link :href="route('mindfulcoloring')">
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="brush" :style="{ color: siteSettings.icon_color }" />
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Mindful Coloring</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link> -->
-
-                    <Link :href="route('registeredpets')">
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="pets" />
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Registered Pets</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link>
-                    <Link :href="route('cctv.monitor')">
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="videocam" />
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Surveillance Camera</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link>
-                    <q-separator class="q-my-md" />
-                    <Link>
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="fa-solid fa-user"/>
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Profile Page</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link>
-
-                    <Link >
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="fa-solid fa-gear" />
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Profile Settings</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link>
-
-                    <!-- <q-separator v-if="isAdmin" class="q-my-md" /> -->
-
-                    <!-- <Link v-if="isAdmin" :href="route('manage.users')">
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="fa-solid fa-user-pen"  />
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Manage Users</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link> -->
-
-                    
-                    <!-- <Link v-if="isAdmin" >
-                        <q-item clickable class="GPL__drawer-item">
-                            <q-item-section avatar>
-                                <q-icon name="fa-solid fa-pen-to-square"/>
-                            </q-item-section>
-                            <q-item-section>
-                                <q-item-label>Manage Website</q-item-label>
-                            </q-item-section>
-                        </q-item>
-                    </Link> -->
-
-                    <!-- <q-separator v-if="isAdmin" class="q-my-md" /> -->
-                </q-list>
-            </q-scroll-area>
+              <!-- Dark Mode Toggle -->
+              <q-item clickable class="GPL__drawer-item" @click="toggleDarkMode">
+                <q-item-section avatar>
+                  <q-icon :name="isDarkMode ? 'light_mode' : 'dark_mode'" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}</q-item-label>
+                </q-item-section>
+              </q-item>
+  
+            </q-list>
+          </q-scroll-area>
         </q-drawer>
-        <q-dialog
-        v-model="thepost"
-        backdrop-filter="blur(4px) saturate(150%)"
-        persistent
-    >
-        <div
-            class="instagram-card-2 bg-white rounded-lg shadow-lg overflow-hidden max-w-half"
-            style="width: 90vw; height: 70vh"
-        >
-            <div class="flex justify-start p-8 bg-gray-100">
-                <h4 class="text-2xl font-bold">Create Post</h4>
-            </div>
-
-            <div
-                class="flex flex-col gap-8 p-8 overflow-y-auto"
-                style="height: calc(100% - 64px)"
-            >
-                <form @submit.prevent="submit">
-                    <!-- File input for image upload -->
-                    <file-pond 
-                        name="image"
-                        ref="pond"
-                        class-name="my-pond"
-                        label-idle="Drop files here or click to upload"
-                        allow-multiple="true"
-                        credits="false"
-                        accepted-file-types="image/jpeg, image/png"
-                        :server="{
-                            url:'',
-                            process: {
-                                url:'/upload-image',
-                                method: 'POST',
-                                onload: handleFilePondLoad
-                            },
-                            revert: handleFilePondRevert,
-                            headers:{
-                                'X-CSRF-TOKEN': $page.props.csrf_token
-                            }
-            
-                        }"
-                    ></file-pond>
-
-                    <!-- Title input -->
-                    <div class="q-pa-md">
-                        <q-input
-                            v-model="form.title"
-                            rounded
-                            outlined
-                            type="text"
-                            label="Title"
-                            class="w-full text-xl"
-                        />
-                    </div>
-
-                    <!-- Description input -->
-                    <div class="q-pa-md">
-                        <q-input
-                            v-model="form.description"
-                            rounded
-                            outlined
-                            type="textarea"
-                            label="Description"
-                            class="w-full text-xl"
-                        />
-                    </div>
-
-                    <!-- Error message display -->
-                    <div
-                        v-if="errorMessage"
-                        class="q-pa-md text-red-500 text-lg"
-                    >
-                        {{ errorMessage }}
-                    </div>
-
-                    <!-- Submit button -->
-                    <div class="q-pa-md flex justify-end gap-4">
-                        <q-btn
-                            color="positive"
-                            label="Submit"
-                            type="submit"
-                            class="text-lg"
-                        />
-                        <q-btn
-                            flat
-                            color="negative"
-                            label="Cancel"
-                            v-close-popup
-                            class="text-lg"
-                        />
-                    </div>
-                </form>
-            </div>
-        </div>
-    </q-dialog>
-        <q-page-container>
-            <slot :search="search"/>
+  
+        <q-page-container :class="['page-content-container', {'dark-page': isDarkMode}]">
+          <slot :search="search" />
         </q-page-container>
-    </q-layout>
-</div>
-</template>
-
-<style lang="sass">
-.GPL
-
-  &__toolbar
-    height: 64px
-
-  &__toolbar-input
-    width: 35%
-
-  &__drawer-item
-    line-height: 24px
-    border-radius: 0 24px 24px 0
-
-    .q-item__section--avatar
-      padding-left: 10px
-      .q-icon
-        color: #5f6368
-
-    .q-item__label:not(.q-item__label--caption)
-      color: #3c4043
-      letter-spacing: .01785714em
-      font-size: .875rem
-      font-weight: 500
-      line-height: 1.25rem
-
-    &--storage
-      border-radius: 0
-      margin-right: 0
-      padding-top: 24px
-      padding-bottom: 24px
-
-  &__side-btn
-    &__label
-      font-size: 12px
-      line-height: 24px
-      letter-spacing: .01785714em
-      font-weight: 500
-
-  @media (min-width: 1024px)
-    &__page-container
-      padding-left: 94px
-</style>
-
+      </q-layout>
+    </div>
+  </template>
 <style scoped>
+.custom-drawer {
+  background: #d4d8bd !important;
+  backdrop-filter: blur(10px); /* Optional for glass effect */
+  box-shadow: none; /* If Quasar's default shadow is interfering */
+  border-top-right-radius: 20px;
+  border-bottom-right-radius: 20px;
+  overflow: hidden; /* Ensures content follows rounded shape */
+}
+
+/* Apply the background color to all drawer elements */
+:deep(.q-drawer) {
+  background: #d4d8bd !important;
+}
+
+:deep(.q-drawer__content) {
+  background: #d4d8bd !important;
+}
+
+/* Ensure the scroll area also has the same background */
+:deep(.custom-drawer .q-scrollarea__container) {
+  background: #d4d8bd !important;
+}
+
+/* Ensure the content inside the drawer does not break the rounded corners */
+.drawer-content {
+  border-radius: inherit;
+  overflow: hidden;
+  background: #d4d8bd !important;
+}
+
+.page-content-container {
+  padding-top: 20px; /* Adds space above the content */
+}
+
+.custom-text {
+    color: var(--surface-900); 
+    font-weight: 700; 
+    font-size: 1.5rem; 
+    line-height: 2rem;
+}
+.custom-color{
+    color: #4f6642;
+}
 .bg-website{
-    background-color: #F8F3EC;
+    background-color: #F5F5DC;
 }
 .text-brand {
     color: #a2aa33 !important;
@@ -591,5 +328,57 @@ const submit = () => {
     color: black;
     background: white;
     font-family: "Poppins", sans-serif;
+}
+
+/* Dark mode styles */
+.bg-dark {
+  background-color: #121212;
+}
+
+.dark-drawer {
+  background-color: #1e1e1e !important;
+}
+
+.dark-drawer .q-item {
+  color: #e0e0e0;
+}
+
+.dark-drawer .q-icon {
+  color: #e0e0e0;
+}
+
+.dark-page {
+  background-color: #121212;
+}
+
+/* Ensure the content inside the drawer does not break the rounded corners */
+.drawer-content {
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.drawer-content:not(.dark-drawer) {
+  background: #d4d8bd !important;
+}
+
+.dark-drawer .drawer-content {
+  background: #1e1e1e !important;
+}
+
+/* Dark mode overrides for Quasar components */
+.body--dark .q-drawer {
+  background-color: #1e1e1e;
+}
+
+.body--dark .q-item {
+  color: #e0e0e0;
+}
+
+.body--dark .q-separator {
+  background-color: #333333;
+}
+
+.body--dark .q-card {
+  background-color: #2d2d2d;
 }
 </style>
