@@ -180,10 +180,11 @@ onUnmounted(() => {
             </div>
 
             <div class="generic-container2">
-                <Link href="/login"><q-btn label="Log in" padding="xs md" class="font-poppins btn-color-login" rounded
-                    flat /></Link>
-                <Link href="/register"><q-btn label="Sign Up" padding="xs md" class="font-poppins btn-color-login" flat
-                    rounded />
+                <Link href="/login">
+                    <button class="auth-btn btn-login">Log in</button>
+                </Link>
+                <Link href="/register">
+                    <button class="auth-btn btn-signup">Sign Up</button>
                 </Link>
             </div>
         </div>
