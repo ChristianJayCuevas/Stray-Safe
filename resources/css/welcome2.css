@@ -245,7 +245,8 @@
 #hero {
     display: flex; 
     flex-direction: row; 
-    margin-top: 1rem;
+    margin-top: 2rem; 
+    margin-bottom: 2rem; 
     overflow: hidden;
 }
 
@@ -368,6 +369,7 @@
     justify-content: center;
     width: 100%;
     margin-top: 4rem;
+    background-color: rgba(79, 102, 66, 0.1);
 }
 
 .feature-grid {
@@ -1223,5 +1225,584 @@
     
     .feature-card-description {
         font-size: 1rem;
+    }
+}
+
+
+/* Demo and About Us */
+/* Demo Section Styles */
+#demo {
+    padding: 5rem 0;
+    margin: 0 auto;
+    width: 100%;
+    background-color: rgba(79, 102, 66, 0.1);
+}
+
+.demo-section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.section-heading {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.section-title {
+    font-size: 3rem;
+    color: #1f3623;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+.section-subtitle {
+    font-size: 1.5rem;
+    color: #4f6642;
+    display: block;
+}
+
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+}
+
+.video-card {
+    background-color: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.video-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+}
+
+.video-container {
+    aspect-ratio: 16 / 9;
+    position: relative;
+    overflow: hidden;
+    background-color: #1f3623;
+}
+
+.video-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: 500;
+}
+
+.play-button {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.play-button i {
+    font-size: 2rem;
+    color: white;
+    transition: transform 0.3s ease;
+}
+
+.video-card:hover .play-button {
+    background-color: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.video-card:hover .play-button i {
+    transform: scale(1.2);
+}
+
+.video-description {
+    padding: 1.5rem;
+}
+
+.video-title {
+    font-size: 1.5rem;
+    color: #1f3623;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.video-text {
+    font-size: 1rem;
+    color: #4f6642;
+    line-height: 1.5;
+}
+
+/* About Us Section Styles */
+#about {
+    padding: 5rem 0;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.about-section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.team-carousel-container {
+    position: relative;
+    margin: 2rem 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+}
+
+.team-carousel {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    padding: 1rem 0;
+    scroll-snap-type: x mandatory;
+    /* Add initial padding to center the first card */
+    padding-left: calc(50% - 150px); /* Adjust based on card width */
+    padding-right: calc(50% - 150px); /* Adjust based on card width */
+}
+
+.team-card {
+    min-width: calc(33.333% - 14px);
+    background-color: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    transition: all 0.5s ease;
+    display: flex;
+    flex-direction: column;
+    scroll-snap-align: center;
+    filter: blur(3px) grayscale(30%);
+    transform: scale(0.9);
+    opacity: 0.7;
+    /* Set a consistent width for reliable centering */
+    width: 350px;
+    flex-shrink: 0;
+}
+
+.team-card.active {
+    filter: blur(0) grayscale(0%);
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+}
+
+.team-card:hover {
+    transform: translateY(-10px) scale(1);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+    filter: blur(0) grayscale(0%);
+    opacity: 1;
+}
+
+.member-image {
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+}
+
+.member-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.team-card:hover .member-image img {
+    transform: scale(1.1);
+}
+
+.member-info {
+    padding: 1.5rem;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.member-name {
+    font-size: 1.5rem;
+    color: #1f3623;
+    margin-bottom: 0.3rem;
+    font-weight: 600;
+}
+
+.member-title {
+    font-size: 1rem;
+    color: #4f6642;
+    margin-bottom: 1rem;
+    font-style: italic;
+}
+
+.member-bio {
+    font-size: 0.95rem;
+    color: #333;
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+    flex-grow: 1;
+}
+
+.member-social {
+    display: flex;
+    gap: 1rem;
+}
+
+.social-link {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1f3623;
+    transition: all 0.3s ease;
+}
+
+.social-link:hover {
+    background-color: #1f3623;
+    color: white;
+    transform: translateY(-3px);
+}
+
+.carousel-control {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: white;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: #1f3623;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+    transition: all 0.3s ease;
+}
+
+.carousel-control:hover {
+    background-color: #1f3623;
+    color: white;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+}
+
+.prev-btn {
+    left: 5px;
+}
+
+.next-btn {
+    right: 5px;
+}
+
+.carousel-dots {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 2rem;
+}
+
+.carousel-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #ddd;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.carousel-dot.active, .carousel-dot:hover {
+    background-color: #1f3623;
+    transform: scale(1.2);
+}
+
+/* Responsive styles for Team Carousel */
+@media (max-width: 1200px) {
+    .about-section {
+        max-width: 90%;
+    }
+    
+    .team-carousel {
+        padding-left: calc(50% - 140px);
+        padding-right: calc(50% - 140px);
+    }
+    
+    .team-card {
+        width: 280px;
+    }
+}
+
+@media (max-width: 992px) {
+    .team-carousel {
+        padding-left: calc(50% - 125px);
+        padding-right: calc(50% - 125px);
+    }
+    
+    .team-card {
+        width: 250px;
+    }
+    
+    .carousel-control {
+        top: initial;
+        bottom: -60px;
+        transform: none;
+    }
+    
+    .prev-btn {
+        left: calc(50% - 60px);
+    }
+    
+    .next-btn {
+        right: calc(50% - 60px);
+    }
+    
+    .carousel-dots {
+        margin-top: 5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .section-title {
+        font-size: 2.5rem;
+    }
+    
+    .section-subtitle {
+        font-size: 1.2rem;
+    }
+    
+    .team-carousel {
+        padding-left: calc(50% - 110px);
+        padding-right: calc(50% - 110px);
+    }
+    
+    .team-card {
+        width: 220px;
+    }
+    
+    .carousel-control {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .team-carousel {
+        padding-left: calc(50% - 100px);
+        padding-right: calc(50% - 100px);
+    }
+    
+    .team-card {
+        width: 200px;
+    }
+    
+    .about-section {
+        padding: 1rem;
+    }
+}
+.footer-container {
+    width: 100%;
+    padding: 60px 30px 20px;
+    font-family: 'Poppins', sans-serif;
+    color: #1f3623;
+}
+
+.footer-content {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+    gap: 40px;
+}
+
+.footer-section {
+    flex: 1;
+    min-width: 200px;
+}
+
+.logo-section {
+    flex: 1.5;
+}
+
+.footer-logo {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.footer-logo-img {
+    height: 40px;
+    width: auto;
+}
+
+.footer-logo-text {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+.custom-color {
+    color: #739D5E;
+}
+
+.footer-tagline {
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+.footer-description {
+    font-size: 0.9rem;
+    color: #555;
+    max-width: 300px;
+}
+
+.footer-heading {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.footer-heading:after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 0;
+    width: 40px;
+    height: 3px;
+    background-color: #739D5E;
+    border-radius: 2px;
+}
+
+.footer-links, .footer-contact-info {
+    list-style: none;
+    padding: 0;
+}
+
+.footer-links li, .footer-contact-info li {
+    margin-bottom: 12px;
+}
+
+.footer-links a {
+    color: #1f3623;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.footer-links a:hover {
+    color: #739D5E;
+}
+
+.footer-contact-info li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.footer-contact-info i {
+    color: #739D5E;
+}
+
+.thesis-section p {
+    margin-bottom: 8px;
+}
+
+.thesis-degree {
+    font-weight: 500;
+    margin-top: 10px;
+}
+
+.thesis-term {
+    font-style: italic;
+    margin-bottom: 15px;
+}
+
+.thesis-advisors {
+    font-size: 0.9rem;
+    margin-top: 15px;
+}
+
+.footer-bottom {
+    max-width: 1200px;
+    margin: 40px auto 0;
+    padding-top: 20px;
+    border-top: 1px solid rgba(79, 102, 66, 0.3);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.social-links {
+    display: flex;
+    gap: 15px;
+}
+
+.social-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: rgba(115, 157, 94, 0.1);
+    color: #1f3623;
+    transition: all 0.3s ease;
+}
+
+.social-icon:hover {
+    background-color: #739D5E;
+    color: white;
+}
+
+.copyright {
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.thesis-disclaimer {
+    font-size: 0.8rem;
+    margin-top: 5px;
+    color: #777;
+}
+
+@media (max-width: 768px) {
+    .footer-content {
+        flex-direction: column;
+        gap: 30px;
+    }
+    
+    .footer-section {
+        width: 100%;
+    }
+    
+    .footer-bottom {
+        flex-direction: column-reverse;
+        text-align: center;
+    }
+    
+    .social-links {
+        justify-content: center;
+        margin-top: 15px;
     }
 }
