@@ -151,8 +151,27 @@ onUnmounted(() => {
     });
 });
 
-const currentTeamIndex = ref(0);
-const teamMembers = ref([
+const currentTeamIndex = ref(1); // Start at index 1 (first real card)
+const isScrolling = ref(false);
+const isMobile = ref(false);
+const teamCarousel = ref(null);
+
+// Watch for window resize to update mobile state
+const updateMobileState = () => {
+    isMobile.value = window.innerWidth <= 768;
+};
+
+onMounted(() => {
+    window.addEventListener('resize', updateMobileState);
+    updateMobileState(); // Initial check
+    
+    // Initialize carousel
+    setTimeout(() => {
+        scrollTeamCarousel();
+    }, 100);
+});
+// Create original team members array
+const originalTeamMembers = ref([
     {
         name: "Jane Doe",
         title: "Lead Developer",
@@ -193,107 +212,90 @@ const teamMembers = ref([
     }
 ]);
 
-// Refs
-const teamCarousel = ref(null);
+// Add clone of first card at the end and last card at the beginning for infinite loop effect
+const teamMembers = computed(() => {
+    if (originalTeamMembers.value.length === 0) return [];
 
-// Set initial index to the middle of the carousel
-// If you want to start with a different member, adjust this value
-const initialTeamIndex = Math.floor(teamMembers.value.length / 2);
-currentTeamIndex.value = initialTeamIndex;
+    const firstClone = { ...originalTeamMembers.value[0], clone: true };
+    const lastClone = { ...originalTeamMembers.value[originalTeamMembers.value.length - 1], clone: true };
 
-// Lifecycle hooks
-onMounted(() => {
-    window.addEventListener('scroll', handleScroll);
-    
-    // Initialize the carousel with the center card active
-    updateActiveCard();
-    
-    // Need to trigger initial scroll to center the active card
-    // Small delay to ensure DOM is fully rendered
-    setTimeout(() => {
-        scrollTeamCarousel();
-    }, 100);
-    
-    // Check for screen size and adjust if necessary
-    checkScreenSize();
-    window.addEventListener('resize', checkScreenSize);
+    return [lastClone, ...originalTeamMembers.value, firstClone];
 });
+// Function to scroll the carousel
+const scrollTeamCarousel = () => {
+    if (!teamCarousel.value) return;
 
-onBeforeUnmount(() => {
-    window.removeEventListener('scroll', handleScroll);
-    window.removeEventListener('resize', checkScreenSize);
-});
+    const cardWidth = isMobile.value ? teamCarousel.value.offsetWidth : 280;
+    const gap = 20; // Space between cards
 
-// Watch for changes in currentTeamIndex
+    const scrollPosition = currentTeamIndex.value * (cardWidth + gap);
+
+    teamCarousel.value.style.scrollBehavior = "smooth"; 
+    teamCarousel.value.scrollLeft = scrollPosition;
+};
+
+// Watch for changes to currentTeamIndex and scroll the carousel
 watch(currentTeamIndex, () => {
     scrollTeamCarousel();
-    updateActiveCard();
 });
 
+// Watch for changes to isMobile and update carousel
+watch(isMobile, () => {
+    scrollTeamCarousel();
+});
+
+// Go to a specific team member
+const goToTeamMember = (index) => {
+    // Add 1 to account for the clone at the beginning
+    currentTeamIndex.value = index + 1;
+    scrollTeamCarousel();
+};
+
+// Next team member with proper looping
 const nextTeamMember = () => {
-    currentTeamIndex.value = (currentTeamIndex.value + 1) % (teamMembers.value.length + 1); // +1 for the duplicate
+    if (isScrolling.value) return;
+    isScrolling.value = true;
+
+    currentTeamIndex.value++;
+
+    if (currentTeamIndex.value >= teamMembers.value.length - 1) {
+        setTimeout(() => {
+            teamCarousel.value.style.transition = "none"; // Remove transition for instant jump
+            currentTeamIndex.value = 1; // Jump to real first card
+            scrollTeamCarousel();
+            setTimeout(() => (teamCarousel.value.style.transition = "all 0.3s ease"), 50);
+        }, 300);
+    }
+
+    scrollTeamCarousel();
+    setTimeout(() => (isScrolling.value = false), 300);
 };
 
 const prevTeamMember = () => {
-    currentTeamIndex.value = (currentTeamIndex.value - 1 + (teamMembers.value.length + 1)) % (teamMembers.value.length + 1);
-};
+    if (isScrolling.value) return;
+    isScrolling.value = true;
 
-const goToTeamMember = (index) => {
-    currentTeamIndex.value = index;
-};
+    currentTeamIndex.value--;
 
-const scrollTeamCarousel = () => {
-    if (teamCarousel.value) {
-        const cards = teamCarousel.value.querySelectorAll('.team-card');
-        if (!cards.length) return;
-        
-        const cardWidth = cards[0].offsetWidth;
-        const gap = 20; // Same as defined in CSS
-        
-        // Calculate center position
-        const containerWidth = teamCarousel.value.clientWidth;
-        const carouselCenter = containerWidth / 2;
-        const cardCenter = cardWidth / 2;
-        
-        // Calculate scroll position to center the current card
-        let scrollPosition = currentTeamIndex.value * (cardWidth + gap);
-        
-        // Adjust for centering if we're not using CSS padding for initial centering
-        // scrollPosition = scrollPosition - (carouselCenter - cardCenter);
-        
-        teamCarousel.value.scrollTo({
-            left: scrollPosition,
-            behavior: 'smooth'
-        });
+    if (currentTeamIndex.value <= 0) {
+        setTimeout(() => {
+            teamCarousel.value.style.transition = "none"; // Remove transition for instant jump
+            currentTeamIndex.value = teamMembers.value.length - 2; // Jump to real last card
+            scrollTeamCarousel();
+            setTimeout(() => (teamCarousel.value.style.transition = "all 0.3s ease"), 50);
+        }, 300);
     }
-};
 
-const updateActiveCard = () => {
-    if (teamCarousel.value) {
-        const cards = teamCarousel.value.querySelectorAll('.team-card');
-        cards.forEach((card, index) => {
-            if (index === currentTeamIndex.value) {
-                card.classList.add('active');
-            } else {
-                card.classList.remove('active');
-            }
-        });
-    }
-};
-
-const checkScreenSize = () => {
-    // Adjust scrolling behavior based on screen size
-    if (window.innerWidth <= 768) {
-        // For mobile, ensure we have proper snapping
-        if (teamCarousel.value) {
-            teamCarousel.value.style.scrollSnapType = 'x mandatory';
-        }
-    }
-    
-    // Force update active card after resize
     scrollTeamCarousel();
-    setTimeout(updateActiveCard, 300); // Small delay to ensure scroll has completed
+    setTimeout(() => (isScrolling.value = false), 300);
 };
+
+
+// Function to determine if a card is active (for mobile view)
+const isActiveCard = (index) => {
+    return index === currentTeamIndex.value;
+};
+
 </script>
 <template>
     <div class="background-website">
@@ -335,7 +337,7 @@ const checkScreenSize = () => {
 
         <!-- Mobile Navigation -->
         <button class="mobile-nav-button" @click="toggleMobileMenu">
-            <i class="fa-solid fa-paw"></i>
+            <i class="fa-solid fa-bars"></i>
         </button>
 
         <div class="mobile-nav-menu" :class="{ 'active': mobileMenuOpen }">
@@ -609,86 +611,60 @@ const checkScreenSize = () => {
 
             <!-- About Us Section -->
             <div id="about">
-    <div class="about-section">
-        <div class="section-heading">
-            <div class="section-title font-poppins">Meet Our Team</div>
-            <span class="section-subtitle font-poppins">The minds behind StraySafe</span>
-        </div>
+                <div class="about-section">
+                    <div class="section-heading">
+                        <div class="section-title font-poppins">Meet Our Team</div>
+                        <span class="section-subtitle font-poppins">The minds behind StraySafe</span>
+                    </div>
 
-        <div class="team-carousel-container">
-            <button class="carousel-control prev-btn" @click="prevTeamMember">
-                <i class="fa-solid fa-chevron-left"></i>
-            </button>
+                    <div class="team-carousel-container">
+                        <button class="carousel-control prev-btn" @click="prevTeamMember">
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
 
-            <div class="team-carousel" ref="teamCarousel">
-                <div 
-                    v-for="(member, index) in teamMembers" 
-                    :key="index"
-                    :class="['team-card', { active: currentTeamIndex === index }]"
-                >
-                    <div class="member-image">
-                        <img :src="member.image" :alt="member.name" />
-                    </div>
-                    <div class="member-info">
-                        <h3 class="member-name font-poppins">{{ member.name }}</h3>
-                        <p class="member-title">{{ member.title }}</p>
-                        <p class="member-bio">{{ member.bio }}</p>
-                        <div class="member-social">
-                            <a :href="member.linkedin" target="_blank" class="social-link">
-                                <i class="fa-brands fa-linkedin"></i>
-                            </a>
-                            <a 
-                                v-if="member.github" 
-                                :href="member.github" 
-                                target="_blank" 
-                                class="social-link"
+                        <div class="team-carousel" ref="teamCarousel">
+                            <!-- All cards including clones for infinite loop effect -->
+                            <div 
+                                v-for="(member, index) in teamMembers" 
+                                :key="index" 
+                                class="team-card" 
+                                :class="{ 'active': isActiveCard(index) }"
                             >
-                                <i class="fa-brands fa-github"></i>
-                            </a>
+                                <div class="member-image">
+                                    <img :src="member.image" :alt="member.name" />
+                                </div>
+                                <div class="member-content">
+                                    <h3 class="member-name">{{ member.name }}</h3>
+                                    <p class="member-role">{{ member.title }}</p>
+                                    <p class="member-bio">{{ member.bio }}</p>
+                                    <div class="member-social">
+                                        <a :href="member.linkedin" target="_blank" class="social-link">
+                                            <i class="fa-brands fa-linkedin"></i>
+                                        </a>
+                                        <a v-if="member.github" :href="member.github" target="_blank" class="social-link">
+                                            <i class="fa-brands fa-github"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        <button class="carousel-control next-btn" @click="nextTeamMember">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
                     </div>
-                </div>
-                <!-- Duplicate the first card -->
-                <div class="team-card" v-if="teamMembers.length > 0">
-                    <div class="member-image">
-                        <img :src="teamMembers[0].image" :alt="teamMembers[0].name" />
-                    </div>
-                    <div class="member-info">
-                        <h3 class="member-name font-poppins">{{ teamMembers[0].name }}</h3>
-                        <p class="member-title">{{ teamMembers[0].title }}</p>
-                        <p class="member-bio">{{ teamMembers[0].bio }}</p>
-                        <div class="member-social">
-                            <a :href="teamMembers[0].linkedin" target="_blank" class="social-link">
-                                <i class="fa-brands fa-linkedin"></i>
-                            </a>
-                            <a 
-                                v-if="teamMembers[0].github" 
-                                :href="teamMembers[0].github" 
-                                target="_blank" 
-                                class="social-link"
-                            >
-                                <i class="fa-brands fa-github"></i>
-                            </a>
-                        </div>
+                    
+                    <div class="carousel-dots">
+                        <span 
+                            v-for="(_, index) in originalTeamMembers" 
+                            :key="index" 
+                            class="carousel-dot" 
+                            :class="{ 'active': currentTeamIndex === index + 1 }"
+                            @click="goToTeamMember(index)"
+                        ></span>
                     </div>
                 </div>
             </div>
-
-            <button class="carousel-control next-btn" @click="nextTeamMember">
-                <i class="fa-solid fa-chevron-right"></i>
-            </button>
-        </div>
-
-        <div class="carousel-dots">
-            <span 
-                v-for="(member, index) in teamMembers" 
-                :key="index"
-                :class="['carousel-dot', { active: currentTeamIndex === index }]"
-                @click="goToTeamMember(index)"
-            ></span>
-        </div>
-    </div>
-</div>
             <div class="footer-container" style="background-color: rgba(79, 102, 66, 0.1);">
                 <div class="footer-content">
                     <div class="footer-section logo-section">

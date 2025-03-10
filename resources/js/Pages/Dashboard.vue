@@ -220,7 +220,7 @@ function generateHeatmapData(count, min, max) {
                             @click="showDatePicker = !showDatePicker"
                         >
                             <div class="flex items-center">
-                                <q-icon name="event" class="mr-2" />
+                                <q-icon name="fa-solid fa-calendar" class="mr-2" />
                                 <span class="font-poppins">{{ selectedDate }}</span>
                             </div>
                         </q-btn>
@@ -319,7 +319,7 @@ function generateHeatmapData(count, min, max) {
         </div>
 
         <!-- Heatmap Section -->
-        <div class="mt-6 mx-6 mb-6">
+        <div class="mt-6 mx-6">
             <q-card class="chart-card heatmap-card" flat>
                 <q-card-section>
                     <VueApexCharts :series="heatmapSeries" :options="heatmapOptions" type="heatmap" height="350" />

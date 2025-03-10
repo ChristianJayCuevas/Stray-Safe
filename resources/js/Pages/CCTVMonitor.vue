@@ -3,18 +3,63 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 
+// Sample CCTV data - this would be fetched from an API in a real implementation
 const cctvs = ref([
     {
+        id: 1,
         name: 'Dog Demonstration Video',
+        location: 'Main Street',
+        status: 'Online',
         videoSrc: ['https://127.0.0.1:5000/video'],
         snapshots: []
     },
     {
+        id: 2,
         name: 'Cat Demonstration Video',
+        location: 'Park Avenue',
+        status: 'Online',
         videoSrc: ['https://100.89.19.38:5001/video'],
         snapshots: []
     },
+    {
+        id: 3,
+        name: 'Camera 3',
+        location: 'City Center',
+        status: 'Offline',
+        videoSrc: [''],
+        snapshots: []
+    },
+    {
+        id: 4,
+        name: 'Camera 4',
+        location: 'Riverside',
+        status: 'Online',
+        videoSrc: ['https://127.0.0.1:5000/video'],
+        snapshots: []
+    },
 ]);
+
+// Pagination settings
+const pagination = ref({
+    page: 1,
+    rowsPerPage: 4,
+    totalPages: computed(() => Math.ceil(cctvs.value.length / pagination.value.rowsPerPage))
+});
+
+// Filtered CCTVs based on pagination
+const paginatedCCTVs = computed(() => {
+    const start = (pagination.value.page - 1) * pagination.value.rowsPerPage;
+    const end = start + pagination.value.rowsPerPage;
+    return cctvs.value.slice(start, end);
+});
+
+// System stats
+const systemStats = ref({
+    totalCameras: cctvs.value.length,
+    onlineCameras: computed(() => cctvs.value.filter(cam => cam.status === 'Online').length),
+    detections: 12,
+    lastUpdate: new Date().toLocaleString()
+});
 
 const models = ref([
     {
@@ -36,6 +81,7 @@ const groupedSnapshots = computed(() => {
 
 const dialogVisible = ref(false);
 const selectedCCTV = ref(null);
+const activeTab = ref('live');
 
 async function openDialog(cctv) {
     selectedCCTV.value = cctv;
@@ -64,6 +110,7 @@ async function openDialog(cctv) {
         selectedCCTV.value.snapshots = [];
     }
 }
+
 const snapshots = ref([]);
 const loading = ref(true);
 
@@ -116,6 +163,12 @@ async function sendMockNotification() {
     }
 }
 
+// Function to change pagination page
+function changePage(newPage) {
+    if (newPage > 0 && newPage <= pagination.value.totalPages) {
+        pagination.value.page = newPage;
+    }
+}
 
 // Fetch the recent snapshots when the component is mounted
 onMounted(fetchRecentSnapshots);
@@ -126,103 +179,195 @@ function closeDialog() {
 }
 </script>
 
-<template> 
+<template>
     <AuthenticatedLayout>
-        <q-layout>
-            <q-page-container>
-                <div class="text-container-normal">
-                    <p class="header">Barangay Sacred Heart</p>
+        <div class="cctv-dashboard">
+            <!-- Header with system stats -->
+            <div class="dashboard-header">
+                <h1>CCTV Surveillance System</h1>
+                <div class="system-time">{{ new Date().toLocaleString() }}</div>
+            </div>
+            
+            <!-- System stats cards -->
+            <div class="stats-container">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-video"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value">{{ systemStats.totalCameras }}</div>
+                        <div class="stat-label">Total Cameras</div>
+                    </div>
                 </div>
-                <q-page class="q-pa-md">
-                    <div class="q-gutter-md row justify-center">
-                        <q-card v-for="(cctv, index) in cctvs" :key="index" class="cctv-card" @click="openDialog(cctv)">
-                            <div class="title-container">
-                                <p class="title">Recording</p>
+                
+                <div class="stat-card">
+                    <div class="stat-icon online">
+                        <i class="fas fa-wifi"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value">{{ systemStats.onlineCameras }}</div>
+                        <div class="stat-label">Online Cameras</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon alert">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value">{{ systemStats.detections }}</div>
+                        <div class="stat-label">Detections Today</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value">{{ systemStats.lastUpdate }}</div>
+                        <div class="stat-label">Last Update</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tabs for different views -->
+            <div class="cctv-tabs">
+                <div 
+                    class="tab" 
+                    :class="{ active: activeTab === 'live' }"
+                    @click="activeTab = 'live'"
+                >
+                    Live Feeds
+                </div>
+                <div 
+                    class="tab" 
+                    :class="{ active: activeTab === 'snapshots' }"
+                    @click="activeTab = 'snapshots'"
+                >
+                    Recent Snapshots
+                </div>
+            </div>
+            
+            <!-- Live feeds tab content -->
+            <div v-if="activeTab === 'live'" class="tab-content">
+                <div class="cctv-grid">
+                    <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
+                        <div class="cctv-header">
+                            <span class="cctv-name">{{ cctv.name }}</span>
+                            <span class="cctv-location">{{ cctv.location }}</span>
+                            <span class="cctv-status" :class="cctv.status.toLowerCase()">
+                                {{ cctv.status }}
+                            </span>
+                        </div>
+                        <div class="cctv-feed">
+                            <img 
+                                v-if="cctv.status === 'Online'"
+                                :src="cctv.videoSrc[0]"
+                                @error="() => { if (cctv.videoSrc.length > 1) $event.target.src = cctv.videoSrc[1]; }"
+                                autoplay loop class="video-feed"
+                            />
+                            <div v-else class="offline-feed">
+                                <i class="fas fa-video-slash"></i>
+                                <span>Camera Offline</span>
                             </div>
-                            <q-card-section>
-                                <img :src="cctv.videoSrc[0]"
-                                     @error="() => { if (cctv.videoSrc.length > 1) $event.target.src = cctv.videoSrc[1]; }"
-                                     autoplay loop class="video-feed"></img>
-                            </q-card-section>
-
-                            <q-card-section>
-                                <q-item>
-                                    <q-item-section>
-                                        <q-item-label class="sub-title">{{ cctv.name }}</q-item-label>
-                                    </q-item-section>
-                                </q-item>
-                            </q-card-section>
-                        </q-card>
+                            <div class="feed-overlay">
+                                <div class="feed-timestamp">{{ new Date().toLocaleTimeString() }}</div>
+                                <div v-if="cctv.status === 'Online'" class="live-indicator">LIVE</div>
+                            </div>
+                        </div>
                     </div>
-                </q-page>
-            </q-page-container>
-
-            <!-- Mock Notification Sender -->
-            <!-- <q-page-container>
-                <div class="text-container-normal">
-                    <p class="header">Send Mock Notification</p>
                 </div>
-                <q-page class="q-pa-md">
-                    <q-form @submit.prevent="sendMockNotification">
-                        <q-input v-model="notificationTitle" label="Notification Title" outlined dense />
-                        <q-input v-model="notificationBody" label="Notification Body" outlined dense />
-                        <q-btn label="Send Notification" color="primary" @click="sendMockNotification" />
-                    </q-form>
-                    <p class="q-mt-md">{{ notificationResponse }}</p>
-                </q-page>
-            </q-page-container> -->
-
-            <q-page-container>
-                <div class="text-container-normal">
-                    <p class="header">Barangay Sacred Heart - Recent Snapshots</p>
+                
+                <!-- Pagination controls -->
+                <div class="pagination-controls">
+                    <button 
+                        class="pagination-btn" 
+                        :disabled="pagination.page === 1"
+                        @click="changePage(pagination.page - 1)"
+                    >
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span class="pagination-info">
+                        Page {{ pagination.page }} of {{ pagination.totalPages }}
+                    </span>
+                    <button 
+                        class="pagination-btn" 
+                        :disabled="pagination.page === pagination.totalPages"
+                        @click="changePage(pagination.page + 1)"
+                    >
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
                 </div>
-                <q-page class="q-pa-md">
-                    <div v-if="loading" class="text-center q-mt-md">
-                        <q-spinner-dots color="primary" size="lg" />
-                        <p>Loading recent snapshots...</p>
+            </div>
+            
+            <!-- Snapshots tab content -->
+            <div v-if="activeTab === 'snapshots'" class="tab-content">
+                <div v-if="loading" class="loading-container">
+                    <q-spinner-dots color="primary" size="lg" />
+                    <p>Loading recent snapshots...</p>
+                </div>
+                <div v-else class="snapshots-container">
+                    <div v-for="(snapshot, index) in snapshots" :key="index" class="snapshot-card">
+                        <img :src="snapshot.imageUrl" alt="Snapshot" class="snapshot-image" />
+                        <div class="snapshot-info">
+                            <div class="snapshot-time">{{ snapshot.timestamp }}</div>
+                            <div class="snapshot-status" :class="snapshot.strayStatus.toLowerCase().replace(' ', '-')">
+                                {{ snapshot.strayStatus }}
+                            </div>
+                            <div class="snapshot-location">{{ snapshot.location }}</div>
+                        </div>
                     </div>
-                    <div v-else>
-                        <q-table
-                            :rows="snapshots"
-                            :columns="columns"
-                            row-key="timestamp"
-                            class="q-pa-md"
-                            flat
-                            bordered
-                            separator="horizontal"
-                        >
-                            <template v-slot:body-cell-imageUrl="props">
-                                <img :src="props.row.imageUrl" alt="Snapshot" style="width: 100px; height: auto;" />
-                            </template>
-                        </q-table>
-                    </div>
-                </q-page>
-            </q-page-container>
-        </q-layout>
+                </div>
+            </div>
+        </div>
     </AuthenticatedLayout>
+    
+    <!-- CCTV Detail Dialog -->
     <q-dialog v-model="dialogVisible" backdrop-filter="blur(4px) saturate(150%)">
         <q-card class="cctv-dialog">
-            <div class="cctv-dialog-container" style="background: black;" @click.stop>
-                <img v-if="selectedCCTV" :src="selectedCCTV.videoSrc[0]"
-                     @error="() => { if (selectedCCTV.videoSrc.length > 1) $event.target.src = selectedCCTV.videoSrc[1]; }"
-                     autoplay loop class="cctv-video"></img>
+            <div class="dialog-header">
+                <h2 v-if="selectedCCTV">{{ selectedCCTV.name }}</h2>
+                <button class="close-btn" @click="closeDialog">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-
-            <div class="snapshot-details" style="width: 50%; padding: 20px;">
-                <div v-if="selectedCCTV">
-                    <p class="sub-title">{{ selectedCCTV.name }} - Snapshots</p>
-
-                    <div v-for="(dogSnapshots, dogIndex) in groupedSnapshots" :key="dogIndex">
-                        <q-expansion-item :label="'Dog ' + (dogIndex + 1)" expand-separator dense>
-                            <div v-for="(snapshot, index) in dogSnapshots" :key="index" class="snapshot-item">
-                                <img :src="snapshot.src" alt="Snapshot" class="snapshot-image"
-                                     style="width: 100%; object-fit: contain;" />
-                                <div class="snapshot-details">
-                                    <p><strong>Time:</strong> {{ snapshot.time }}</p>
-                                    <p><strong>Status:</strong> {{ snapshot.classification }}</p>
-                                </div>
+            
+            <div class="dialog-content">
+                <div class="cctv-dialog-container">
+                    <img 
+                        v-if="selectedCCTV && selectedCCTV.status === 'Online'" 
+                        :src="selectedCCTV.videoSrc[0]"
+                        @error="() => { if (selectedCCTV.videoSrc.length > 1) $event.target.src = selectedCCTV.videoSrc[1]; }"
+                        autoplay loop class="cctv-video"
+                    />
+                    <div v-else class="offline-feed large">
+                        <i class="fas fa-video-slash"></i>
+                        <span>Camera Offline</span>
+                    </div>
+                    
+                    <div class="feed-overlay">
+                        <div class="feed-timestamp">{{ new Date().toLocaleTimeString() }}</div>
+                        <div v-if="selectedCCTV && selectedCCTV.status === 'Online'" class="live-indicator">LIVE</div>
+                    </div>
+                </div>
+                
+                <div class="snapshot-details">
+                    <h3 v-if="selectedCCTV">Recent Detections</h3>
+                    
+                    <div v-if="selectedCCTV && selectedCCTV.snapshots.length > 0">
+                        <div v-for="(snapshot, index) in selectedCCTV.snapshots" :key="index" class="snapshot-item">
+                            <img :src="snapshot.src" alt="Snapshot" class="snapshot-image" />
+                            <div class="snapshot-info">
+                                <div><strong>Time:</strong> {{ snapshot.time }}</div>
+                                <div><strong>Status:</strong> {{ snapshot.classification }}</div>
                             </div>
-                        </q-expansion-item>
+                        </div>
+                    </div>
+                    
+                    <div v-else class="no-snapshots">
+                        <i class="fas fa-image"></i>
+                        <span>No recent detections</span>
                     </div>
                 </div>
             </div>

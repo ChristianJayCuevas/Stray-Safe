@@ -187,7 +187,7 @@ const submit = () => {
                     <q-icon name="videocam" />
                   </q-item-section>
                   <q-item-section>
-                    <q-item-label>Surveillance Camera</q-item-label>
+                    <q-item-label>CCTV Cameras</q-item-label>
                   </q-item-section>
                 </q-item>
               </Link>
@@ -213,6 +213,17 @@ const submit = () => {
                   <q-item-label>{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}</q-item-label>
                 </q-item-section>
               </q-item>
+              <Link :href="route('logout')" method="post">
+                <q-item clickable class="GPL__drawer-item">
+                  <q-item-section avatar>
+                    <q-icon name="logout" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>Logout</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </Link>
+   
   
             </q-list>
           </q-scroll-area>
