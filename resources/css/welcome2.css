@@ -1,6 +1,48 @@
 .background-website {
     background-color: #F5F5DC;
 }
+.btn-color-login {
+    background-color: transparent;
+    color: black;
+    border: solid 1px #1f3623;
+    padding: 0 16px; /* Adjust horizontal padding */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px; /* Rounded corners */
+    font-size: 14px;
+    height: 36px; /* Ensures consistent button height */
+    min-width: 100px; /* Adjust to avoid squished text */
+    text-transform: none; /* Prevents auto uppercase */
+    white-space: nowrap; /* Prevents text wrapping */
+    overflow: hidden; /* Ensures text stays inside */
+    line-height: 1; /* Fixes vertical spacing */
+}
+
+/* Target the inner content of q-btn to ensure vertical centering */
+.btn-color-login .q-btn__content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+.btn-color-register {
+    background-color: #38a3a5;
+    color: white;
+    padding: 8px 16px; /* Adjusted for proper spacing */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    text-transform: none;
+    font-size: 14px;
+    height: 40px; /* Fixed height to prevent overflow */
+    width: auto; /* Ensures the button wraps around content */
+    line-height: 1; /* Prevents excess spacing */
+    overflow: hidden; /* Prevents text from spilling */
+    white-space: nowrap; /* Prevents text from wrapping */
+}
 
 /* for navpill */
 .custom-navbar {
@@ -108,14 +150,13 @@
 }
 
 /* container for login and sign up */
-.generic-container2{
+.generic-container2 {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-right: 40px;
     gap: 10px;
-}
 
+}
 /* logo */
 .logo-size{
     width: 2.5rem; 
@@ -133,34 +174,34 @@
     color: #4f6642;
 }
 
-/* Login and Signup Buttons */
+/* Auth button styles */
 .auth-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.1rem;
-    font-weight: 600;
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 14px;
     font-family: 'Poppins', sans-serif;
-    background-color: transparent;
-    color: #1f3623;
-    border: 2px solid rgba(79, 102, 66, 0.3);
-    transition: all 0.3s ease;
-    min-width: 120px;
+    cursor: pointer;
     text-align: center;
-    letter-spacing: 0.5px;
-    padding: 8px 20px;
-    border-radius: 20px;
-    text-decoration: none;
+    min-width: 100px;
+    border: none;
+    transition: all 0.3s ease;
 }
 
-.auth-btn:hover {
-    background-color: rgba(79, 102, 66, 0.1);
-    transform: translateY(-3px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+.btn-login {
+    background-color: transparent;
+    color: black;
+    border: solid 1px #1f3623;
 }
 
 .btn-signup {
-    border-color: rgba(31, 54, 35, 0.3);
+    background-color: transparent;
+    color: black;
+    border: solid 1px #1f3623;
+}
+
+.btn-login:hover, .btn-signup:hover {
+    background-color: rgba(79, 102, 66, 0.1);
 }
 
 /* Mobile Auth Buttons */
