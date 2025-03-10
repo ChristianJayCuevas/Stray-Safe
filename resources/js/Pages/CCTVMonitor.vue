@@ -1,7 +1,16 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import axios from 'axios';
+
+// Theme toggle
+const isDarkTheme = ref(true);
+
+function toggleTheme() {
+    isDarkTheme.value = !isDarkTheme.value;
+    // Save theme preference to localStorage
+    localStorage.setItem('cctv-theme', isDarkTheme.value ? 'dark' : 'light');
+}
 
 // Sample CCTV data - this would be fetched from an API in a real implementation
 const cctvs = ref([
@@ -170,8 +179,16 @@ function changePage(newPage) {
     }
 }
 
-// Fetch the recent snapshots when the component is mounted
-onMounted(fetchRecentSnapshots);
+// Load saved theme preference
+onMounted(() => {
+    fetchRecentSnapshots();
+    
+    // Check for saved theme preference
+    const savedTheme = localStorage.getItem('cctv-theme');
+    if (savedTheme) {
+        isDarkTheme.value = savedTheme === 'dark';
+    }
+});
 
 function closeDialog() {
     dialogVisible.value = false;
@@ -181,11 +198,17 @@ function closeDialog() {
 
 <template>
     <AuthenticatedLayout>
-        <div class="cctv-dashboard">
+        <div class="cctv-dashboard" :class="{ 'light-theme': !isDarkTheme }">
             <!-- Header with system stats -->
             <div class="dashboard-header">
                 <h1>CCTV Surveillance System</h1>
-                <div class="system-time">{{ new Date().toLocaleString() }}</div>
+                <div class="header-controls">
+                    <button class="theme-toggle" @click="toggleTheme">
+                        <i class="fas" :class="isDarkTheme ? 'fa-sun' : 'fa-moon'"></i>
+                        {{ isDarkTheme ? 'Light Mode' : 'Dark Mode' }}
+                    </button>
+                    <div class="system-time">{{ new Date().toLocaleString() }}</div>
+                </div>
             </div>
             
             <!-- System stats cards -->
@@ -325,7 +348,7 @@ function closeDialog() {
     
     <!-- CCTV Detail Dialog -->
     <q-dialog v-model="dialogVisible" backdrop-filter="blur(4px) saturate(150%)">
-        <q-card class="cctv-dialog">
+        <q-card class="cctv-dialog" :class="{ 'light-theme': !isDarkTheme }">
             <div class="dialog-header">
                 <h2 v-if="selectedCCTV">{{ selectedCCTV.name }}</h2>
                 <button class="close-btn" @click="closeDialog">
