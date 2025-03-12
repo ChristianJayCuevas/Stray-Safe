@@ -1,0 +1,165 @@
+/* Global Theme Variables */
+:root {
+    /* Light Mode */
+    --bg-light: #f8f9fa;
+    --bg-secondary-light: #e9ecef;
+    --bg-card-light: #ffffff;
+    --text-primary-light: #212529;
+    --text-secondary-light: #6c757d;
+    --accent-color-light: #4f6642;
+    --accent-light: #4f6642;
+    --accent-dark-light: #3d4e33;
+    --shadow-color-light: rgba(0, 0, 0, 0.1);
+    
+    /* Dark Mode - Dark Blue Palette */
+    --bg-dark: #0f172a;  /* Dark blue */
+    --bg-secondary-dark: #1e293b;  /* Slightly lighter blue */
+    --bg-card-dark: #1e293b;  /* Card background */
+    --text-primary-dark: #e2e8f0;  /* Light text */
+    --text-secondary-dark: #94a3b8;  /* Secondary text */
+    --accent-color-dark: #3b82f6;  /* Bright blue accent */
+    --accent-dark: #2563eb;  /* Darker blue accent */
+    --accent-light-dark: #60a5fa;  /* Lighter blue accent */
+    --shadow-color-dark: rgba(0, 0, 0, 0.5);
+    
+    /* Default to light mode */
+    --bg-primary: var(--bg-light);
+    --bg-secondary: var(--bg-secondary-light);
+    --bg-card: var(--bg-card-light);
+    --text-primary: var(--text-primary-light);
+    --text-secondary: var(--text-secondary-light);
+    --accent-color: var(--accent-color-light);
+    --accent-dark: var(--accent-dark-light);
+    --accent-light: var(--accent-light);
+    --shadow-color: var(--shadow-color-light);
+}
+
+/* Dark Mode */
+.dark-mode {
+    --bg-primary: var(--bg-dark);
+    --bg-secondary: var(--bg-secondary-dark);
+    --bg-card: var(--bg-card-dark);
+    --text-primary: var(--text-primary-dark);
+    --text-secondary: var(--text-secondary-dark);
+    --accent-color: var(--accent-color-dark);
+    --accent-dark: var(--accent-dark);
+    --accent-light: var(--accent-light-dark);
+    --shadow-color: var(--shadow-color-dark);
+}
+
+/* Dark mode body class */
+body.dark-mode {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* Light mode body class */
+body:not(.dark-mode) {
+    background-color: #F5F5DC;
+    color: #333333;
+}
+
+/* Card styles for dark mode */
+.dark-mode .q-card {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+    border-radius: 10px;
+    box-shadow: 0 4px 6px var(--shadow-color);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.dark-mode .q-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px var(--shadow-color);
+}
+
+/* Card styles for light mode */
+body:not(.dark-mode) .q-card {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+    border-radius: 10px;
+    box-shadow: 0 4px 6px var(--shadow-color);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+body:not(.dark-mode) .q-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px var(--shadow-color);
+}
+
+/* Stat Card Styles */
+.stat-card {
+    display: flex;
+    align-items: center;
+    padding: 1.25rem;
+    border-radius: 0.5rem;
+    background-color: var(--bg-card);
+    box-shadow: 0 4px 6px var(--shadow-color);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px var(--shadow-color);
+}
+
+.stat-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background-color: var(--accent-light);
+    color: white;
+    margin-right: 1rem;
+}
+
+.stat-icon.online {
+    background-color: var(--status-online);
+}
+
+.stat-icon.alert {
+    background-color: var(--status-offline);
+}
+
+.stat-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Sidebar Active States */
+.sidebar-active {
+    background-color: #4f6642 !important; /* Green for light mode */
+    color: white !important;
+    border-radius: 8px;
+    font-weight: bold;
+    margin: 4px 8px;
+    transition: all 0.3s ease;
+}
+
+.sidebar-active-dark {
+    background-color: #3b82f6 !important; /* Blue for dark mode */
+    color: white !important;
+    border-radius: 8px;
+    font-weight: bold;
+    margin: 4px 8px;
+    transition: all 0.3s ease;
+}
+
+/* Make sure icons in active items are also white */
+.sidebar-active .q-icon,
+.sidebar-active-dark .q-icon {
+    color: white !important;
+}

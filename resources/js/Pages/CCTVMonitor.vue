@@ -1,13 +1,40 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, inject } from 'vue';
 import axios from 'axios';
 
-// Theme toggle
+// Get the global dark mode state from the AuthenticatedLayout
+const globalIsDarkMode = inject('isDarkMode', ref(false));
+
+// Theme toggle - sync with global dark mode
 const isDarkTheme = ref(true);
+
+// Sync local theme with global theme on mount and when global theme changes
+onMounted(() => {
+    // Initialize with global theme
+    isDarkTheme.value = globalIsDarkMode.value;
+    
+    // Save theme preference to localStorage
+    localStorage.setItem('cctv-theme', isDarkTheme.value ? 'dark' : 'light');
+    fetchRecentSnapshots();
+    
+    // Check for saved theme preference
+    const savedTheme = localStorage.getItem('cctv-theme');
+    if (savedTheme) {
+        isDarkTheme.value = savedTheme === 'dark';
+    }
+});
+
+// Watch for changes in the global dark mode
+watch(globalIsDarkMode, (newValue) => {
+    isDarkTheme.value = newValue;
+    localStorage.setItem('cctv-theme', isDarkTheme.value ? 'dark' : 'light');
+});
 
 function toggleTheme() {
     isDarkTheme.value = !isDarkTheme.value;
+    // Update global dark mode
+    globalIsDarkMode.value = isDarkTheme.value;
     // Save theme preference to localStorage
     localStorage.setItem('cctv-theme', isDarkTheme.value ? 'dark' : 'light');
 }
@@ -179,17 +206,6 @@ function changePage(newPage) {
     }
 }
 
-// Load saved theme preference
-onMounted(() => {
-    fetchRecentSnapshots();
-    
-    // Check for saved theme preference
-    const savedTheme = localStorage.getItem('cctv-theme');
-    if (savedTheme) {
-        isDarkTheme.value = savedTheme === 'dark';
-    }
-});
-
 function closeDialog() {
     dialogVisible.value = false;
     selectedCCTV.value = null;
@@ -198,7 +214,7 @@ function closeDialog() {
 
 <template>
     <AuthenticatedLayout>
-        <div class="cctv-dashboard" :class="{ 'light-theme': !isDarkTheme }">
+        <div class="cctv-dashboard" :class="{ 'dark-mode': isDarkTheme, 'light-theme': !isDarkTheme }">
             <!-- Header with system stats -->
             <div class="dashboard-header">
                 <h1>CCTV Surveillance System</h1>
@@ -348,7 +364,7 @@ function closeDialog() {
     
     <!-- CCTV Detail Dialog -->
     <q-dialog v-model="dialogVisible" backdrop-filter="blur(4px) saturate(150%)">
-        <q-card class="cctv-dialog" :class="{ 'light-theme': !isDarkTheme }">
+        <q-card class="cctv-dialog" :class="{ 'dark-mode': isDarkTheme, 'light-theme': !isDarkTheme }">
             <div class="dialog-header">
                 <h2 v-if="selectedCCTV">{{ selectedCCTV.name }}</h2>
                 <button class="close-btn" @click="closeDialog">

@@ -1,11 +1,14 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, inject } from 'vue';
 import { QCard, QCardSection, QTable, QImg, QInput, QSelect, QIcon, QBtn, QDate } from 'quasar';
 import { Head } from '@inertiajs/vue3';
 import VueApexCharts from 'vue3-apexcharts';
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Swal from 'sweetalert2';
+
+// Get the global dark mode state from the AuthenticatedLayout
+const isDarkMode = inject('isDarkMode', ref(false));
 
 const authUser = ref({ name: 'User', isNewUser: true }); // Assuming isNewUser flag to check if it's the user's first visit
 const strayAnimalsData = ref({
@@ -184,11 +187,11 @@ function generateHeatmapData(count, min, max) {
 
     <AuthenticatedLayout>
         <!-- Dashboard Header with Title, Search, and Date Picker -->
-        <div class="dashboard-header mx-6 mt-6 mb-4">
+        <div class="dashboard-header mx-6 mt-6 mb-4" :class="{'dark-theme-text': isDarkMode}">
             <div class="flex justify-between items-center">
                 <!-- Dashboard Title -->
                 <div class="dashboard-title">
-                    <h1 class="text-3xl font-bold text-black font-poppins">Dashboard</h1>
+                    <h1 class="text-3xl font-bold font-poppins">Dashboard</h1>
                 </div>
                 
                 <!-- Search and Date Picker -->
@@ -199,130 +202,127 @@ function generateHeatmapData(count, min, max) {
                         outlined 
                         dense
                         placeholder="Search..." 
-                        class="search-input bg-white"
-                        bg-color="white"
+                        class="search-input"
+                        :dark="isDarkMode"
+                        :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
+                        :color="isDarkMode ? 'var(--text-primary)' : 'black'"
                     >
                         <template v-slot:append>
-                            <div class="search-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
-                                </svg>
-                            </div>
+                            <q-icon name="search" />
                         </template>
                     </q-input>
                     
                     <!-- Date Picker -->
-                    <div class="date-picker-container">
-                        <q-btn 
-                            outline 
-                            class="date-picker-btn bg-white"
-                            color="black"
-                            @click="showDatePicker = !showDatePicker"
+                    <div class="date-picker-container relative">
+                        <q-input 
+                            v-model="selectedDate" 
+                            outlined 
+                            dense
+                            readonly
+                            placeholder="Select Date"
+                            @click="showDatePicker = true"
+                            :dark="isDarkMode"
+                            :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
+                            :color="isDarkMode ? 'var(--text-primary)' : 'black'"
                         >
-                            <div class="flex items-center">
-                                <q-icon name="fa-solid fa-calendar" class="mr-2" />
-                                <span class="font-poppins">{{ selectedDate }}</span>
-                            </div>
-                        </q-btn>
+                            <template v-slot:append>
+                                <q-icon name="event" />
+                            </template>
+                        </q-input>
                         
-                        <q-menu v-model="showDatePicker" anchor="bottom right" self="top right">
+                        <q-popup-proxy v-model="showDatePicker" transition-show="scale" transition-hide="scale">
                             <q-date 
                                 v-model="selectedDate" 
-                                @update:model-value="(date) => { showDatePicker = false; filterDataByDate(); }"
-                                minimal
-                                class="bg-white"
+                                @input="showDatePicker = false"
+                                :dark="isDarkMode"
+                                :color="isDarkMode ? 'var(--accent-color)' : 'primary'"
                             />
-                        </q-menu>
+                        </q-popup-proxy>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- Main Dashboard Content - Stats Cards -->
+        
+        <!-- Dashboard Content -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 mx-6">
             <!-- Total Detected Animals Card -->
-            <q-card class="info-card total-animals-card" flat>
-                <q-card-section class="flex flex-col items-center justify-center h-full">
-                    <div class="text-center">
-                        <h3 class="text-lg font-semibold mb-2 font-poppins">Total Detected Animals</h3>
-                        <p class="text-6xl font-bold text-primary font-poppins">{{ strayAnimalsData.totalSightings }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
-
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-paw"></i>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ strayAnimalsData.totalSightings }}</div>
+                    <div class="stat-label">Total Stray Animal Sightings</div>
+                </div>
+            </div>
+            
             <!-- Stray Dogs Card -->
-            <q-card class="info-card stray-dogs-card" flat>
-                <q-card-section class="flex flex-col items-center justify-center h-full">
-                    <div class="text-center">
-                        <h3 class="text-lg font-semibold mb-2 font-poppins">Stray Dogs</h3>
-                        <p class="text-6xl font-bold text-primary font-poppins">{{ strayAnimalsData.strayDogs }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
-
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-dog"></i>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ strayAnimalsData.strayDogs }}</div>
+                    <div class="stat-label">Stray Dogs Detected</div>
+                </div>
+            </div>
+            
             <!-- Stray Cats Card -->
-            <q-card class="info-card stray-cats-card" flat>
-                <q-card-section class="flex flex-col items-center justify-center h-full">
-                    <div class="text-center">
-                        <h3 class="text-lg font-semibold mb-2 font-poppins">Stray Cats</h3>
-                        <p class="text-6xl font-bold text-primary font-poppins">{{ strayAnimalsData.strayCats }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
-
-            <!-- Registered Dogs Card -->
-            <q-card class="info-card registered-dogs-card" flat>
-                <q-card-section class="flex flex-col items-center justify-center h-full">
-                    <div class="text-center">
-                        <h3 class="text-lg font-semibold mb-2 font-poppins">Registered Dogs</h3>
-                        <p class="text-6xl font-bold text-primary font-poppins">{{ strayAnimalsData.registeredDogs }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
-
-            <!-- Registered Cats Card -->
-            <q-card class="info-card registered-cats-card" flat>
-                <q-card-section class="flex flex-col items-center justify-center h-full">
-                    <div class="text-center">
-                        <h3 class="text-lg font-semibold mb-2 font-poppins">Registered Cats</h3>
-                        <p class="text-6xl font-bold text-primary font-poppins">{{ strayAnimalsData.registeredCats }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
-
-            <!-- Empty Card for Balance (or can be used for another metric) -->
-            <q-card class="info-card empty-card" flat>
-                <q-card-section class="flex flex-col items-center justify-center h-full">
-                    <div class="text-center">
-                        <h3 class="text-lg font-semibold mb-2 font-poppins">Total Registered</h3>
-                        <p class="text-6xl font-bold text-primary font-poppins">{{ strayAnimalsData.registeredDogs + strayAnimalsData.registeredCats }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-cat"></i>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ strayAnimalsData.strayCats }}</div>
+                    <div class="stat-label">Stray Cats Detected</div>
+                </div>
+            </div>
         </div>
-
+        
         <!-- Charts Section -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 mx-6">
-            <!-- Line Chart Card -->
-            <q-card class="chart-card line-chart-card" flat>
+            <!-- Line Chart -->
+            <q-card class="theme-card" flat :dark="isDarkMode">
                 <q-card-section>
-                    <VueApexCharts :series="lineChartSeries" :options="lineChartOptions" type="line" height="350" />
+                    <VueApexCharts type="line" :options="lineChartOptions" :series="lineChartSeries" height="350" />
                 </q-card-section>
             </q-card>
-
-            <!-- Pie Chart Card -->
-            <q-card class="chart-card pie-chart-card" flat>
+            
+            <!-- Pie Chart -->
+            <q-card class="theme-card" flat :dark="isDarkMode">
                 <q-card-section>
-                    <VueApexCharts :series="pieChartSeries" :options="pieChartOptions" type="pie" height="350" />
+                    <VueApexCharts type="pie" :options="pieChartOptions" :series="pieChartSeries" height="350" />
                 </q-card-section>
             </q-card>
         </div>
-
-        <!-- Heatmap Section -->
+        
+        <!-- Heatmap -->
         <div class="mt-6 mx-6">
-            <q-card class="chart-card heatmap-card" flat>
+            <q-card class="theme-card" flat :dark="isDarkMode">
                 <q-card-section>
-                    <VueApexCharts :series="heatmapSeries" :options="heatmapOptions" type="heatmap" height="350" />
+                    <VueApexCharts type="heatmap" :options="heatmapOptions" :series="heatmapSeries" height="350" />
+                </q-card-section>
+            </q-card>
+        </div>
+        
+        <!-- Recent Sightings Feed -->
+        <div class="mt-6 mx-6 mb-6">
+            <q-card class="theme-card" flat :dark="isDarkMode">
+                <q-card-section>
+                    <div class="text-xl font-bold mb-4">Recent Stray Animal Sightings</div>
+                    
+                    <!-- Placeholder for Recent Sightings Feed -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- This would be populated with actual data from your backend -->
+                        <q-card v-for="i in 6" :key="i" class="theme-card sighting-card" flat :dark="isDarkMode">
+                            <q-img src="https://placehold.co/600x400/4f6642/FFFFFF/png?text=Stray+Animal" height="200px" />
+                            <q-card-section>
+                                <div class="text-lg font-bold mb-1">Stray Dog Spotted</div>
+                                <div class="text-sm mb-2">Location: Sample Street, Barangay {{ i }}</div>
+                                <div class="text-xs text-gray-500">Reported: {{ new Date().toLocaleDateString() }}</div>
+                            </q-card-section>
+                        </q-card>
+                    </div>
                 </q-card-section>
             </q-card>
         </div>
@@ -348,48 +348,49 @@ function generateHeatmapData(count, min, max) {
     background-color: white !important;
 }
 
-.info-card,
-.chart-card {
-    background-color: #d4d8bd;
-    border-radius: 8px;
-    overflow: hidden;
-    height: 100%;
+.stat-card {
+    background-color: var(--bg-card);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 4px 6px var(--shadow-color);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px var(--shadow-color);
+}
+
+.stat-icon {
+    background-color: var(--accent-color);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s ease;
+    margin-right: 15px;
+    font-size: 20px;
+    color: white;
 }
 
-.info-card:hover,
-.chart-card:hover {
-    transform: translateY(-5px);
-    transition: all 0.3s ease;
+.stat-info {
+    flex: 1;
 }
 
-.heatmap-card,
-.total-animals-card,
-.stray-dogs-card,
-.stray-cats-card,
-.registered-dogs-card,
-.registered-cats-card,
-.line-chart-card,
-.pie-chart-card {
-    background-color: #d4d8bd;
-    border-radius: 8px;
-    overflow: hidden;
-    transition: all 0.3s ease;
+.stat-value {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: var(--text-primary);
 }
 
-.heatmap-card:hover,
-.total-animals-card:hover,
-.stray-dogs-card:hover,
-.stray-cats-card:hover,
-.registered-dogs-card:hover,
-.registered-cats-card:hover,
-.line-chart-card:hover,
-.pie-chart-card:hover {
-    transform: translateY(-5px);
-    transition: all 0.3s ease;
+.stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
 }
 
 .q-card-section {
@@ -411,5 +412,47 @@ function generateHeatmapData(count, min, max) {
 /* Apply Poppins font to all text */
 * {
     font-family: 'Poppins', sans-serif;
+}
+
+.theme-card {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px var(--shadow-color);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.theme-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px var(--shadow-color);
+}
+
+.sighting-card {
+    overflow: hidden;
+}
+
+/* Fix text colors in cards */
+.theme-card .text-xl,
+.theme-card .text-lg,
+.theme-card .text-sm {
+    color: var(--text-primary);
+}
+
+.theme-card .text-xs.text-gray-500 {
+    color: var(--text-secondary) !important;
+}
+
+/* ApexCharts theme overrides */
+:deep(.apexcharts-canvas .apexcharts-title-text) {
+    fill: var(--text-primary) !important;
+}
+
+:deep(.apexcharts-canvas .apexcharts-legend-text) {
+    color: var(--text-primary) !important;
+}
+
+:deep(.apexcharts-canvas .apexcharts-xaxis-label),
+:deep(.apexcharts-canvas .apexcharts-yaxis-label) {
+    fill: var(--text-secondary) !important;
 }
 </style>
