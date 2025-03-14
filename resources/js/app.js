@@ -1,4 +1,5 @@
 import '../css/app.css';
+import '../css/global-theme.css'; // Import global theme CSS
 import './bootstrap';
 
 import { createInertiaApp } from '@inertiajs/vue3';

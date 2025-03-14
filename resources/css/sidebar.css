@@ -1,0 +1,64 @@
+/* Sidebar Styles */
+.custom-drawer {
+  background-color: var(--bg-light);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+  border-radius: 0 12px 12px 0;
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.dark-drawer {
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+.GPL__drawer-item {
+  color: inherit;
+  transition: all 0.3s ease;
+  border-radius: 8px;
+  margin: 4px 8px;
+}
+
+.GPL__drawer-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark-drawer .GPL__drawer-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Active state styling */
+.sidebar-active {
+  background-color: var(--accent-light) !important;
+  color: white !important;
+  font-weight: bold;
+}
+
+.sidebar-active-dark {
+  background-color: var(--accent-dark) !important;
+  color: white !important;
+  font-weight: bold;
+}
+
+/* Make sure icons in active items are also white */
+.sidebar-active .q-icon,
+.sidebar-active-dark .q-icon {
+  color: white !important;
+}
+
+/* Logo styling */
+.logo-section {
+  padding: 16px;
+  margin-bottom: 8px;
+}
+
+.custom-text {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 2rem;
+}
+
+.custom-color {
+  color: var(--accent-color);
+}

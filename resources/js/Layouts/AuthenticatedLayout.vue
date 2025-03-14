@@ -1,6 +1,6 @@
 
 <script setup>
-import { ref, computed, onMounted, defineEmits, provide } from "vue";
+import { ref, computed, onMounted, defineEmits, provide, watch } from "vue";
 import { Link, usePage, router } from "@inertiajs/vue3";
 import { Head, useForm } from "@inertiajs/vue3";
 import { useQuasar } from 'quasar';
@@ -41,10 +41,22 @@ function toggleDarkMode() {
   applyDarkMode(isDarkMode.value);
 }
 
-// Apply dark mode to Quasar
+// Apply dark mode to Quasar and body
 function applyDarkMode(isDark) {
   $q.dark.set(isDark);
+  
+  // Apply dark mode class to body for global CSS variables
+  if (isDark) {
+    document.body.classList.add('dark-mode');
+  } else {
+    document.body.classList.remove('dark-mode');
+  }
 }
+
+// Watch for dark mode changes to ensure consistency
+watch(isDarkMode, (newValue) => {
+  applyDarkMode(newValue);
+});
 
 // Provide dark mode state to child components
 provide('isDarkMode', isDarkMode);
@@ -145,11 +157,15 @@ const submit = () => {
                 <q-item-label class="text-2xl custom-text font-bold font-poppins">Stray<span class="custom-color">Safe</span></q-item-label>
               </q-item-section>
             </q-item>
-            <q-separator class="q-my-md" />
+            <q-separator class="q-my-md" :dark="isDarkMode" />
   
               <!-- Navigation Links -->
               <Link :href="route('dashboard')">
-                <q-item clickable class="GPL__drawer-item">
+                <q-item 
+                  clickable 
+                  class="GPL__drawer-item q-my-sm" 
+                  :class="{ 'sidebar-active': route().current('dashboard') && !isDarkMode, 'sidebar-active-dark': route().current('dashboard') && isDarkMode }"
+                >
                   <q-item-section avatar>
                     <q-icon name="dashboard" />
                   </q-item-section>
@@ -160,7 +176,11 @@ const submit = () => {
               </Link>
   
               <Link :href="route('map')">
-                <q-item clickable class="GPL__drawer-item">
+                <q-item 
+                  clickable 
+                  class="GPL__drawer-item q-my-sm" 
+                  :class="{ 'sidebar-active': route().current('map') && !isDarkMode, 'sidebar-active-dark': route().current('map') && isDarkMode }"
+                >
                   <q-item-section avatar>
                     <q-icon name="map" />
                   </q-item-section>
@@ -171,7 +191,11 @@ const submit = () => {
               </Link>
   
               <Link :href="route('registeredpets')">
-                <q-item clickable class="GPL__drawer-item">
+                <q-item 
+                  clickable 
+                  class="GPL__drawer-item q-my-sm" 
+                  :class="{ 'sidebar-active': route().current('registeredpets') && !isDarkMode, 'sidebar-active-dark': route().current('registeredpets') && isDarkMode }"
+                >
                   <q-item-section avatar>
                     <q-icon name="pets" />
                   </q-item-section>
@@ -182,19 +206,23 @@ const submit = () => {
               </Link>
   
               <Link :href="route('cctv.monitor')">
-                <q-item clickable class="GPL__drawer-item">
+                <q-item 
+                  clickable 
+                  class="GPL__drawer-item q-my-sm" 
+                  :class="{ 'sidebar-active': route().current('cctv.monitor') && !isDarkMode, 'sidebar-active-dark': route().current('cctv.monitor') && isDarkMode }"
+                >
                   <q-item-section avatar>
                     <q-icon name="videocam" />
                   </q-item-section>
                   <q-item-section>
-                    <q-item-label>CCTV Cameras</q-item-label>
+                    <q-item-label>CCTV Monitor</q-item-label>
                   </q-item-section>
                 </q-item>
               </Link>
               <q-separator class="q-my-md" />
   
               <Link :href="route('profile.edit')">
-                <q-item clickable class="GPL__drawer-item">
+                <q-item clickable class="GPL__drawer-item" :active="route().current('profile.edit')" :active-class="isDarkMode ? 'sidebar-active-dark' : 'sidebar-active'">
                   <q-item-section avatar>
                     <q-icon name="fa-solid fa-user" />
                   </q-item-section>
@@ -237,33 +265,37 @@ const submit = () => {
   </template>
 <style scoped>
 .custom-drawer {
-  background: #d4d8bd !important;
-  backdrop-filter: blur(10px); /* Optional for glass effect */
-  box-shadow: none; /* If Quasar's default shadow is interfering */
-  border-top-right-radius: 20px;
-  border-bottom-right-radius: 20px;
-  overflow: hidden; /* Ensures content follows rounded shape */
+  background-color: var(--bg-light);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
 }
 
-/* Apply the background color to all drawer elements */
-:deep(.q-drawer) {
-  background: #d4d8bd !important;
+.dark-drawer {
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
 }
 
-:deep(.q-drawer__content) {
-  background: #d4d8bd !important;
+.GPL__drawer-item {
+  color: inherit;
+  transition: all 0.3s ease;
 }
 
-/* Ensure the scroll area also has the same background */
-:deep(.custom-drawer .q-scrollarea__container) {
-  background: #d4d8bd !important;
+.dark-drawer .GPL__drawer-item {
+  color: var(--text-primary);
 }
 
-/* Ensure the content inside the drawer does not break the rounded corners */
-.drawer-content {
-  border-radius: inherit;
-  overflow: hidden;
-  background: #d4d8bd !important;
+.dark-drawer .GPL__drawer-item:hover {
+  background-color: var(--bg-secondary);
+}
+
+.sidebar-active {
+  background-color: var(--accent-light);
+  color: white;
+}
+
+.sidebar-active-dark {
+  background-color: var(--accent-dark);
+  color: var(--text-primary);
 }
 
 .page-content-container {
@@ -347,15 +379,8 @@ const submit = () => {
 }
 
 .dark-drawer {
-  background-color: #1e1e1e !important;
-}
-
-.dark-drawer .q-item {
-  color: #e0e0e0;
-}
-
-.dark-drawer .q-icon {
-  color: #e0e0e0;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
 }
 
 .dark-page {
@@ -369,27 +394,27 @@ const submit = () => {
 }
 
 .drawer-content:not(.dark-drawer) {
-  background: #d4d8bd !important;
+  background: var(--bg-light) !important;
 }
 
 .dark-drawer .drawer-content {
-  background: #1e1e1e !important;
+  background: var(--bg-dark) !important;
 }
 
 /* Dark mode overrides for Quasar components */
 .body--dark .q-drawer {
-  background-color: #1e1e1e;
+  background-color: var(--bg-dark);
 }
 
 .body--dark .q-item {
-  color: #e0e0e0;
+  color: var(--text-primary);
 }
 
 .body--dark .q-separator {
-  background-color: #333333;
+  background-color: var(--bg-secondary);
 }
 
 .body--dark .q-card {
-  background-color: #2d2d2d;
+  background-color: var(--bg-dark);
 }
 </style>

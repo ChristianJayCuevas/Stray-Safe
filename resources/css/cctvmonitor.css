@@ -1,10 +1,11 @@
 /* Main Dashboard Layout */
 .cctv-dashboard {
-  background-color: #1e1e2f;
-  color: #fff;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
   padding: 20px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  transition: all 0.3s ease;
 }
 
 /* Dashboard Header */
@@ -13,19 +14,22 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 20px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px var(--shadow-color);
 }
 
 .dashboard-header h1 {
   font-size: 24px;
   font-weight: 600;
   margin: 0;
+  color: var(--text-primary);
 }
 
 .system-time {
   font-size: 14px;
-  color: #a3a3a3;
+  color: var(--text-secondary);
   background-color: rgba(0, 0, 0, 0.2);
   padding: 8px 12px;
   border-radius: 4px;
@@ -40,22 +44,22 @@
 }
 
 .stat-card {
-  background-color: #27293d;
+  background-color: var(--bg-card);
   border-radius: 10px;
   padding: 20px;
   display: flex;
   align-items: center;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px var(--shadow-color);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .stat-card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 15px var(--shadow-color);
 }
 
 .stat-icon {
-  background-color: #1d8cf8;
+  background-color: var(--accent-color);
   width: 50px;
   height: 50px;
   border-radius: 50%;
@@ -67,11 +71,11 @@
 }
 
 .stat-icon.online {
-  background-color: #00bf9a;
+  background-color: var(--status-online);
 }
 
 .stat-icon.alert {
-  background-color: #fd5d93;
+  background-color: var(--status-offline);
 }
 
 .stat-info {
@@ -82,11 +86,12 @@
   font-size: 24px;
   font-weight: bold;
   margin-bottom: 5px;
+  color: var(--text-primary);
 }
 
 .stat-label {
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--text-secondary);
   text-transform: uppercase;
 }
 
@@ -94,38 +99,35 @@
 .cctv-tabs {
   display: flex;
   margin-bottom: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .tab {
   padding: 12px 20px;
   cursor: pointer;
   font-weight: 500;
-  color: #a3a3a3;
-  position: relative;
-  transition: color 0.3s;
+  color: var(--text-secondary);
+  background-color: var(--tab-inactive);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  margin-right: 5px;
+  transition: all 0.3s ease;
 }
 
 .tab:hover {
-  color: #fff;
+  background-color: var(--card-hover);
 }
 
 .tab.active {
-  color: #fff;
-}
-
-.tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background-color: #1d8cf8;
+  background-color: var(--tab-active);
+  color: var(--text-primary);
 }
 
 .tab-content {
-  margin-top: 20px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 6px var(--shadow-color);
 }
 
 /* CCTV Grid */
@@ -137,17 +139,17 @@
 }
 
 .cctv-card {
-  background-color: #27293d;
+  background-color: var(--bg-card);
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px var(--shadow-color);
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .cctv-card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 15px var(--shadow-color);
 }
 
 .cctv-header {
@@ -155,17 +157,19 @@
   display: flex;
   flex-direction: column;
   background-color: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .cctv-name {
   font-weight: 600;
   font-size: 16px;
   margin-bottom: 5px;
+  color: var(--text-primary);
 }
 
 .cctv-location {
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--text-secondary);
   margin-bottom: 5px;
 }
 
@@ -178,13 +182,13 @@
 }
 
 .cctv-status.online {
-  background-color: rgba(0, 191, 154, 0.2);
-  color: #00bf9a;
+  background-color: var(--status-online);
+  color: var(--text-primary);
 }
 
 .cctv-status.offline {
-  background-color: rgba(253, 93, 147, 0.2);
-  color: #fd5d93;
+  background-color: var(--status-offline);
+  color: var(--text-primary);
 }
 
 .cctv-feed {
@@ -207,8 +211,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #a3a3a3;
-  background-color: #1a1a2e;
+  color: var(--text-secondary);
+  background-color: #333;
 }
 
 .offline-feed i {
@@ -234,12 +238,12 @@
 
 .feed-timestamp {
   font-size: 12px;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .live-indicator {
-  background-color: #ff0000;
-  color: white;
+  background-color: var(--live-indicator);
+  color: var(--text-primary);
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 12px;
@@ -261,9 +265,9 @@
 }
 
 .pagination-btn {
-  background-color: #27293d;
+  background-color: var(--accent-color);
+  color: var(--text-primary);
   border: none;
-  color: #fff;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -275,7 +279,7 @@
 }
 
 .pagination-btn:hover:not(:disabled) {
-  background-color: #1d8cf8;
+  background-color: var(--accent-light);
 }
 
 .pagination-btn:disabled {
@@ -286,6 +290,7 @@
 .pagination-info {
   margin: 0 15px;
   font-size: 14px;
+  color: var(--text-secondary);
 }
 
 /* Snapshots Container */
@@ -296,10 +301,10 @@
 }
 
 .snapshot-card {
-  background-color: #27293d;
+  background-color: var(--bg-card);
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px var(--shadow-color);
 }
 
 .snapshot-image {
@@ -315,6 +320,7 @@
 .snapshot-time {
   font-size: 14px;
   margin-bottom: 5px;
+  color: var(--text-primary);
 }
 
 .snapshot-status {
@@ -327,17 +333,17 @@
 
 .snapshot-status.stray {
   background-color: rgba(253, 93, 147, 0.2);
-  color: #fd5d93;
+  color: var(--text-primary);
 }
 
 .snapshot-status.no-stray {
   background-color: rgba(0, 191, 154, 0.2);
-  color: #00bf9a;
+  color: var(--text-primary);
 }
 
 .snapshot-location {
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--text-secondary);
 }
 
 /* Loading Container */
@@ -351,8 +357,8 @@
 
 /* Dialog Styling */
 .cctv-dialog {
-  background-color: #1e1e2f;
-  color: #fff;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
   border-radius: 10px;
   width: 90vw;
   max-width: 1200px;
@@ -367,26 +373,27 @@
   justify-content: space-between;
   align-items: center;
   padding: 15px 20px;
-  background-color: #27293d;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .dialog-header h2 {
   margin: 0;
   font-size: 20px;
+  color: var(--text-primary);
 }
 
 .close-btn {
   background: none;
   border: none;
-  color: #a3a3a3;
+  color: var(--text-primary);
   font-size: 20px;
   cursor: pointer;
   transition: color 0.3s;
 }
 
 .close-btn:hover {
-  color: #fff;
+  color: var(--text-secondary);
 }
 
 .dialog-content {
@@ -412,13 +419,14 @@
   flex: 1;
   padding: 20px;
   overflow-y: auto;
-  background-color: #27293d;
+  background-color: var(--bg-card);
 }
 
 .snapshot-details h3 {
   margin-top: 0;
   margin-bottom: 20px;
   font-size: 18px;
+  color: var(--text-primary);
 }
 
 .snapshot-item {
@@ -443,7 +451,7 @@
   align-items: center;
   justify-content: center;
   padding: 50px 0;
-  color: #a3a3a3;
+  color: var(--text-secondary);
 }
 
 .no-snapshots i {
@@ -496,7 +504,7 @@
   top: 10px;
   right: 10px;
   background-color: red;
-  color: white;
+  color: var(--text-primary);
   padding: 5px;
   border-radius: 5px;
   font-weight: bold;
@@ -519,7 +527,7 @@
   align-items: center;
   padding: 10px;
   background-color: rgba(0, 0, 0, 0.7);
-  color: white;
+  color: var(--text-primary);
 }
 
 .title {
@@ -530,7 +538,7 @@
 .header,
 .sub-title {
   font-size: 36px;
-  color: black;
+  color: var(--text-primary);
   font-weight: 600;
   letter-spacing: -1px;
   position: relative;
@@ -542,7 +550,7 @@
 
 .normal-text {
   font-size: 20px;
-  color: black;
+  color: var(--text-primary);
   font-weight: 100;
   letter-spacing: -1px;
   position: relative;
@@ -619,4 +627,65 @@
 
 p{
   margin: 0;
+}
+
+/* Base styles */
+:root {
+    /* Dark theme colors (default) */
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #252525;
+    --bg-card: #2a2a2a;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --accent-color: #4f6642;
+    --accent-light: #5a7a4d;
+    --accent-dark: #3d5033;
+    --status-online: #4CAF50;
+    --status-offline: #F44336;
+    --border-color: #333333;
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --live-indicator: #ff0000;
+    --card-hover: #333333;
+    --tab-active: #4f6642;
+    --tab-inactive: #333333;
+}
+
+/* Light theme colors */
+.light-theme {
+    --bg-primary: #F5F5DC;
+    --bg-secondary: #ffffff;
+    --bg-card: #d4d8bd;
+    --text-primary: #333333;
+    --text-secondary: #555555;
+    --accent-color: #4f6642;
+    --accent-light: #5a7a4d;
+    --accent-dark: #3d5033;
+    --status-online: #4CAF50;
+    --status-offline: #F44336;
+    --border-color: #dddddd;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --live-indicator: #ff0000;
+    --card-hover: #e5e9ce;
+    --tab-active: #4f6642;
+    --tab-inactive: #d4d8bd;
+}
+
+/* Ensure dark mode class also applies the dark theme */
+.dark-mode {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #252525;
+    --bg-card: #2a2a2a;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --accent-color: #4f6642;
+    --accent-light: #5a7a4d;
+    --accent-dark: #3d5033;
+    --status-online: #4CAF50;
+    --status-offline: #F44336;
+    --border-color: #333333;
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --live-indicator: #ff0000;
+    --card-hover: #333333;
+    --tab-active: #4f6642;
+    --tab-inactive: #333333;
 }

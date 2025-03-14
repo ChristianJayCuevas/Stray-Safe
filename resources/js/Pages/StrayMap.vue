@@ -42,8 +42,8 @@ function resetFilters() {
         <div class="map-header mx-6 mt-6 mb-4">
             <div class="flex justify-between items-center">
                 <div>
-                    <h1 class="text-3xl font-bold text-black font-poppins">Stray Map</h1>
-                    <p class="text-gray-600">Barangay Sacred Heart</p>
+                    <h1 class="text-3xl font-bold font-poppins">Stray Map</h1>
+                    <p class="text-secondary">Barangay Sacred Heart</p>
                 </div>
                 
                 <!-- Map Controls -->
@@ -68,7 +68,7 @@ function resetFilters() {
         
         <!-- Filter Panel (conditionally shown) -->
         <div v-if="showFilters" class="filter-panel mx-6 mb-4">
-            <q-card flat class="bg-gray-100">
+            <q-card flat class="theme-card">
                 <q-card-section>
                     <div class="flex flex-wrap gap-4">
                         <div>
@@ -141,57 +141,49 @@ function resetFilters() {
         
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mx-6 mb-4">
-            <q-card flat class="stat-card">
-                <q-card-section class="flex items-center">
-                    <div class="stat-icon bg-blue-100 text-blue-600">
-                        <q-icon name="visibility" size="sm" />
-                    </div>
-                    <div class="ml-3">
-                        <p class="text-sm text-gray-600">Total Sightings</p>
-                        <p class="text-xl font-bold">{{ mapStats.totalSightings }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <q-icon name="visibility" size="sm" />
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ mapStats.totalSightings }}</div>
+                    <div class="stat-label">Total Sightings</div>
+                </div>
+            </div>
             
-            <q-card flat class="stat-card">
-                <q-card-section class="flex items-center">
-                    <div class="stat-icon bg-amber-100 text-amber-600">
-                        <q-icon name="pets" size="sm" />
-                    </div>
-                    <div class="ml-3">
-                        <p class="text-sm text-gray-600">Dog Sightings</p>
-                        <p class="text-xl font-bold">{{ mapStats.dogSightings }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <q-icon name="pets" size="sm" />
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ mapStats.dogSightings }}</div>
+                    <div class="stat-label">Dog Sightings</div>
+                </div>
+            </div>
             
-            <q-card flat class="stat-card">
-                <q-card-section class="flex items-center">
-                    <div class="stat-icon bg-green-100 text-green-600">
-                        <q-icon name="pets" size="sm" />
-                    </div>
-                    <div class="ml-3">
-                        <p class="text-sm text-gray-600">Cat Sightings</p>
-                        <p class="text-xl font-bold">{{ mapStats.catSightings }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <q-icon name="pets" size="sm" />
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ mapStats.catSightings }}</div>
+                    <div class="stat-label">Cat Sightings</div>
+                </div>
+            </div>
             
-            <q-card flat class="stat-card">
-                <q-card-section class="flex items-center">
-                    <div class="stat-icon bg-purple-100 text-purple-600">
-                        <q-icon name="videocam" size="sm" />
-                    </div>
-                    <div class="ml-3">
-                        <p class="text-sm text-gray-600">Active CCTVs</p>
-                        <p class="text-xl font-bold">{{ mapStats.activeCCTVs }}</p>
-                    </div>
-                </q-card-section>
-            </q-card>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <q-icon name="videocam" size="sm" />
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ mapStats.activeCCTVs }}</div>
+                    <div class="stat-label">Active CCTVs</div>
+                </div>
+            </div>
         </div>
         
         <!-- Map Container -->
-        <div class="mx-6 mb-6">
+        <div class="mx-6 mb-6 map-container">
             <Map />
         </div>
     </AuthenticatedLayout>
@@ -199,12 +191,45 @@ function resetFilters() {
 
 <style scoped>
 .map-header {
-    margin-bottom: 1rem;
+    margin-bottom: 20px;
+}
+
+.map-header h1 {
+    color: var(--text-primary);
+}
+
+.text-secondary {
+    color: var(--text-secondary);
 }
 
 .filter-active {
-    background-color: #4f6642;
-    color: white;
+    background-color: var(--accent-light) !important;
+    color: white !important;
+}
+
+.filter-panel {
+    transition: all 0.3s ease;
+}
+
+/* Theme card styles */
+.theme-card {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px var(--shadow-color);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.theme-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px var(--shadow-color);
+}
+
+/* Map container */
+.map-container {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px var(--shadow-color);
 }
 
 .stat-card {

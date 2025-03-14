@@ -4,8 +4,8 @@
             <!-- Header Section -->
             <div class="header-section flex justify-between items-center mb-6">
                 <div>
-                    <h1 class="text-3xl font-bold text-black font-poppins">Registered Animals</h1>
-                    <p class="text-gray-600">Barangay Sacred Heart</p>
+                    <h1 class="text-3xl font-bold font-poppins">Registered Animals</h1>
+                    <p class="text-secondary">Barangay Sacred Heart</p>
                 </div>
                 
                 <!-- Action Buttons -->
@@ -27,53 +27,45 @@
             
             <!-- Statistics Cards -->
             <div class="stats-section grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <q-card flat class="stat-card">
-                    <q-card-section class="flex items-center">
-                        <div class="stat-icon bg-blue-100 text-blue-600">
-                            <q-icon name="pets" size="sm" />
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm text-gray-600">Total Registered</p>
-                            <p class="text-xl font-bold">{{ totalRegistered }}</p>
-                        </div>
-                    </q-card-section>
-                </q-card>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <q-icon name="pets" size="sm" />
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value">{{ totalRegistered }}</div>
+                        <div class="stat-label">Total Registered</div>
+                    </div>
+                </div>
                 
-                <q-card flat class="stat-card">
-                    <q-card-section class="flex items-center">
-                        <div class="stat-icon bg-green-100 text-green-600">
-                            <q-icon name="today" size="sm" />
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm text-gray-600">Registered Today</p>
-                            <p class="text-xl font-bold">{{ registeredToday }}</p>
-                        </div>
-                    </q-card-section>
-                </q-card>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <q-icon name="today" size="sm" />
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value">{{ registeredToday }}</div>
+                        <div class="stat-label">Registered Today</div>
+                    </div>
+                </div>
                 
-                <q-card flat class="stat-card">
-                    <q-card-section class="flex items-center">
-                        <div class="stat-icon bg-amber-100 text-amber-600">
-                            <q-icon name="dog" size="sm" />
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm text-gray-600">Dogs</p>
-                            <p class="text-xl font-bold">{{ dogCount }}</p>
-                        </div>
-                    </q-card-section>
-                </q-card>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <q-icon name="dog" size="sm" />
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value">{{ dogCount }}</div>
+                        <div class="stat-label">Dogs</div>
+                    </div>
+                </div>
                 
-                <q-card flat class="stat-card">
-                    <q-card-section class="flex items-center">
-                        <div class="stat-icon bg-purple-100 text-purple-600">
-                            <q-icon name="cat" size="sm" />
-                        </div>
-                        <div class="ml-3">
-                            <p class="text-sm text-gray-600">Cats</p>
-                            <p class="text-xl font-bold">{{ catCount }}</p>
-                        </div>
-                    </q-card-section>
-                </q-card>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <q-icon name="cat" size="sm" />
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value">{{ catCount }}</div>
+                        <div class="stat-label">Cats</div>
+                    </div>
+                </div>
             </div>
             
             <!-- Search and Filter Bar -->
@@ -84,7 +76,9 @@
                     outlined 
                     dense
                     class="search-input"
-                    bg-color="white"
+                    :dark="isDarkMode"
+                    :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
+                    :color="isDarkMode ? 'var(--text-primary)' : 'black'"
                 >
                     <template v-slot:prepend>
                         <q-icon name="search" />
@@ -98,7 +92,9 @@
                     outlined
                     dense
                     class="filter-select"
-                    bg-color="white"
+                    :dark="isDarkMode"
+                    :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
+                    :color="isDarkMode ? 'var(--text-primary)' : 'black'"
                 />
                 
                 <q-select
@@ -108,12 +104,14 @@
                     outlined
                     dense
                     class="filter-select"
-                    bg-color="white"
+                    :dark="isDarkMode"
+                    :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
+                    :color="isDarkMode ? 'var(--text-primary)' : 'black'"
                 />
                 
                 <q-btn 
                     flat 
-                    color="negative" 
+                    :color="isDarkMode ? 'red-5' : 'negative'" 
                     label="Reset Filters" 
                     @click="resetFilters"
                     class="self-end"
@@ -121,7 +119,7 @@
             </div>
             
             <!-- Registered Animals Table -->
-            <q-card flat class="table-card">
+            <q-card flat class="theme-card">
                 <q-card-section>
                     <q-table
                         :rows="filteredAnimals"
@@ -132,6 +130,8 @@
                         class="pets-table"
                         :rows-per-page-options="[10, 15, 20]"
                         no-data-label="No registered animals to display."
+                        :dark="isDarkMode"
+                        :color="isDarkMode ? 'var(--accent-color)' : 'primary'"
                     >
                         <!-- Custom Picture Cell -->
                         <template v-slot:body-cell-picture="props">
@@ -186,11 +186,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, inject } from 'vue';
 import { QCard, QCardSection, QTable, QImg, QBtn, QIcon, QBadge, QChip, QAvatar, QInput, QSelect, QTd } from 'quasar';
 import axios from 'axios';
 import { Notify } from 'quasar';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+
+// Get the global dark mode state from the AuthenticatedLayout
+const isDarkMode = inject('isDarkMode', ref(false));
 
 // Set the default Axios authorization header
 axios.defaults.headers.common['Authorization'] = 'Bearer StraySafeTeam3';
