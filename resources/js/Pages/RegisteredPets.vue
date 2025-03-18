@@ -1,34 +1,38 @@
 <template>
     <AuthenticatedLayout>
         <div class="registered-pets-container px-6 py-4">
-            <!-- Header Section -->
-            <div class="header-section flex justify-between items-center mb-6">
-                <div>
-                    <h1 class="text-3xl font-bold font-poppins">Registered Animals</h1>
-                    <p class="text-secondary">Barangay Sacred Heart</p>
-                </div>
-                
-                <!-- Action Buttons -->
-                <div class="flex gap-3">
-                    <q-btn 
-                        color="primary" 
-                        icon="add" 
-                        label="Register New" 
-                        class="register-btn"
-                    />
-                    <q-btn 
-                        outline 
-                        color="secondary" 
-                        icon="refresh" 
-                        @click="fetchRegisteredAnimals"
-                    />
+            <!-- Standardized Header Section -->
+            <div class="page-header mx-6 mt-6 mb-6">
+                <div class="flex justify-between items-center">
+                    <div class="header-title">
+                        <h1 class="text-3xl font-bold font-poppins">Registered Animals</h1>
+                        <p class="text-gray-600 dark:text-gray-400">Barangay Sacred Heart</p>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="header-actions flex gap-3">
+                        <q-btn 
+                            class="primary-btn"
+                            icon-right="add" 
+                            label="Register New" 
+                        >
+                            <q-tooltip>Add a new animal registration</q-tooltip>
+                        </q-btn>
+                        <q-btn 
+                            class="secondary-btn"
+                            icon="refresh" 
+                            @click="fetchRegisteredAnimals"
+                        >
+                            <q-tooltip>Refresh animal data</q-tooltip>
+                        </q-btn>
+                    </div>
                 </div>
             </div>
             
             <!-- Statistics Cards -->
             <div class="stats-section grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div class="stat-card">
-                    <div class="stat-icon">
+                    <div class="stat-icon total-icon">
                         <q-icon name="pets" size="sm" />
                     </div>
                     <div class="stat-info">
@@ -38,7 +42,7 @@
                 </div>
                 
                 <div class="stat-card">
-                    <div class="stat-icon">
+                    <div class="stat-icon today-icon">
                         <q-icon name="today" size="sm" />
                     </div>
                     <div class="stat-info">
@@ -48,7 +52,7 @@
                 </div>
                 
                 <div class="stat-card">
-                    <div class="stat-icon">
+                    <div class="stat-icon dog-icon">
                         <q-icon name="dog" size="sm" />
                     </div>
                     <div class="stat-info">
@@ -58,7 +62,7 @@
                 </div>
                 
                 <div class="stat-card">
-                    <div class="stat-icon">
+                    <div class="stat-icon cat-icon">
                         <q-icon name="cat" size="sm" />
                     </div>
                     <div class="stat-info">
@@ -69,54 +73,54 @@
             </div>
             
             <!-- Search and Filter Bar -->
-            <div class="filter-section flex flex-wrap gap-4 mb-6">
-                <q-input 
-                    v-model="searchText" 
-                    placeholder="Search by owner or animal type..." 
-                    outlined 
-                    dense
-                    class="search-input"
-                    :dark="isDarkMode"
-                    :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
-                    :color="isDarkMode ? 'var(--text-primary)' : 'black'"
-                >
-                    <template v-slot:prepend>
-                        <q-icon name="search" />
-                    </template>
-                </q-input>
-                
-                <q-select
-                    v-model="animalTypeFilter"
-                    :options="['All Types', 'Dog', 'Cat', 'Other']"
-                    label="Animal Type"
-                    outlined
-                    dense
-                    class="filter-select"
-                    :dark="isDarkMode"
-                    :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
-                    :color="isDarkMode ? 'var(--text-primary)' : 'black'"
-                />
-                
-                <q-select
-                    v-model="statusFilter"
-                    :options="['All Status', 'Active', 'Inactive']"
-                    label="Status"
-                    outlined
-                    dense
-                    class="filter-select"
-                    :dark="isDarkMode"
-                    :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
-                    :color="isDarkMode ? 'var(--text-primary)' : 'black'"
-                />
-                
-                <q-btn 
-                    flat 
-                    :color="isDarkMode ? 'red-5' : 'negative'" 
-                    label="Reset Filters" 
-                    @click="resetFilters"
-                    class="self-end"
-                />
-            </div>
+            <q-card flat class="filter-card mb-6">
+                <q-card-section>
+                    <div class="filter-section flex flex-wrap gap-4">
+                        <q-input 
+                            v-model="searchText" 
+                            placeholder="Search by owner or animal type..." 
+                            class="search-input"
+                            bg-color="white"
+                        >
+                            <template v-slot:prepend>
+                                <q-icon name="search" />
+                            </template>
+                        </q-input>
+                        
+                        <q-select
+                            v-model="animalTypeFilter"
+                            :options="['All Types', 'Dog', 'Cat', 'Other']"
+                            label="Animal Type"
+                            class="filter-select"
+                            bg-color="white"
+                        >
+                            <template v-slot:prepend>
+                                <q-icon name="pets" />
+                            </template>
+                        </q-select>
+                        
+                        <q-select
+                            v-model="statusFilter"
+                            :options="['All Status', 'Active', 'Inactive']"
+                            label="Status"
+                            class="filter-select"
+                            bg-color="white"
+                        >
+                            <template v-slot:prepend>
+                                <q-icon name="check_circle" />
+                            </template>
+                        </q-select>
+                        
+                        <q-btn 
+                            class="reset-btn self-end"
+                            label="Reset Filters" 
+                            @click="resetFilters"
+                        >
+                            <q-tooltip>Clear all filters</q-tooltip>
+                        </q-btn>
+                    </div>
+                </q-card-section>
+            </q-card>
             
             <!-- Registered Animals Table -->
             <q-card flat class="theme-card">
@@ -131,8 +135,13 @@
                         :rows-per-page-options="[10, 15, 20]"
                         no-data-label="No registered animals to display."
                         :dark="isDarkMode"
-                        :color="isDarkMode ? 'var(--accent-color)' : 'primary'"
                     >
+                        <template v-slot:loading>
+                            <q-inner-loading showing color="primary">
+                                <q-spinner-dots size="50px" color="primary" />
+                            </q-inner-loading>
+                        </template>
+                        
                         <!-- Custom Picture Cell -->
                         <template v-slot:body-cell-picture="props">
                             <q-td :props="props">
@@ -151,6 +160,7 @@
                                     :color="getAnimalTypeColor(props.row.animal_type)"
                                     text-color="white"
                                     size="sm"
+                                    class="animal-chip"
                                 >
                                     <q-icon :name="getAnimalTypeIcon(props.row.animal_type)" class="q-mr-xs" />
                                     {{ props.row.animal_type }}
@@ -173,8 +183,12 @@
                         <template v-slot:body-cell-actions="props">
                             <q-td :props="props">
                                 <div class="flex gap-2">
-                                    <q-btn flat round size="sm" color="primary" icon="visibility" />
-                                    <q-btn flat round size="sm" color="secondary" icon="edit" />
+                                    <q-btn flat round size="sm" color="info" icon="visibility">
+                                        <q-tooltip>View details</q-tooltip>
+                                    </q-btn>
+                                    <q-btn flat round size="sm" color="warning" icon="edit">
+                                        <q-tooltip>Edit registration</q-tooltip>
+                                    </q-btn>
                                 </div>
                             </q-td>
                         </template>
@@ -187,10 +201,11 @@
 
 <script setup>
 import { ref, computed, onMounted, inject } from 'vue';
-import { QCard, QCardSection, QTable, QImg, QBtn, QIcon, QBadge, QChip, QAvatar, QInput, QSelect, QTd } from 'quasar';
+import { QCard, QCardSection, QTable, QImg, QBtn, QIcon, QBadge, QChip, QAvatar, QInput, QSelect, QTd, QTooltip, QSpinnerDots, QInnerLoading } from 'quasar';
 import axios from 'axios';
 import { Notify } from 'quasar';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import '../../css/registered-pets.css';
 
 // Get the global dark mode state from the AuthenticatedLayout
 const isDarkMode = inject('isDarkMode', ref(false));
@@ -338,9 +353,9 @@ function resetFilters() {
 // Helper functions for styling
 function getAnimalTypeColor(type) {
     const typeLower = type.toLowerCase();
-    if (typeLower === 'dog') return 'amber';
-    if (typeLower === 'cat') return 'purple';
-    return 'grey';
+    if (typeLower === 'dog') return '#38a3a5';
+    if (typeLower === 'cat') return '#57cc99';
+    return '#4f6642';
 }
 
 function getAnimalTypeIcon(type) {
@@ -356,66 +371,6 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
-.registered-pets-container {
-    background-color: #f8f9fa;
-}
-
-.stat-card {
-    background-color: #d4d8bd;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.stat-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.table-card {
-    background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.pets-table {
-    border-radius: 8px;
-}
-
-.search-input {
-    min-width: 300px;
-}
-
-.filter-select {
-    min-width: 150px;
-}
-
-.pet-avatar {
-    border: 2px solid #eaeaea;
-    overflow: hidden;
-}
-
-.pet-avatar img {
-    object-fit: cover;
-    width: 100%;
-    height: 100%;
-}
-
-.status-badge {
-    padding: 4px 8px;
-    border-radius: 12px;
-}
-
-.register-btn {
-    background-color: #4f6642;
-}
+<style>
+/* Component styles are now in the dedicated CSS file */
 </style>

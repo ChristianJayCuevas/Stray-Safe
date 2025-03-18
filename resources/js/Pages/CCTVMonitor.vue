@@ -1,43 +1,26 @@
 <script setup>
+import { ref, onMounted, inject, computed, watch } from 'vue';
+import { Head } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { ref, computed, onMounted, watch, inject } from 'vue';
+import '../../css/cctvmonitor.css';
 import axios from 'axios';
 
 // Get the global dark mode state from the AuthenticatedLayout
 const globalIsDarkMode = inject('isDarkMode', ref(false));
 
-// Theme toggle - sync with global dark mode
-const isDarkTheme = ref(true);
+// Use global dark mode directly instead of maintaining a separate state
+const isDarkTheme = computed(() => globalIsDarkMode.value);
+
+// Watch for changes to the global dark mode state
+watch(globalIsDarkMode, (newValue) => {
+    console.log('Dark mode changed:', newValue);
+    // The isDarkTheme computed property will automatically update
+});
 
 // Sync local theme with global theme on mount and when global theme changes
 onMounted(() => {
-    // Initialize with global theme
-    isDarkTheme.value = globalIsDarkMode.value;
-    
-    // Save theme preference to localStorage
-    localStorage.setItem('cctv-theme', isDarkTheme.value ? 'dark' : 'light');
     fetchRecentSnapshots();
-    
-    // Check for saved theme preference
-    const savedTheme = localStorage.getItem('cctv-theme');
-    if (savedTheme) {
-        isDarkTheme.value = savedTheme === 'dark';
-    }
 });
-
-// Watch for changes in the global dark mode
-watch(globalIsDarkMode, (newValue) => {
-    isDarkTheme.value = newValue;
-    localStorage.setItem('cctv-theme', isDarkTheme.value ? 'dark' : 'light');
-});
-
-function toggleTheme() {
-    isDarkTheme.value = !isDarkTheme.value;
-    // Update global dark mode
-    globalIsDarkMode.value = isDarkTheme.value;
-    // Save theme preference to localStorage
-    localStorage.setItem('cctv-theme', isDarkTheme.value ? 'dark' : 'light');
-}
 
 // Sample CCTV data - this would be fetched from an API in a real implementation
 const cctvs = ref([
@@ -92,15 +75,36 @@ const paginatedCCTVs = computed(() => {
 // System stats
 const systemStats = ref({
     totalCameras: cctvs.value.length,
-    onlineCameras: computed(() => cctvs.value.filter(cam => cam.status === 'Online').length),
-    detections: 12,
-    lastUpdate: new Date().toLocaleString()
+    onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
+    detectionsToday: 12,
+    storageUsed: '1.2 TB'
 });
 
 const models = ref([
     {
         name: 'Real-Time Detection Transformer (RT-DETR)',
     },
+]);
+
+const recentSnapshots = ref([
+    {
+        imageUrl: 'https://via.placeholder.com/300x200?text=Stray+Dog',
+        timestamp: '2023-06-15 14:30',
+        animalType: 'Dog',
+        location: 'Main Street'
+    },
+    {
+        imageUrl: 'https://via.placeholder.com/300x200?text=Stray+Cat',
+        timestamp: '2023-06-15 13:45',
+        animalType: 'Cat',
+        location: 'Park Avenue'
+    },
+    {
+        imageUrl: 'https://via.placeholder.com/300x200?text=Stray+Dog',
+        timestamp: '2023-06-15 12:20',
+        animalType: 'Dog',
+        location: 'Riverside'
+    }
 ]);
 
 const groupedSnapshots = computed(() => {
@@ -119,53 +123,22 @@ const dialogVisible = ref(false);
 const selectedCCTV = ref(null);
 const activeTab = ref('live');
 
-async function openDialog(cctv) {
+function openDialog(cctv) {
     selectedCCTV.value = cctv;
     dialogVisible.value = true;
-
-    // Fetch the latest snapshots and statuses for the selected CCTV
-    try {
-        const response = await axios.get(`http://127.0.0.1:8000/api/snapshots`, {
-            params: {
-                cctvName: cctv.name
-            },
-            headers: {
-                Authorization: 'Bearer StraySafeTeam3'
-            }
-        });
-
-        if (response.data && response.data.snapshots) {
-            selectedCCTV.value.snapshots = response.data.snapshots.map(snapshot => ({
-                src: snapshot.image_url,
-                time: snapshot.timestamp,
-                classification: snapshot.stray_status
-            }));
-        }
-    } catch (error) {
-        console.error("Failed to fetch snapshots:", error);
-        selectedCCTV.value.snapshots = [];
-    }
 }
 
-const snapshots = ref([]);
 const loading = ref(true);
 
 async function fetchRecentSnapshots() {
     loading.value = true;
     try {
-        const response = await axios.get('http://127.0.0.1:8000/api/snapshots/recent');
-        if (response.data && response.data.snapshots) {
-            snapshots.value = response.data.snapshots.map(snapshot => ({
-                imageUrl: snapshot.image_url,
-                timestamp: snapshot.timestamp,
-                strayStatus: snapshot.stray_status,
-                location: snapshot.location,
-            }));
-        }
+        // In a real implementation, this would be an API call
+        // const response = await axios.get('http://127.0.0.1:8000/api/snapshots/recent');
+        // recentSnapshots.value = response.data.snapshots;
+        loading.value = false;
     } catch (error) {
         console.error("Failed to fetch recent snapshots:", error);
-        snapshots.value = [];
-    } finally {
         loading.value = false;
     }
 }
@@ -214,21 +187,28 @@ function closeDialog() {
 
 <template>
     <AuthenticatedLayout>
-        <div class="cctv-dashboard" :class="{ 'dark-mode': isDarkTheme, 'light-theme': !isDarkTheme }">
-            <!-- Header with system stats -->
-            <div class="dashboard-header">
-                <h1>CCTV Surveillance System</h1>
-                <div class="header-controls">
-                    <button class="theme-toggle" @click="toggleTheme">
-                        <i class="fas" :class="isDarkTheme ? 'fa-sun' : 'fa-moon'"></i>
-                        {{ isDarkTheme ? 'Light Mode' : 'Dark Mode' }}
-                    </button>
-                    <div class="system-time">{{ new Date().toLocaleString() }}</div>
+        <div class="cctv-monitor-container px-6 py-4" :class="{ 'dark-mode': isDarkTheme }">
+            <!-- Header Section -->
+            <div class="page-header">
+                <div class="flex justify-between items-center">
+                    <div class="header-title">
+                        <h1 class="text-3xl font-bold font-poppins">CCTV Surveillance System</h1>
+                        <p class="text-gray-600 dark:text-gray-400">Barangay Sacred Heart</p>
+                    </div>
+                    
+                    <!-- CCTV Controls -->
+                    <div class="header-actions">
+                        <div class="system-time">
+                            <i class="fas fa-clock mr-2"></i>
+                            {{ new Date().toLocaleTimeString() }}
+                        </div>
+                        <q-btn color="primary" icon="refresh" label="Refresh" @click="fetchRecentSnapshots" />
+                    </div>
                 </div>
             </div>
-            
-            <!-- System stats cards -->
-            <div class="stats-container">
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon">
                         <i class="fas fa-video"></i>
@@ -238,9 +218,8 @@ function closeDialog() {
                         <div class="stat-label">Total Cameras</div>
                     </div>
                 </div>
-                
                 <div class="stat-card">
-                    <div class="stat-icon online">
+                    <div class="stat-icon">
                         <i class="fas fa-wifi"></i>
                     </div>
                     <div class="stat-info">
@@ -248,114 +227,70 @@ function closeDialog() {
                         <div class="stat-label">Online Cameras</div>
                     </div>
                 </div>
-                
                 <div class="stat-card">
-                    <div class="stat-icon alert">
-                        <i class="fas fa-exclamation-triangle"></i>
+                    <div class="stat-icon">
+                        <i class="fas fa-paw"></i>
                     </div>
                     <div class="stat-info">
-                        <div class="stat-value">{{ systemStats.detections }}</div>
+                        <div class="stat-value">{{ systemStats.detectionsToday }}</div>
                         <div class="stat-label">Detections Today</div>
                     </div>
                 </div>
-                
                 <div class="stat-card">
                     <div class="stat-icon">
-                        <i class="fas fa-clock"></i>
+                        <i class="fas fa-database"></i>
                     </div>
                     <div class="stat-info">
-                        <div class="stat-value">{{ systemStats.lastUpdate }}</div>
-                        <div class="stat-label">Last Update</div>
+                        <div class="stat-value">{{ systemStats.storageUsed }}</div>
+                        <div class="stat-label">Storage Used</div>
                     </div>
                 </div>
             </div>
-            
-            <!-- Tabs for different views -->
-            <div class="cctv-tabs">
-                <div 
-                    class="tab" 
-                    :class="{ active: activeTab === 'live' }"
-                    @click="activeTab = 'live'"
-                >
-                    Live Feeds
-                </div>
-                <div 
-                    class="tab" 
-                    :class="{ active: activeTab === 'snapshots' }"
-                    @click="activeTab = 'snapshots'"
-                >
-                    Recent Snapshots
-                </div>
-            </div>
-            
-            <!-- Live feeds tab content -->
-            <div v-if="activeTab === 'live'" class="tab-content">
-                <div class="cctv-grid">
-                    <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
-                        <div class="cctv-header">
-                            <span class="cctv-name">{{ cctv.name }}</span>
-                            <span class="cctv-location">{{ cctv.location }}</span>
-                            <span class="cctv-status" :class="cctv.status.toLowerCase()">
-                                {{ cctv.status }}
-                            </span>
+
+            <!-- CCTV Feeds -->
+            <div class="cctv-grid">
+                <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
+                    <div class="cctv-feed">
+                        <video v-if="cctv.status === 'Online'" :src="cctv.videoSrc[0]" autoplay loop muted></video>
+                        <div v-else class="offline-message">
+                            <i class="fas fa-video-slash mr-2"></i> Camera Offline
                         </div>
-                        <div class="cctv-feed">
-                            <img 
-                                v-if="cctv.status === 'Online'"
-                                :src="cctv.videoSrc[0]"
-                                @error="() => { if (cctv.videoSrc.length > 1) $event.target.src = cctv.videoSrc[1]; }"
-                                autoplay loop class="video-feed"
-                            />
-                            <div v-else class="offline-feed">
-                                <i class="fas fa-video-slash"></i>
-                                <span>Camera Offline</span>
-                            </div>
-                            <div class="feed-overlay">
-                                <div class="feed-timestamp">{{ new Date().toLocaleTimeString() }}</div>
-                                <div v-if="cctv.status === 'Online'" class="live-indicator">LIVE</div>
-                            </div>
+                    </div>
+                    <div class="cctv-info">
+                        <div class="cctv-title">{{ cctv.name }}</div>
+                        <div class="cctv-location">{{ cctv.location }}</div>
+                        <div class="cctv-status" :class="cctv.status === 'Online' ? 'status-online' : 'status-offline'">
+                            <i :class="cctv.status === 'Online' ? 'fas fa-circle' : 'fas fa-circle-xmark'" class="mr-1"></i>
+                            {{ cctv.status }}
                         </div>
                     </div>
                 </div>
-                
-                <!-- Pagination controls -->
-                <div class="pagination-controls">
-                    <button 
-                        class="pagination-btn" 
-                        :disabled="pagination.page === 1"
-                        @click="changePage(pagination.page - 1)"
-                    >
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <span class="pagination-info">
-                        Page {{ pagination.page }} of {{ pagination.totalPages }}
-                    </span>
-                    <button 
-                        class="pagination-btn" 
-                        :disabled="pagination.page === pagination.totalPages"
-                        @click="changePage(pagination.page + 1)"
-                    >
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                </div>
             </div>
-            
-            <!-- Snapshots tab content -->
-            <div v-if="activeTab === 'snapshots'" class="tab-content">
-                <div v-if="loading" class="loading-container">
-                    <q-spinner-dots color="primary" size="lg" />
-                    <p>Loading recent snapshots...</p>
-                </div>
-                <div v-else class="snapshots-container">
-                    <div v-for="(snapshot, index) in snapshots" :key="index" class="snapshot-card">
-                        <img :src="snapshot.imageUrl" alt="Snapshot" class="snapshot-image" />
-                        <div class="snapshot-info">
-                            <div class="snapshot-time">{{ snapshot.timestamp }}</div>
-                            <div class="snapshot-status" :class="snapshot.strayStatus.toLowerCase().replace(' ', '-')">
-                                {{ snapshot.strayStatus }}
-                            </div>
-                            <div class="snapshot-location">{{ snapshot.location }}</div>
-                        </div>
+
+            <!-- Pagination Controls -->
+            <div class="flex justify-center mt-6 mb-6">
+                <q-pagination
+                    v-model="pagination.page"
+                    :max="pagination.totalPages"
+                    direction-links
+                    boundary-links
+                    color="primary"
+                    active-color="primary"
+                />
+            </div>
+
+            <!-- Recent Detections Section -->
+            <div class="page-header mb-6">
+                <h2 class="text-2xl font-bold">Recent Detections</h2>
+            </div>
+
+            <div class="detection-grid">
+                <div v-for="(snapshot, index) in recentSnapshots" :key="index" class="detection-card">
+                    <img :src="snapshot.imageUrl" class="detection-image" alt="Detection" />
+                    <div class="detection-info">
+                        <div class="detection-type">{{ snapshot.animalType }}</div>
+                        <div class="detection-time">{{ snapshot.timestamp }}</div>
+                        <div class="detection-location">{{ snapshot.location }}</div>
                     </div>
                 </div>
             </div>
@@ -364,54 +299,27 @@ function closeDialog() {
     
     <!-- CCTV Detail Dialog -->
     <q-dialog v-model="dialogVisible" backdrop-filter="blur(4px) saturate(150%)">
-        <q-card class="cctv-dialog" :class="{ 'dark-mode': isDarkTheme, 'light-theme': !isDarkTheme }">
+        <q-card class="cctv-dialog-card">
             <div class="dialog-header">
-                <h2 v-if="selectedCCTV">{{ selectedCCTV.name }}</h2>
-                <button class="close-btn" @click="closeDialog">
-                    <i class="fas fa-times"></i>
-                </button>
+                <h2 class="text-xl font-bold">{{ selectedCCTV?.name }}</h2>
+                <q-btn flat round icon="close" @click="closeDialog" />
             </div>
-            
             <div class="dialog-content">
-                <div class="cctv-dialog-container">
-                    <img 
-                        v-if="selectedCCTV && selectedCCTV.status === 'Online'" 
-                        :src="selectedCCTV.videoSrc[0]"
-                        @error="() => { if (selectedCCTV.videoSrc.length > 1) $event.target.src = selectedCCTV.videoSrc[1]; }"
-                        autoplay loop class="cctv-video"
-                    />
-                    <div v-else class="offline-feed large">
-                        <i class="fas fa-video-slash"></i>
-                        <span>Camera Offline</span>
-                    </div>
-                    
-                    <div class="feed-overlay">
-                        <div class="feed-timestamp">{{ new Date().toLocaleTimeString() }}</div>
-                        <div v-if="selectedCCTV && selectedCCTV.status === 'Online'" class="live-indicator">LIVE</div>
+                <div class="cctv-feed-large">
+                    <video v-if="selectedCCTV?.status === 'Online'" :src="selectedCCTV?.videoSrc[0]" autoplay loop muted></video>
+                    <div v-else class="offline-message">
+                        <i class="fas fa-video-slash mr-2"></i> Camera Offline
                     </div>
                 </div>
-                
-                <div class="snapshot-details">
-                    <h3 v-if="selectedCCTV">Recent Detections</h3>
-                    
-                    <div v-if="selectedCCTV && selectedCCTV.snapshots.length > 0">
-                        <div v-for="(snapshot, index) in selectedCCTV.snapshots" :key="index" class="snapshot-item">
-                            <img :src="snapshot.src" alt="Snapshot" class="snapshot-image" />
-                            <div class="snapshot-info">
-                                <div><strong>Time:</strong> {{ snapshot.time }}</div>
-                                <div><strong>Status:</strong> {{ snapshot.classification }}</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div v-else class="no-snapshots">
-                        <i class="fas fa-image"></i>
-                        <span>No recent detections</span>
+                <div class="cctv-info-large mt-4">
+                    <div class="text-lg font-bold">{{ selectedCCTV?.name }}</div>
+                    <div class="text-sm text-gray-600 dark:text-gray-400">{{ selectedCCTV?.location }}</div>
+                    <div class="mt-2" :class="selectedCCTV?.status === 'Online' ? 'text-green-500' : 'text-red-500'">
+                        <i :class="selectedCCTV?.status === 'Online' ? 'fas fa-circle' : 'fas fa-circle-xmark'" class="mr-1"></i>
+                        {{ selectedCCTV?.status }}
                     </div>
                 </div>
             </div>
         </q-card>
     </q-dialog>
 </template>
-
-<style src="../../css/cctvmonitor.css" lang="css"></style>

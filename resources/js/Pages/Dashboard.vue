@@ -1,11 +1,12 @@
 <script setup>
-import { ref, onMounted, watch, inject } from 'vue';
+import { ref, onMounted, inject, watch } from 'vue';
 import { QCard, QCardSection, QTable, QImg, QInput, QSelect, QIcon, QBtn, QDate } from 'quasar';
 import { Head } from '@inertiajs/vue3';
 import VueApexCharts from 'vue3-apexcharts';
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Swal from 'sweetalert2';
+import '../../css/dashboard.css';
 
 // Get the global dark mode state from the AuthenticatedLayout
 const isDarkMode = inject('isDarkMode', ref(false));
@@ -18,9 +19,6 @@ const strayAnimalsData = ref({
     registeredDogs: 35,
     registeredCats: 25,
 });
-
-// Search functionality
-const searchQuery = ref('');
 
 // Date selection
 const selectedDate = ref(new Date().toISOString().split('T')[0]);
@@ -186,58 +184,34 @@ function generateHeatmapData(count, min, max) {
     <Head title="Dashboard" />
 
     <AuthenticatedLayout>
-        <!-- Dashboard Header with Title, Search, and Date Picker -->
-        <div class="dashboard-header mx-6 mt-6 mb-4" :class="{'dark-theme-text': isDarkMode}">
+        <!-- Standardized Header Section -->
+        <div class="page-header mx-6 mt-6 mb-6">
             <div class="flex justify-between items-center">
-                <!-- Dashboard Title -->
-                <div class="dashboard-title">
+                <div class="header-title">
                     <h1 class="text-3xl font-bold font-poppins">Dashboard</h1>
+                    <p class="text-gray-600 dark:text-gray-400">Barangay Sacred Heart</p>
                 </div>
                 
-                <!-- Search and Date Picker -->
-                <div class="dashboard-controls flex items-center gap-4">
-                    <!-- Search Bar -->
-                    <q-input 
-                        v-model="searchQuery" 
-                        outlined 
-                        dense
-                        placeholder="Search..." 
-                        class="search-input"
-                        :dark="isDarkMode"
-                        :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
-                        :color="isDarkMode ? 'var(--text-primary)' : 'black'"
-                    >
-                        <template v-slot:append>
-                            <q-icon name="search" />
-                        </template>
-                    </q-input>
-                    
+                <!-- Dashboard Controls -->
+                <div class="header-actions flex items-center gap-4">
                     <!-- Date Picker -->
-                    <div class="date-picker-container relative">
-                        <q-input 
-                            v-model="selectedDate" 
-                            outlined 
-                            dense
-                            readonly
-                            placeholder="Select Date"
-                            @click="showDatePicker = true"
-                            :dark="isDarkMode"
-                            :bg-color="isDarkMode ? 'var(--bg-secondary)' : 'white'"
-                            :color="isDarkMode ? 'var(--text-primary)' : 'black'"
+                    <div class="date-picker-wrapper relative">
+                        <q-btn 
+                            class="date-btn secondary-btn"
+                            icon="event"
+                            @click="showDatePicker = !showDatePicker"
                         >
-                            <template v-slot:append>
-                                <q-icon name="event" />
-                            </template>
-                        </q-input>
+                            {{ new Date(selectedDate).toLocaleDateString() }}
+                        </q-btn>
                         
-                        <q-popup-proxy v-model="showDatePicker" transition-show="scale" transition-hide="scale">
+                        <q-card v-if="showDatePicker" class="date-picker-card absolute">
                             <q-date 
                                 v-model="selectedDate" 
-                                @input="showDatePicker = false"
-                                :dark="isDarkMode"
-                                :color="isDarkMode ? 'var(--accent-color)' : 'primary'"
+                                mask="YYYY-MM-DD" 
+                                today-btn
+                                @update:model-value="showDatePicker = false"
                             />
-                        </q-popup-proxy>
+                        </q-card>
                     </div>
                 </div>
             </div>
@@ -328,131 +302,3 @@ function generateHeatmapData(count, min, max) {
         </div>
     </AuthenticatedLayout>
 </template>
-
-<style scoped>
-.dashboard-container {
-    padding-top: 20px;
-}
-
-.dashboard-header {
-    margin-bottom: 20px;
-}
-
-.search-input {
-    width: 250px;
-    background-color: white !important;
-}
-
-.date-picker-btn {
-    min-width: 150px;
-    background-color: white !important;
-}
-
-.stat-card {
-    background-color: var(--bg-card);
-    border-radius: 10px;
-    padding: 20px;
-    display: flex;
-    align-items: center;
-    box-shadow: 0 4px 6px var(--shadow-color);
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 15px var(--shadow-color);
-}
-
-.stat-icon {
-    background-color: var(--accent-color);
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 15px;
-    font-size: 20px;
-    color: white;
-}
-
-.stat-info {
-    flex: 1;
-}
-
-.stat-value {
-    font-size: 24px;
-    font-weight: bold;
-    margin-bottom: 5px;
-    color: var(--text-primary);
-}
-
-.stat-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-}
-
-.q-card-section {
-    padding: 16px;
-}
-
-.text-primary {
-    color: #4f6642;
-}
-
-.text-gray-800 {
-    color: #333;
-}
-
-.text-gray-200 {
-    color: #eee;
-}
-
-/* Apply Poppins font to all text */
-* {
-    font-family: 'Poppins', sans-serif;
-}
-
-.theme-card {
-    background-color: var(--bg-card) !important;
-    color: var(--text-primary) !important;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px var(--shadow-color);
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.theme-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 15px var(--shadow-color);
-}
-
-.sighting-card {
-    overflow: hidden;
-}
-
-/* Fix text colors in cards */
-.theme-card .text-xl,
-.theme-card .text-lg,
-.theme-card .text-sm {
-    color: var(--text-primary);
-}
-
-.theme-card .text-xs.text-gray-500 {
-    color: var(--text-secondary) !important;
-}
-
-/* ApexCharts theme overrides */
-:deep(.apexcharts-canvas .apexcharts-title-text) {
-    fill: var(--text-primary) !important;
-}
-
-:deep(.apexcharts-canvas .apexcharts-legend-text) {
-    color: var(--text-primary) !important;
-}
-
-:deep(.apexcharts-canvas .apexcharts-xaxis-label),
-:deep(.apexcharts-canvas .apexcharts-yaxis-label) {
-    fill: var(--text-secondary) !important;
-}
-</style>

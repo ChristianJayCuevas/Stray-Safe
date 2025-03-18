@@ -1,6 +1,6 @@
 /* Sidebar Styles */
 .custom-drawer {
-  background-color: var(--bg-light);
+  background-color: #d4d8bd; /* Green palette from Welcome.vue */
   color: var(--text-primary);
   transition: all 0.3s ease;
   border-radius: 0 12px 12px 0;
