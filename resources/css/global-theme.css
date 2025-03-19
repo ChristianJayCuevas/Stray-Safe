@@ -59,6 +59,13 @@ body:not(.dark-mode) {
     color: #333333;
 }
 
+/* Button styles */
+.header-actions .q-btn {
+    height: 36px;
+    min-height: 36px;
+    padding: 6px 14px;
+}
+
 /* Card styles for dark mode */
 .dark-mode .q-card {
     background-color: var(--bg-card);

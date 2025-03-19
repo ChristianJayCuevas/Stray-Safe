@@ -13,7 +13,8 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 use App\Http\Controllers\MapPinController;
-
+use App\Http\Controllers\StreamProxyController;
+use App\Http\Controllers\StreamController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -49,9 +50,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/post/comment', [CommentController::class, 'createComment'])->name('createComment');
 
     Route::get('/cctv-monitor', [CCTVController::class, 'monitor'])->name('cctv.monitor');
+    Route::get('/stream-test', function () {
+        return Inertia::render('StreamTest');
+    })->name('stream.test');
     Route::get('/cctv', [CCTVController::class, 'view'])->name('cctv.view');
     Route::get('/cctv/detect', [CCTVController::class, 'detect'])->name('cctv.detect');
     
+    // Stream proxy routes to handle CORS
+    Route::options('stream-proxy/{path?}', [StreamProxyController::class, 'options'])
+        ->where('path', '.*');
+    Route::get('stream-proxy/{path?}', [StreamProxyController::class, 'proxy'])
+        ->where('path', '.*');
+        
+    // New stream controller routes
+    Route::get('stream/{path}', [StreamController::class, 'proxyStream'])
+        ->where('path', '.*');
+    Route::get('api/streams', [StreamController::class, 'getStreams']);
+    Route::get('api/streams/test/{streamId}', [StreamController::class, 'testStream']);
 
     //For the profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

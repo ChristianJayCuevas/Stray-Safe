@@ -36,9 +36,11 @@
     color: white;
     border: none;
     border-radius: 8px;
-    padding: 8px 16px;
+    padding: 6px 14px;
     font-weight: 500;
     transition: all 0.3s ease;
+    height: 36px;
+    min-height: 36px;
 }
 
 .secondary-btn {
@@ -46,9 +48,11 @@
     color: white;
     border: none;
     border-radius: 8px;
-    padding: 8px 16px;
+    padding: 6px 14px;
     font-weight: 500;
     transition: all 0.3s ease;
+    height: 36px;
+    min-height: 36px;
 }
 
 .primary-btn:hover, .secondary-btn:hover {

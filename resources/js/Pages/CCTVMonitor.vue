@@ -1,9 +1,11 @@
 <script setup>
-import { ref, onMounted, inject, computed, watch } from 'vue';
+import { ref, onMounted, inject, computed, watch, nextTick, onUnmounted } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import StreamPlayer from '@/Components/StreamPlayer.vue';
 import '../../css/cctvmonitor.css';
 import axios from 'axios';
+import Hls from 'hls.js'; // Import HLS.js library
 
 // Get the global dark mode state from the AuthenticatedLayout
 const globalIsDarkMode = inject('isDarkMode', ref(false));
@@ -17,52 +19,170 @@ watch(globalIsDarkMode, (newValue) => {
     // The isDarkTheme computed property will automatically update
 });
 
+// CCTV data
+const cctvs = ref([]);
+const loading = ref(true);
+const streamError = ref(false);
+
+// API configuration
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://20.195.42.135:5000'; // VPS server IP and port
+console.log('Using API base URL:', API_BASE_URL);
+
+// Check if HLS.js is available
+const hlsAvailable = ref(Hls.isSupported());
+
 // Sync local theme with global theme on mount and when global theme changes
 onMounted(() => {
+    console.log('Component mounted');
+    if (!hlsAvailable.value) {
+        console.warn('HLS.js is not available - video playback may be limited');
+    }
+    fetchCCTVStreams();
     fetchRecentSnapshots();
 });
 
-// Sample CCTV data - this would be fetched from an API in a real implementation
-const cctvs = ref([
-    {
-        id: 1,
-        name: 'Dog Demonstration Video',
-        location: 'Main Street',
-        status: 'Online',
-        videoSrc: ['https://127.0.0.1:5000/video'],
-        snapshots: []
-    },
-    {
-        id: 2,
-        name: 'Cat Demonstration Video',
-        location: 'Park Avenue',
-        status: 'Online',
-        videoSrc: ['https://100.89.19.38:5001/video'],
-        snapshots: []
-    },
-    {
-        id: 3,
-        name: 'Camera 3',
-        location: 'City Center',
-        status: 'Offline',
-        videoSrc: [''],
-        snapshots: []
-    },
-    {
-        id: 4,
-        name: 'Camera 4',
-        location: 'Riverside',
-        status: 'Online',
-        videoSrc: ['https://127.0.0.1:5000/video'],
-        snapshots: []
-    },
-]);
+// Clean up when component is unmounted
+onUnmounted(() => {
+    console.log('Component unmounted');
+});
+
+// Function to fetch CCTV streams from the API
+async function fetchCCTVStreams() {
+    loading.value = true;
+    streamError.value = false;
+    
+    try {
+        console.log('Fetching CCTV streams from API...');
+        const response = await axios.get(`${API_BASE_URL}/api/streams`, {
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            timeout: 10000 // 10 second timeout
+        });
+        
+        console.log('API response:', response.data);
+        
+        if (response.data && Array.isArray(response.data)) {
+            // Transform API data to match our CCTV data structure
+            cctvs.value = response.data.map((stream, index) => {
+                return {
+                    id: index + 1,
+                    name: stream.name,
+                    location: `Camera ${index + 1}`,
+                    status: stream.status === 'active' ? 'Online' : 'Offline',
+                    videoSrc: [stream.urls.ai_processed.hls], // Use AI processed HLS stream
+                    originalSrc: stream.urls.original.hls,    // Store original stream URL
+                    streamInfo: stream
+                };
+            });
+            
+            // Update system stats
+            systemStats.value = {
+                totalCameras: cctvs.value.length,
+                onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
+                detectionsToday: Math.floor(Math.random() * 30), // This would come from the API in a real implementation
+                storageUsed: '1.2 TB' // This would come from the API in a real implementation
+            };
+        } else {
+            console.warn('No streams found in API response or invalid format, using direct m3u8 URL');
+            // If no streams are available, use sample data with direct m3u8 URL
+            useSampleData();
+            streamError.value = true;
+        }
+    } catch (error) {
+        console.error("Failed to fetch CCTV streams:", error);
+        console.log("Using direct m3u8 URL instead");
+        useSampleData();
+        streamError.value = true;
+    } finally {
+        loading.value = false;
+    }
+}
+
+// Function to use sample data when API is unavailable
+function useSampleData() {
+    console.log('Using sample CCTV data');
+    
+    // Create sample data with the proxied stream URL
+    const proxiedStreamUrl = '/stream/ai_cam1/index.m3u8';
+    
+    cctvs.value = [
+        {
+            id: 1,
+            name: 'CCTV 1',
+            location: 'Main Entrance',
+            status: 'Online',
+            videoSrc: [proxiedStreamUrl],
+            originalSrc: proxiedStreamUrl,
+            lastDetection: new Date().toLocaleString(),
+            snapshots: [
+                { url: 'https://via.placeholder.com/300x200?text=Dog+Detection', timestamp: '2023-10-15 14:30:45', label: 'Stray Dog' },
+            ]
+        },
+        {
+            id: 2,
+            name: 'CCTV 2',
+            location: 'Back Alley',
+            status: 'Online',
+            videoSrc: [proxiedStreamUrl],
+            originalSrc: proxiedStreamUrl,
+            lastDetection: new Date().toLocaleString(),
+            snapshots: []
+        },
+        {
+            id: 3,
+            name: 'CCTV 3',
+            location: 'Side Street',
+            status: 'Offline',
+            videoSrc: [],
+            originalSrc: '',
+            lastDetection: 'N/A',
+            snapshots: []
+        },
+        {
+            id: 4,
+            name: 'CCTV 4',
+            location: 'Park Entrance',
+            status: 'Online',
+            videoSrc: [proxiedStreamUrl],
+            originalSrc: proxiedStreamUrl,
+            lastDetection: new Date().toLocaleString(),
+            snapshots: [
+                { url: 'https://via.placeholder.com/300x200?text=Dog+Detection', timestamp: '2023-10-14 09:45:12', label: 'Stray Dog' }
+            ]
+        }
+    ];
+    
+    // Calculate total pages
+    totalPages.value = Math.ceil(cctvs.value.length / pagination.value.itemsPerPage);
+    
+    // Update system stats with sample data
+    systemStats.value = {
+        totalCameras: cctvs.value.length,
+        onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
+        detectionsToday: 8,
+        storageUsed: '1.2 TB'
+    };
+}
 
 // Pagination settings
 const pagination = ref({
     page: 1,
     rowsPerPage: 4,
-    totalPages: computed(() => Math.ceil(cctvs.value.length / pagination.value.rowsPerPage))
+    totalPages: 1
+});
+
+// Compute total pages whenever cctvs changes
+watch(cctvs, () => {
+    pagination.value.totalPages = Math.ceil(cctvs.value.length / pagination.value.rowsPerPage);
+});
+
+// Watch for pagination changes to reinitialize video players
+watch(() => pagination.value.page, () => {
+    nextTick(() => {
+        // No need to manually initialize video players anymore as the StreamPlayer component handles it
+    });
 });
 
 // Filtered CCTVs based on pagination
@@ -74,10 +194,10 @@ const paginatedCCTVs = computed(() => {
 
 // System stats
 const systemStats = ref({
-    totalCameras: cctvs.value.length,
-    onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
-    detectionsToday: 12,
-    storageUsed: '1.2 TB'
+    totalCameras: 0,
+    onlineCameras: 0,
+    detectionsToday: 0,
+    storageUsed: '0 TB'
 });
 
 const models = ref([
@@ -122,25 +242,54 @@ const groupedSnapshots = computed(() => {
 const dialogVisible = ref(false);
 const selectedCCTV = ref(null);
 const activeTab = ref('live');
+const useAIStream = ref(true);
 
 function openDialog(cctv) {
     selectedCCTV.value = cctv;
     dialogVisible.value = true;
+    useAIStream.value = true;
+    // No need to manually initialize HLS anymore as the StreamPlayer component handles it
 }
 
-const loading = ref(true);
-
 async function fetchRecentSnapshots() {
-    loading.value = true;
     try {
-        // In a real implementation, this would be an API call
-        // const response = await axios.get('http://127.0.0.1:8000/api/snapshots/recent');
-        // recentSnapshots.value = response.data.snapshots;
-        loading.value = false;
+        // Try to fetch detection events from the API
+        const response = await axios.get(`${API_BASE_URL}/api/detection-events`);
+        
+        if (response.data && Array.isArray(response.data)) {
+            recentSnapshots.value = response.data.map(event => {
+                return {
+                    imageUrl: event.image_url || 'https://via.placeholder.com/300x200?text=Detection',
+                    timestamp: event.timestamp || new Date().toLocaleString(),
+                    animalType: event.animal_type || 'Unknown',
+                    location: event.location || 'Unknown'
+                };
+            });
+        }
     } catch (error) {
         console.error("Failed to fetch recent snapshots:", error);
-        loading.value = false;
     }
+}
+
+// References to active HLS instances
+const hlsInstances = ref({});
+
+// Function to setup HLS stream for a video element
+function setupHlsStream(videoElementId, streamUrl, context = 'grid') {
+    // This function is no longer needed as we're using the StreamPlayer component
+    console.log(`Setup HLS stream function is deprecated. Using StreamPlayer component instead.`);
+}
+
+// Function to initialize HLS video player
+function initHlsPlayer(videoElement, streamUrl) {
+    // This function is no longer needed as we're using the StreamPlayer component
+    console.log(`Init HLS player function is deprecated. Using StreamPlayer component instead.`);
+}
+
+function toggleAIView() {
+    useAIStream.value = !useAIStream.value;
+    console.log(`Switched to ${useAIStream.value ? 'AI' : 'original'} stream`);
+    // The StreamPlayer component will automatically update when the stream-url prop changes
 }
 
 // Notification sending component state
@@ -180,8 +329,30 @@ function changePage(newPage) {
 }
 
 function closeDialog() {
+    // No need to clean up HLS instances anymore as the StreamPlayer component handles it
     dialogVisible.value = false;
     selectedCCTV.value = null;
+}
+
+// Function to open the stream in a new browser tab
+function openStreamInBrowser() {
+    window.open('http://20.195.42.135:8888/ai_cam1/index.m3u8', '_blank');
+}
+
+function onStreamReady(id) {
+    console.log(`Stream ready for CCTV ${id}`);
+}
+
+function onStreamError(id, error) {
+    console.error(`Stream error for CCTV ${id}:`, error);
+}
+
+function onModalStreamReady() {
+    console.log('Modal stream ready');
+}
+
+function onModalStreamError(error) {
+    console.error('Modal stream error:', error);
 }
 </script>
 
@@ -192,7 +363,7 @@ function closeDialog() {
             <div class="page-header">
                 <div class="flex justify-between items-center">
                     <div class="header-title">
-                        <h1 class="text-3xl font-bold font-poppins">CCTV Surveillance System</h1>
+                        <h1 class="text-3xl font-bold">CCTV Surveillance System</h1>
                         <p class="text-gray-600 dark:text-gray-400">Barangay Sacred Heart</p>
                     </div>
                     
@@ -202,7 +373,7 @@ function closeDialog() {
                             <i class="fas fa-clock mr-2"></i>
                             {{ new Date().toLocaleTimeString() }}
                         </div>
-                        <q-btn color="primary" icon="refresh" label="Refresh" @click="fetchRecentSnapshots" />
+                        <q-btn class="secondary-btn" icon="refresh" label="Refresh" @click="fetchCCTVStreams" />
                     </div>
                 </div>
             </div>
@@ -247,11 +418,45 @@ function closeDialog() {
                 </div>
             </div>
 
-            <!-- CCTV Feeds -->
-            <div class="cctv-grid">
+            <!-- CCTV Grid -->
+            <div class="page-header mb-6">
+                <h2 class="text-2xl font-bold">CCTV Cameras</h2>
+                <div class="header-actions">
+                    <div class="current-time">
+                        <i class="fas fa-clock mr-2"></i>
+                        {{ new Date().toLocaleTimeString() }}
+                    </div>
+                    <q-btn class="secondary-btn" icon="refresh" label="Refresh" @click="fetchCCTVStreams" />
+                </div>
+            </div>
+
+            <!-- Loading indicator -->
+            <div v-if="loading" class="loading-container">
+                <q-spinner color="primary" size="3em" />
+                <p class="mt-2">Loading CCTV streams...</p>
+            </div>
+
+            <!-- Error message -->
+            <div v-else-if="streamError" class="error-container">
+                <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
+                <p class="mb-2">Unable to connect to the stream server at <strong>{{ API_BASE_URL }}</strong>.</p>
+                <p class="mb-2">Using direct m3u8 URL instead: <strong>http://20.195.42.135:8888/ai_cam1/index.m3u8</strong></p>
+                <p class="mb-4">Note: This stream requires authentication (user: user, password: Straysafeteam3)</p>
+                <div class="flex space-x-2">
+                    <q-btn class="secondary-btn" icon="refresh" label="Try Again" @click="fetchCCTVStreams" />
+                    <q-btn class="primary-btn" icon="open_in_new" label="Test Stream in Browser" @click="openStreamInBrowser" />
+                </div>
+            </div>
+
+            <div v-else class="cctv-grid">
                 <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
                     <div class="cctv-feed">
-                        <video v-if="cctv.status === 'Online'" :src="cctv.videoSrc[0]" autoplay loop muted></video>
+                        <StreamPlayer 
+                            v-if="cctv.status === 'Online'" 
+                            :stream-url="cctv.videoSrc[0]"
+                            @stream-ready="onStreamReady(cctv.id)"
+                            @stream-error="onStreamError(cctv.id, $event)"
+                        />
                         <div v-else class="offline-message">
                             <i class="fas fa-video-slash mr-2"></i> Camera Offline
                         </div>
@@ -302,22 +507,67 @@ function closeDialog() {
         <q-card class="cctv-dialog-card">
             <div class="dialog-header">
                 <h2 class="text-xl font-bold">{{ selectedCCTV?.name }}</h2>
-                <q-btn flat round icon="close" @click="closeDialog" />
+                <q-btn flat round icon="close" @click="closeDialog" class="close-btn" />
             </div>
             <div class="dialog-content">
                 <div class="cctv-feed-large">
-                    <video v-if="selectedCCTV?.status === 'Online'" :src="selectedCCTV?.videoSrc[0]" autoplay loop muted></video>
+                    <StreamPlayer 
+                        v-if="selectedCCTV?.status === 'Online'" 
+                        :stream-url="useAIStream ? selectedCCTV?.videoSrc[0] : selectedCCTV?.originalSrc"
+                        @stream-ready="onModalStreamReady"
+                        @stream-error="onModalStreamError"
+                    />
                     <div v-else class="offline-message">
                         <i class="fas fa-video-slash mr-2"></i> Camera Offline
                     </div>
-                </div>
-                <div class="cctv-info-large mt-4">
-                    <div class="text-lg font-bold">{{ selectedCCTV?.name }}</div>
-                    <div class="text-sm text-gray-600 dark:text-gray-400">{{ selectedCCTV?.location }}</div>
-                    <div class="mt-2" :class="selectedCCTV?.status === 'Online' ? 'text-green-500' : 'text-red-500'">
-                        <i :class="selectedCCTV?.status === 'Online' ? 'fas fa-circle' : 'fas fa-circle-xmark'" class="mr-1"></i>
-                        {{ selectedCCTV?.status }}
+                    <div class="feed-overlay">
+                        <div class="feed-timestamp">{{ new Date().toLocaleString() }}</div>
+                        <div class="feed-location">{{ selectedCCTV?.location }}</div>
                     </div>
+                </div>
+                <div class="cctv-info-large">
+                    <div class="camera-details">
+                        <div class="text-lg font-bold mb-2">Camera Details</div>
+                        <div class="detail-item">
+                            <span class="detail-label">Name:</span>
+                            <span class="detail-value">{{ selectedCCTV?.name }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Location:</span>
+                            <span class="detail-value">{{ selectedCCTV?.location }}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Status:</span>
+                            <span class="detail-value" :class="selectedCCTV?.status === 'Online' ? 'text-green-500' : 'text-red-500'">
+                                <i :class="selectedCCTV?.status === 'Online' ? 'fas fa-circle' : 'fas fa-circle-xmark'" class="mr-1"></i>
+                                {{ selectedCCTV?.status }}
+                            </span>
+                        </div>
+                        <div v-if="selectedCCTV?.streamInfo" class="detail-item">
+                            <span class="detail-label">Stream Type:</span>
+                            <span class="detail-value">HLS Stream</span>
+                        </div>
+                    </div>
+                    <div class="camera-stats">
+                        <div class="text-lg font-bold mb-2">Detection Statistics</div>
+                        <div class="stats-item">
+                            <span class="stats-label">Today's Detections:</span>
+                            <span class="stats-value">{{ Math.floor(Math.random() * 20) }}</span>
+                        </div>
+                        <div class="stats-item">
+                            <span class="stats-label">Dogs Detected:</span>
+                            <span class="stats-value">{{ Math.floor(Math.random() * 15) }}</span>
+                        </div>
+                        <div class="stats-item">
+                            <span class="stats-label">Cats Detected:</span>
+                            <span class="stats-value">{{ Math.floor(Math.random() * 10) }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-actions mt-4">
+                    <q-btn class="secondary-btn" icon="notifications" label="Send Alert" />
+                    <q-btn class="primary-btn ml-2" icon="save" label="Save Snapshot" />
+                    <q-btn v-if="selectedCCTV?.originalSrc" class="secondary-btn ml-2" icon="switch_video" label="Toggle AI View" @click="toggleAIView" />
                 </div>
             </div>
         </q-card>

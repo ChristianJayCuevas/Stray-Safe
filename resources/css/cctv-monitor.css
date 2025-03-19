@@ -35,11 +35,13 @@
 .system-time {
     display: flex;
     align-items: center;
-    padding: 8px 16px;
+    padding: 6px 14px;
     border-radius: 8px;
     background-color: var(--btn-secondary-bg);
     color: var(--btn-secondary-text);
     font-size: 0.9rem;
+    height: 36px;
+    min-height: 36px;
 }
 
 .dark-mode .system-time {
@@ -232,26 +234,35 @@
 /* Dialog */
 .cctv-dialog-card {
     background-color: var(--card-bg);
-    border-radius: 10px;
+    border-radius: 12px;
     overflow: hidden;
-    max-width: 90vw;
+    width: 70vw;
+    max-width: 1400px;
     max-height: 90vh;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
 }
 
 .dark-mode .cctv-dialog-card {
     background-color: var(--dark-card-bg);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
 .dialog-header {
-    padding: 15px 20px;
+    padding: 18px 24px;
     border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background-color: rgba(79, 102, 66, 0.1);
+}
+
+.dark-mode .dialog-header {
+    background-color: rgba(59, 130, 246, 0.1);
 }
 
 .dialog-content {
-    padding: 20px;
+    padding: 24px;
 }
 
 .cctv-feed-large {
@@ -260,11 +271,117 @@
     background-color: #000;
     position: relative;
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .cctv-info-large {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.camera-details, .camera-stats {
+    background-color: rgba(79, 102, 66, 0.05);
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .camera-details, .dark-mode .camera-stats {
+    background-color: rgba(59, 130, 246, 0.05);
+}
+
+.detail-item, .stats-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .detail-item, .dark-mode .stats-item {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.detail-item:last-child, .stats-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.detail-label, .stats-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.detail-value, .stats-value {
+    font-weight: 600;
+}
+
+.offline-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #ff5252;
+    font-size: 1.2rem;
+    font-weight: 500;
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.feed-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 10px 16px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0));
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.feed-timestamp {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.feed-location {
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 4px 8px;
+    background-color: rgba(79, 102, 66, 0.8);
+    border-radius: 4px;
+}
+
+.dark-mode .feed-location {
+    background-color: rgba(59, 130, 246, 0.8);
+}
+
+.close-btn {
+    transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+    background-color: rgba(255, 0, 0, 0.1);
+    color: #ff5252;
+}
+
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
     margin-top: 20px;
+}
+
+.ml-2 {
+    margin-left: 0.5rem;
+}
+
+.mt-4 {
+    margin-top: 1rem;
 }
 
 /* Theme Card */
