@@ -25,8 +25,10 @@ const loading = ref(true);
 const streamError = ref(false);
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://20.195.42.135:5000'; // VPS server IP and port
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://YOUR_VPS_IP:5000'; // Replace with your VPS IP
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://YOUR_VPS_IP:5000'; // Flask server URL
 console.log('Using API base URL:', API_BASE_URL);
+console.log('Using Flask server URL:', FLASK_SERVER_URL);
 
 // Check if HLS.js is available
 const hlsAvailable = ref(Hls.isSupported());
@@ -52,8 +54,8 @@ async function fetchCCTVStreams() {
     streamError.value = false;
     
     try {
-        console.log('Fetching CCTV streams from API...');
-        const response = await axios.get(`${API_BASE_URL}/api/streams`, {
+        console.log('Fetching CCTV streams from Flask server...');
+        const response = await axios.get(`${FLASK_SERVER_URL}/streams`, {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -61,18 +63,18 @@ async function fetchCCTVStreams() {
             timeout: 10000 // 10 second timeout
         });
         
-        console.log('API response:', response.data);
+        console.log('Flask API response:', response.data);
         
-        if (response.data && Array.isArray(response.data)) {
-            // Transform API data to match our CCTV data structure
-            cctvs.value = response.data.map((stream, index) => {
+        if (response.data && response.data.streams && Array.isArray(response.data.streams)) {
+            // Transform Flask API data to match our CCTV data structure
+            cctvs.value = response.data.streams.map((stream, index) => {
                 return {
-                    id: index + 1,
-                    name: stream.name,
-                    location: `Camera ${index + 1}`,
-                    status: stream.status === 'active' ? 'Online' : 'Offline',
-                    videoSrc: [stream.urls.ai_processed.hls], // Use AI processed HLS stream
-                    originalSrc: stream.urls.original.hls,    // Store original stream URL
+                    id: stream.id || (index + 1),
+                    name: stream.name || `Camera ${index + 1}`,
+                    location: stream.location || `Location ${index + 1}`,
+                    status: 'Online',
+                    videoSrc: [`${FLASK_SERVER_URL}/video/${stream.id}`], // Use Flask video endpoint
+                    originalSrc: `${FLASK_SERVER_URL}/video/${stream.id}`,
                     streamInfo: stream
                 };
             });
@@ -80,19 +82,19 @@ async function fetchCCTVStreams() {
             // Update system stats
             systemStats.value = {
                 totalCameras: cctvs.value.length,
-                onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
+                onlineCameras: cctvs.value.length, // Assuming all streams from Flask are online
                 detectionsToday: Math.floor(Math.random() * 30), // This would come from the API in a real implementation
                 storageUsed: '1.2 TB' // This would come from the API in a real implementation
             };
         } else {
-            console.warn('No streams found in API response or invalid format, using direct m3u8 URL');
-            // If no streams are available, use sample data with direct m3u8 URL
+            console.warn('No streams found in Flask API response or invalid format, using sample data');
+            // If no streams are available, use sample data
             useSampleData();
             streamError.value = true;
         }
     } catch (error) {
-        console.error("Failed to fetch CCTV streams:", error);
-        console.log("Using direct m3u8 URL instead");
+        console.error("Failed to fetch CCTV streams from Flask server:", error);
+        console.log("Using sample data instead");
         useSampleData();
         streamError.value = true;
     } finally {
