@@ -123,8 +123,10 @@ export default {
 
     // Function to initialize HLS player
     const initializeHls = (url) => {
-      // Ensure URL uses same protocol as website
-      const secureUrl = url.replace('http:', window.location.protocol);
+      // Only replace protocol with HTTPS if it's not a local URL
+      const secureUrl = url.includes('localhost') || url.includes('127.0.0.1') 
+          ? url 
+          : url.replace('http:', window.location.protocol);
       
       // Check if we should use an existing HLS instance
       if (props.useExistingInstance && props.streamId && activeHlsInstances.value[props.streamId]) {

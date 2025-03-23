@@ -35,33 +35,19 @@ const activeStreamInstances = ref({}); // Store active stream instances by ID
 const activeHlsInstances = ref({}); // Store active HLS instances by ID
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000';
 
 // Server URLs - use the ones from new_stream.py
 const SERVER_URLS = [
-    `${window.location.protocol}//${window.location.hostname}:5000`,
-    `${window.location.protocol}//127.0.0.1:5000`,
-    `${window.location.protocol}//localhost:5000`
+    'http://localhost:5000',
+    'http://127.0.0.1:5000'
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
-    const vpsUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
-    
-    try {
-        const response = await axios.get(`${vpsUrl}/health`, {
-            timeout: 3000
-        });
-        if (response.status === 200) {
-            return vpsUrl;
-        }
-    } catch (error) {
-        // Try other URLs if VPS fails
-    }
-    
+    // Try local URLs first
     for (const url of SERVER_URLS) {
-        if (url === vpsUrl) continue;
         try {
             const response = await axios.get(`${url}/health`, {
                 timeout: 2000
@@ -74,7 +60,8 @@ const getBestServerUrl = async () => {
         }
     }
     
-    return vpsUrl;
+    // If no local URLs work, return the first one as default
+    return SERVER_URLS[0];
 };
 
 // Store the active server URL
