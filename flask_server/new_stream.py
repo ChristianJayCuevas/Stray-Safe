@@ -55,6 +55,7 @@ HLS_SEGMENT_DURATION = 4  # Duration of each HLS segment in seconds
 # Directory for HLS files
 HLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hls_streams')
 os.makedirs(HLS_DIR, exist_ok=True)
+logger.info(f"HLS directory created at: {HLS_DIR}")
 
 # Setup CUDA if available
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -144,11 +145,27 @@ class RTSPStream:
     
     def _start_ffmpeg(self):
         """Start ffmpeg process for HLS streaming"""
-        # Create the HLS directory if it doesn't exist
+        # Ensure HLS directory exists
         os.makedirs(self.hls_path, exist_ok=True)
+        logger.info(f"HLS path for stream {self.stream_id}: {self.hls_path}")
         
-        # Path to the HLS playlist and segments
+        # Clean up any existing files to avoid conflicts
+        for file in glob.glob(os.path.join(self.hls_path, '*.ts')):
+            try:
+                os.remove(file)
+                logger.debug(f"Removed old segment file: {file}")
+            except Exception as e:
+                logger.warning(f"Failed to remove old segment file {file}: {str(e)}")
+        
+        # Remove old playlist if it exists
         playlist_path = os.path.join(self.hls_path, 'playlist.m3u8')
+        if os.path.exists(playlist_path):
+            try:
+                os.remove(playlist_path)
+                logger.debug(f"Removed old playlist: {playlist_path}")
+            except Exception as e:
+                logger.warning(f"Failed to remove old playlist {playlist_path}: {str(e)}")
+        
         segment_path = os.path.join(self.hls_path, 'segment_%03d.ts')
         
         # FFmpeg command to create HLS stream
@@ -168,19 +185,37 @@ class RTSPStream:
             '-f', 'hls',
             '-hls_time', str(HLS_SEGMENT_DURATION),
             '-hls_list_size', '10',
-            '-hls_flags', 'delete_segments',
+            '-hls_flags', 'delete_segments+append_list',
             '-hls_segment_filename', segment_path,
+            '-hls_allow_cache', '0',
             playlist_path
         ]
         
         try:
             # Start ffmpeg process
+            logger.info(f"Starting ffmpeg with command: {' '.join(ffmpeg_cmd)}")
             self.ffmpeg_process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stdout=subprocess.PIPE,  # Capture stdout for debugging
+                stderr=subprocess.PIPE,  # Capture stderr for debugging
+                bufsize=10**8  # Use a large buffer
             )
+            
+            # Start a thread to log ffmpeg output for debugging
+            def log_ffmpeg_output():
+                while self.ffmpeg_process and self.ffmpeg_process.poll() is None:
+                    try:
+                        stderr_line = self.ffmpeg_process.stderr.readline().decode('utf-8', errors='ignore').strip()
+                        if stderr_line:
+                            logger.debug(f"FFmpeg [{self.stream_id}]: {stderr_line}")
+                    except Exception as e:
+                        logger.error(f"Error reading ffmpeg output: {str(e)}")
+                        break
+                    time.sleep(0.1)
+            
+            threading.Thread(target=log_ffmpeg_output, daemon=True).start()
+            
             logger.info(f"Started HLS streaming for {self.stream_id}")
             return True
         except Exception as e:
@@ -515,6 +550,9 @@ cleanup_thread.start()
 def hls_stream(stream_id, filename):
     """Serve HLS stream files"""
     stream_dir = os.path.join(HLS_DIR, stream_id)
+    file_path = os.path.join(stream_dir, filename)
+    
+    logger.debug(f"HLS request for {stream_id}/{filename}")
     
     # Check if the stream directory exists
     if not os.path.exists(stream_dir):
@@ -522,6 +560,7 @@ def hls_stream(stream_id, filename):
         if stream_id in active_streams:
             # Stream exists but directory doesn't, create it
             os.makedirs(stream_dir, exist_ok=True)
+            logger.info(f"Created HLS directory for existing stream: {stream_id}")
         else:
             # Try to fetch from external source
             try:
@@ -540,16 +579,31 @@ def hls_stream(stream_id, filename):
                                     # Create the directory
                                     os.makedirs(stream_dir, exist_ok=True)
                                     # Give it a moment to initialize
-                                    time.sleep(1)
+                                    time.sleep(2)
                                     break
                                 except Exception as e:
                                     logger.error(f"Failed to initialize external stream {stream_id}: {str(e)}")
             except Exception as e:
                 logger.error(f"Failed to fetch external stream {stream_id}: {str(e)}")
     
-    # If the directory still doesn't exist or the file doesn't exist, return an error
-    if not os.path.exists(stream_dir) or not os.path.exists(os.path.join(stream_dir, filename)):
-        return jsonify({"error": f"Stream {stream_id} not found or file {filename} not available"}), 404
+    # If the directory still doesn't exist, return an error
+    if not os.path.exists(stream_dir):
+        logger.error(f"HLS directory for stream {stream_id} does not exist")
+        return jsonify({"error": f"Stream {stream_id} not found"}), 404
+    
+    # If the file doesn't exist and it's the playlist, wait briefly for it to be created
+    if filename == 'playlist.m3u8' and not os.path.exists(file_path):
+        logger.warning(f"Playlist for stream {stream_id} not found, waiting...")
+        # Wait for a short time for the playlist to be created
+        for _ in range(10):  # Try for up to 1 second
+            time.sleep(0.1)
+            if os.path.exists(file_path):
+                break
+    
+    # If the file still doesn't exist, return an error
+    if not os.path.exists(file_path):
+        logger.error(f"HLS file not found: {file_path}")
+        return jsonify({"error": f"File {filename} not available for stream {stream_id}"}), 404
     
     # Add CORS headers
     response = send_from_directory(stream_dir, filename)
@@ -578,25 +632,21 @@ def video(stream_id):
         # Try to fetch from external source if not in our active streams
         try:
             # Use internal flag to prevent recursion
-            external_response = requests.get(f"{EXTERNAL_STREAMS_API}?internal=true", timeout=3)
+            external_url = f"{EXTERNAL_STREAMS_API}?internal=true"
+            external_response = requests.get(external_url, timeout=3)
             if external_response.status_code == 200:
                 external_data = external_response.json()
                 if 'streams' in external_data and isinstance(external_data['streams'], list):
+                    # Add external streams to our list
                     for ext_stream in external_data['streams']:
-                        if ext_stream['id'] == stream_id and 'url' in ext_stream and ext_stream['url'].startswith('rtsp://'):
-                            # Create a new stream instance
-                            try:
-                                new_stream = RTSPStream(ext_stream['url'], stream_id)
-                                new_stream.start()
-                                active_streams[stream_id] = new_stream
-                                logger.info(f"Added external stream on-demand: {stream_id}")
-                                # Give it a moment to initialize
-                                time.sleep(0.5)
-                                break
-                            except Exception as e:
-                                logger.error(f"Failed to initialize external stream {stream_id}: {str(e)}")
+                        # Make sure we don't add duplicates
+                        if not any(s['id'] == ext_stream['id'] for s in active_streams):
+                            # Add HLS URL if not present
+                            if 'hls_url' not in ext_stream:
+                                ext_stream['hls_url'] = f"/hls/{ext_stream['id']}/playlist.m3u8"
+                            active_streams[ext_stream['id']] = ext_stream
         except Exception as e:
-            logger.error(f"Failed to fetch external stream {stream_id}: {str(e)}")
+            logger.error(f"Failed to fetch external streams: {str(e)}")
             
     # If stream still doesn't exist, return an error
     if stream_id not in active_streams:
@@ -632,43 +682,85 @@ def video(stream_id):
 
 @app.route('/streams', methods=['GET'])
 def get_streams():
-    """Get available streams"""
-    streams = []
-    
-    # Check if this is an internal request to prevent recursion
+    """Get list of available streams"""
+    # Check if we're being called from the internal API
     is_internal = request.args.get('internal', 'false').lower() == 'true'
     
-    # Add local streams
+    # Initialize streams list
+    streams_list = []
+    
+    # Add active streams to the list
     for stream_id, stream in active_streams.items():
-        streams.append({
-            "id": stream_id,
-            "url": stream.rtsp_url,
-            "status": "active" if stream.is_running else "inactive",
-            "video_url": f"/video/{stream_id}",
-            "hls_url": f"/hls/{stream_id}/playlist.m3u8"
-        })
+        if isinstance(stream, RTSPStream):
+            stream_info = {
+                'id': stream_id,
+                'name': f'Camera {stream_id}',
+                'location': 'Main Location',
+                'status': 'active',
+                'url': stream.rtsp_url,
+                'video_url': f'/video/{stream_id}',
+                'hls_url': f'/hls/{stream_id}/playlist.m3u8',
+                'type': 'rtsp'
+            }
+            streams_list.append(stream_info)
     
-    # Only fetch external streams if this is not an internal request
-    if not is_internal and EXTERNAL_STREAMS_API and EXTERNAL_STREAMS_API != f"http://{request.host}/streams":
-        try:
-            # Add the internal flag to prevent recursion
-            external_url = f"{EXTERNAL_STREAMS_API}?internal=true"
-            external_response = requests.get(external_url, timeout=3)
-            if external_response.status_code == 200:
-                external_data = external_response.json()
-                if 'streams' in external_data and isinstance(external_data['streams'], list):
-                    # Add external streams to our list
-                    for ext_stream in external_data['streams']:
-                        # Make sure we don't add duplicates
-                        if not any(s['id'] == ext_stream['id'] for s in streams):
-                            # Add HLS URL if not present
-                            if 'hls_url' not in ext_stream:
-                                ext_stream['hls_url'] = f"/hls/{ext_stream['id']}/playlist.m3u8"
-                            streams.append(ext_stream)
-        except Exception as e:
-            logger.error(f"Failed to fetch external streams: {str(e)}")
+    # If no streams are active, add a default main-camera stream
+    if not streams_list:
+        # Create a default main-camera stream if it doesn't exist
+        if 'main-camera' not in active_streams:
+            try:
+                # Use the default RTSP URL from environment
+                rtsp_url = BASE_RTSP_URL
+                new_stream = RTSPStream(rtsp_url, 'main-camera')
+                new_stream.start()
+                active_streams['main-camera'] = new_stream
+                logger.info(f"Created default main-camera stream with URL: {rtsp_url}")
+                
+                # Add it to the streams list
+                streams_list.append({
+                    'id': 'main-camera',
+                    'name': 'Main Camera',
+                    'location': 'Main Location',
+                    'status': 'active',
+                    'url': rtsp_url,
+                    'video_url': '/video/main-camera',
+                    'hls_url': '/hls/main-camera/playlist.m3u8',
+                    'type': 'rtsp'
+                })
+            except Exception as e:
+                logger.error(f"Failed to create default main-camera stream: {str(e)}")
+                # Add a placeholder for the main camera even if it fails
+                streams_list.append({
+                    'id': 'main-camera',
+                    'name': 'Main Camera',
+                    'location': 'Main Location',
+                    'status': 'inactive',
+                    'url': '',
+                    'video_url': '/video/main-camera',
+                    'hls_url': '/hls/main-camera/playlist.m3u8',
+                    'type': 'rtsp'
+                })
     
-    return jsonify({"streams": streams})
+    # Try to fetch from external source if not in our active streams
+    try:
+        # Use internal flag to prevent recursion
+        external_url = f"{EXTERNAL_STREAMS_API}?internal=true"
+        external_response = requests.get(external_url, timeout=3)
+        if external_response.status_code == 200:
+            external_data = external_response.json()
+            if 'streams' in external_data and isinstance(external_data['streams'], list):
+                # Add external streams to our list
+                for ext_stream in external_data['streams']:
+                    # Make sure we don't add duplicates
+                    if not any(s['id'] == ext_stream['id'] for s in streams_list):
+                        # Add HLS URL if not present
+                        if 'hls_url' not in ext_stream:
+                            ext_stream['hls_url'] = f"/hls/{ext_stream['id']}/playlist.m3u8"
+                        streams_list.append(ext_stream)
+    except Exception as e:
+        logger.error(f"Failed to fetch external streams: {str(e)}")
+    
+    return jsonify({'streams': streams_list})
 
 @app.route('/scan', methods=['GET'])
 def scan_streams():

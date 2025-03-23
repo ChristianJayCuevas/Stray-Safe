@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, inject, computed, watch, nextTick, onUnmounted } from 'vue';
+import { ref, onMounted, inject, computed, watch, nextTick, onUnmounted, provide } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import StreamPlayer from '@/Components/StreamPlayer.vue';
@@ -30,6 +30,10 @@ const selectedCCTV = ref(null);
 const useAIStream = ref(false);
 const modalStreamKey = ref(0); // Key to force StreamPlayer refresh in modal
 
+// Stream synchronization
+const activeStreamInstances = ref({}); // Store active stream instances by ID
+const activeHlsInstances = ref({}); // Store active HLS instances by ID
+
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Local Flask server
 const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000'; // Local Flask server
@@ -38,6 +42,10 @@ console.log('Using Flask server URL:', FLASK_SERVER_URL);
 
 // Check if HLS.js is available
 const hlsAvailable = ref(Hls.isSupported());
+
+// Provide the active stream instances to child components
+provide('activeStreamInstances', activeStreamInstances);
+provide('activeHlsInstances', activeHlsInstances);
 
 // Sync local theme with global theme on mount and when global theme changes
 onMounted(() => {
@@ -52,6 +60,14 @@ onMounted(() => {
 // Clean up when component is unmounted
 onUnmounted(() => {
     console.log('Component unmounted');
+    // Clean up all HLS instances
+    Object.values(activeHlsInstances.value).forEach(hls => {
+        if (hls) {
+            hls.destroy();
+        }
+    });
+    activeHlsInstances.value = {};
+    activeStreamInstances.value = {};
 });
 
 // Function to fetch CCTV streams from the API
@@ -74,10 +90,24 @@ async function fetchCCTVStreams() {
         if (response.data && response.data.streams && Array.isArray(response.data.streams)) {
             // Transform Flask API data to match our CCTV data structure
             cctvs.value = response.data.streams.map((stream, index) => {
-                // Check if HLS URL is available
-                const videoUrl = stream.hls_url ? 
-                    `${FLASK_SERVER_URL}${stream.hls_url}` : 
-                    `${FLASK_SERVER_URL}${stream.video_url}`;
+                // Check if HLS URL is available and construct the full URL
+                let videoUrl;
+                if (stream.hls_url) {
+                    // Make sure the HLS URL is absolute
+                    videoUrl = stream.hls_url.startsWith('http') 
+                        ? stream.hls_url 
+                        : `${FLASK_SERVER_URL}${stream.hls_url}`;
+                } else if (stream.video_url) {
+                    // Use video URL as fallback
+                    videoUrl = stream.video_url.startsWith('http')
+                        ? stream.video_url
+                        : `${FLASK_SERVER_URL}${stream.video_url}`;
+                } else {
+                    // Default fallback
+                    videoUrl = `${FLASK_SERVER_URL}/video/${stream.id || 'main-camera'}`;
+                }
+                
+                console.log(`Stream ${stream.id}: Using video URL: ${videoUrl}`);
                 
                 return {
                     id: stream.id || (index + 1),
@@ -119,65 +149,88 @@ function useSampleData() {
     console.log('Using sample CCTV data');
     
     // Create sample data with the proxied stream URL
-    const proxiedStreamUrl = '/stream/ai_cam1/index.m3u8';
+    const sampleHlsUrl = `${FLASK_SERVER_URL}/hls/main-camera/playlist.m3u8`;
+    console.log('Using sample HLS URL:', sampleHlsUrl);
     
     cctvs.value = [
         {
-            id: 1,
-            name: 'CCTV 1',
-            location: 'Main Entrance',
+            id: 'main-camera',
+            name: 'Main Camera',
+            location: 'Main Gate',
             status: 'Online',
-            videoSrc: [proxiedStreamUrl],
-            originalSrc: proxiedStreamUrl,
-            lastDetection: new Date().toLocaleString(),
-            snapshots: [
-                { url: 'https://via.placeholder.com/300x200?text=Dog+Detection', timestamp: '2023-10-15 14:30:45', label: 'Stray Dog' },
-            ]
-        },
-        {
-            id: 2,
-            name: 'CCTV 2',
-            location: 'Back Alley',
-            status: 'Online',
-            videoSrc: [proxiedStreamUrl],
-            originalSrc: proxiedStreamUrl,
-            lastDetection: new Date().toLocaleString(),
-            snapshots: []
-        },
-        {
-            id: 3,
-            name: 'CCTV 3',
-            location: 'Side Street',
-            status: 'Offline',
-            videoSrc: [],
-            originalSrc: '',
-            lastDetection: 'N/A',
-            snapshots: []
-        },
-        {
-            id: 4,
-            name: 'CCTV 4',
-            location: 'Park Entrance',
-            status: 'Online',
-            videoSrc: [proxiedStreamUrl],
-            originalSrc: proxiedStreamUrl,
-            lastDetection: new Date().toLocaleString(),
-            snapshots: [
-                { url: 'https://via.placeholder.com/300x200?text=Dog+Detection', timestamp: '2023-10-14 09:45:12', label: 'Stray Dog' }
-            ]
+            videoSrc: [sampleHlsUrl],
+            originalSrc: 'rtsp://ADMIN:12345@192.168.1.5:554/cam/realmonitor?channel=2&subtype=0',
+            isHls: true
         }
     ];
     
-    // Calculate total pages
-    totalPages.value = Math.ceil(cctvs.value.length / pagination.value.itemsPerPage);
-    
     // Update system stats with sample data
     systemStats.value = {
-        totalCameras: cctvs.value.length,
-        onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
-        detectionsToday: 8,
+        totalCameras: 1,
+        onlineCameras: 1,
+        detectionsToday: 5,
         storageUsed: '1.2 TB'
     };
+}
+
+// Function to open the dialog for a specific CCTV
+function openDialog(cctv) {
+    selectedCCTV.value = { ...cctv }; // Create a copy to avoid reference issues
+    useAIStream.value = false; // Start with regular stream
+    dialogVisible.value = true;
+    
+    console.log(`Opening modal for stream ${cctv.id}`);
+}
+
+// Function to close the dialog
+function closeDialog() {
+    dialogVisible.value = false;
+    // Don't set selectedCCTV to null immediately to prevent stream interruption
+    // This allows the stream to continue in the background
+    // selectedCCTV.value = null;
+}
+
+// Toggle between AI and regular stream view
+function toggleAIView() {
+    useAIStream.value = !useAIStream.value;
+    modalStreamKey.value++; // Force StreamPlayer to reinitialize when toggling
+}
+
+// Stream event handlers
+function onStreamReady(id) {
+    console.log(`Stream ${id} is ready`);
+    // Update the CCTV status if needed
+    const cctv = cctvs.value.find(c => c.id === id);
+    if (cctv) {
+        cctv.status = 'Online';
+    }
+}
+
+function onStreamError(id, error) {
+    console.error(`Stream ${id} error:`, error);
+    // Update the CCTV status if needed
+    const cctv = cctvs.value.find(c => c.id === id);
+    if (cctv) {
+        cctv.streamError = error;
+    }
+}
+
+// Stream event handlers for modal
+function onModalStreamReady() {
+    console.log('Modal stream is ready');
+}
+
+function onModalStreamError(error) {
+    console.error('Modal stream error:', error);
+}
+
+// Register a stream instance
+function registerStreamInstance(id, videoElement, hlsInstance) {
+    console.log(`Registering stream instance for ${id}`);
+    activeStreamInstances.value[id] = videoElement;
+    if (hlsInstance) {
+        activeHlsInstances.value[id] = hlsInstance;
+    }
 }
 
 // Pagination settings
@@ -252,49 +305,6 @@ const groupedSnapshots = computed(() => {
         return result;
     }, []);
 });
-
-function openDialog(cctv) {
-    selectedCCTV.value = { ...cctv }; // Create a copy to avoid reference issues
-    useAIStream.value = false; // Start with regular stream
-    dialogVisible.value = true;
-    modalStreamKey.value++; // Force StreamPlayer to reinitialize in modal
-}
-
-function closeDialog() {
-    dialogVisible.value = false;
-    selectedCCTV.value = null;
-}
-
-function toggleAIView() {
-    useAIStream.value = !useAIStream.value;
-    modalStreamKey.value++; // Force StreamPlayer to reinitialize when toggling
-}
-
-function onStreamReady(id) {
-    console.log(`Stream ${id} is ready`);
-    // Update the CCTV status if needed
-    const cctv = cctvs.value.find(c => c.id === id);
-    if (cctv) {
-        cctv.status = 'Online';
-    }
-}
-
-function onStreamError(id, error) {
-    console.error(`Stream ${id} error:`, error);
-    // Update the CCTV status if needed
-    const cctv = cctvs.value.find(c => c.id === id);
-    if (cctv) {
-        cctv.streamError = error;
-    }
-}
-
-function onModalStreamReady() {
-    console.log('Modal stream is ready');
-}
-
-function onModalStreamError(error) {
-    console.error('Modal stream error:', error);
-}
 
 async function fetchRecentSnapshots() {
     try {
@@ -425,10 +435,13 @@ function openStreamInBrowser() {
                         <StreamPlayer 
                             v-if="cctv.status === 'Online'" 
                             :stream-url="cctv.videoSrc[0]"
+                            :stream-id="cctv.id"
                             :autoplay="true"
                             :muted="true"
+                            :register-instance="true"
                             @stream-ready="onStreamReady(cctv.id)"
                             @stream-error="onStreamError(cctv.id, $event)"
+                            @register-instance="registerStreamInstance"
                         />
                         <div v-else class="offline-feed">
                             <i class="fas fa-video-slash"></i>
@@ -492,8 +505,10 @@ function openStreamInBrowser() {
                         v-if="selectedCCTV && selectedCCTV.status === 'Online'"
                         :key="modalStreamKey"
                         :stream-url="selectedCCTV ? selectedCCTV.videoSrc[0] : ''"
+                        :stream-id="selectedCCTV ? selectedCCTV.id : ''"
                         :autoplay="true"
                         :muted="true"
+                        :use-existing-instance="true"
                         @stream-ready="onModalStreamReady"
                         @stream-error="onModalStreamError"
                     />
