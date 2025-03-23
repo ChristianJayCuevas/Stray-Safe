@@ -24,9 +24,15 @@ const cctvs = ref([]);
 const loading = ref(true);
 const streamError = ref(false);
 
+// Dialog state
+const dialogVisible = ref(false);
+const selectedCCTV = ref(null);
+const useAIStream = ref(false);
+const modalStreamKey = ref(0); // Key to force StreamPlayer refresh in modal
+
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://YOUR_VPS_IP:5000'; // Replace with your VPS IP
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://YOUR_VPS_IP:5000'; // Flask server URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Local Flask server
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://192.168.1.24:5000'; // Updated Flask server URL
 console.log('Using API base URL:', API_BASE_URL);
 console.log('Using Flask server URL:', FLASK_SERVER_URL);
 
@@ -68,21 +74,27 @@ async function fetchCCTVStreams() {
         if (response.data && response.data.streams && Array.isArray(response.data.streams)) {
             // Transform Flask API data to match our CCTV data structure
             cctvs.value = response.data.streams.map((stream, index) => {
+                // Check if HLS URL is available
+                const videoUrl = stream.hls_url ? 
+                    `${FLASK_SERVER_URL}${stream.hls_url}` : 
+                    `${FLASK_SERVER_URL}${stream.video_url}`;
+                
                 return {
                     id: stream.id || (index + 1),
                     name: stream.name || `Camera ${index + 1}`,
                     location: stream.location || `Location ${index + 1}`,
-                    status: 'Online',
-                    videoSrc: [`${FLASK_SERVER_URL}/video/${stream.id}`], // Use Flask video endpoint
-                    originalSrc: `${FLASK_SERVER_URL}/video/${stream.id}`,
-                    streamInfo: stream
+                    status: stream.status === 'active' ? 'Online' : 'Offline',
+                    videoSrc: [videoUrl], // Use HLS URL if available, otherwise fallback to video URL
+                    originalSrc: stream.url, // Store original RTSP URL
+                    streamInfo: stream,
+                    isHls: !!stream.hls_url // Flag to indicate if this is an HLS stream
                 };
             });
             
             // Update system stats
             systemStats.value = {
                 totalCameras: cctvs.value.length,
-                onlineCameras: cctvs.value.length, // Assuming all streams from Flask are online
+                onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
                 detectionsToday: Math.floor(Math.random() * 30), // This would come from the API in a real implementation
                 storageUsed: '1.2 TB' // This would come from the API in a real implementation
             };
@@ -241,16 +253,47 @@ const groupedSnapshots = computed(() => {
     }, []);
 });
 
-const dialogVisible = ref(false);
-const selectedCCTV = ref(null);
-const activeTab = ref('live');
-const useAIStream = ref(true);
-
 function openDialog(cctv) {
-    selectedCCTV.value = cctv;
+    selectedCCTV.value = { ...cctv }; // Create a copy to avoid reference issues
+    useAIStream.value = false; // Start with regular stream
     dialogVisible.value = true;
-    useAIStream.value = true;
-    // No need to manually initialize HLS anymore as the StreamPlayer component handles it
+    modalStreamKey.value++; // Force StreamPlayer to reinitialize in modal
+}
+
+function closeDialog() {
+    dialogVisible.value = false;
+    selectedCCTV.value = null;
+}
+
+function toggleAIView() {
+    useAIStream.value = !useAIStream.value;
+    modalStreamKey.value++; // Force StreamPlayer to reinitialize when toggling
+}
+
+function onStreamReady(id) {
+    console.log(`Stream ${id} is ready`);
+    // Update the CCTV status if needed
+    const cctv = cctvs.value.find(c => c.id === id);
+    if (cctv) {
+        cctv.status = 'Online';
+    }
+}
+
+function onStreamError(id, error) {
+    console.error(`Stream ${id} error:`, error);
+    // Update the CCTV status if needed
+    const cctv = cctvs.value.find(c => c.id === id);
+    if (cctv) {
+        cctv.streamError = error;
+    }
+}
+
+function onModalStreamReady() {
+    console.log('Modal stream is ready');
+}
+
+function onModalStreamError(error) {
+    console.error('Modal stream error:', error);
 }
 
 async function fetchRecentSnapshots() {
@@ -273,88 +316,14 @@ async function fetchRecentSnapshots() {
     }
 }
 
-// References to active HLS instances
-const hlsInstances = ref({});
-
-// Function to setup HLS stream for a video element
-function setupHlsStream(videoElementId, streamUrl, context = 'grid') {
-    // This function is no longer needed as we're using the StreamPlayer component
-    console.log(`Setup HLS stream function is deprecated. Using StreamPlayer component instead.`);
-}
-
-// Function to initialize HLS video player
-function initHlsPlayer(videoElement, streamUrl) {
-    // This function is no longer needed as we're using the StreamPlayer component
-    console.log(`Init HLS player function is deprecated. Using StreamPlayer component instead.`);
-}
-
-function toggleAIView() {
-    useAIStream.value = !useAIStream.value;
-    console.log(`Switched to ${useAIStream.value ? 'AI' : 'original'} stream`);
-    // The StreamPlayer component will automatically update when the stream-url prop changes
-}
-
-// Notification sending component state
-const notificationTitle = ref('');
-const notificationBody = ref('');
-const notificationResponse = ref('');
-
-async function sendMockNotification() {
-    try {
-        const response = await axios.post(
-            'https://straysafe.me/api/send-notification',
-            {
-                title: notificationTitle.value,
-                body: notificationBody.value,
-            },
-            {
-                headers: {
-                    Authorization: `Bearer StraySafeTeam3`, // Replace with your valid token
-                },
-            }
-        );
-
-        notificationResponse.value = `Notification sent successfully: ${response.data.message}`;
-        notificationTitle.value = '';
-        notificationBody.value = '';
-    } catch (error) {
-        console.error('Failed to send notification:', error);
-        notificationResponse.value = 'Failed to send notification. Check console for details.';
-    }
-}
-
-// Function to change pagination page
 function changePage(newPage) {
     if (newPage > 0 && newPage <= pagination.value.totalPages) {
         pagination.value.page = newPage;
     }
 }
 
-function closeDialog() {
-    // No need to clean up HLS instances anymore as the StreamPlayer component handles it
-    dialogVisible.value = false;
-    selectedCCTV.value = null;
-}
-
-// Function to open the stream in a new browser tab
 function openStreamInBrowser() {
     window.open('http://20.195.42.135:8888/ai_cam1/index.m3u8', '_blank');
-}
-
-function onStreamReady(id) {
-    console.log(`Stream ready for CCTV ${id}`);
-}
-
-function onStreamError(id, error) {
-    console.error(`Stream error for CCTV ${id}:`, error);
-}
-
-function onModalStreamReady() {
-    console.log('Modal stream ready');
-}
-
-function onModalStreamError(error) {
-    console.error('Modal stream error:', error);
 }
 </script>
 
@@ -456,11 +425,14 @@ function onModalStreamError(error) {
                         <StreamPlayer 
                             v-if="cctv.status === 'Online'" 
                             :stream-url="cctv.videoSrc[0]"
+                            :autoplay="true"
+                            :muted="true"
                             @stream-ready="onStreamReady(cctv.id)"
                             @stream-error="onStreamError(cctv.id, $event)"
                         />
-                        <div v-else class="offline-message">
-                            <i class="fas fa-video-slash mr-2"></i> Camera Offline
+                        <div v-else class="offline-feed">
+                            <i class="fas fa-video-slash"></i>
+                            <p>Camera Offline</p>
                         </div>
                     </div>
                     <div class="cctv-info">
@@ -507,24 +479,27 @@ function onModalStreamError(error) {
     <!-- CCTV Detail Dialog -->
     <q-dialog v-model="dialogVisible" backdrop-filter="blur(4px) saturate(150%)">
         <q-card class="cctv-dialog-card">
-            <div class="dialog-header">
-                <h2 class="text-xl font-bold">{{ selectedCCTV?.name }}</h2>
-                <q-btn flat round icon="close" @click="closeDialog" class="close-btn" />
-            </div>
-            <div class="dialog-content">
-                <div class="cctv-feed-large">
+            <q-card-section class="dialog-header">
+                <div class="flex justify-between items-center">
+                    <h2 class="dialog-title">{{ selectedCCTV ? selectedCCTV.name : 'Camera Feed' }}</h2>
+                    <q-btn flat round icon="close" @click="closeDialog" />
+                </div>
+            </q-card-section>
+            
+            <q-card-section class="dialog-content">
+                <div class="dialog-video-container">
                     <StreamPlayer 
-                        v-if="selectedCCTV?.status === 'Online'" 
-                        :stream-url="useAIStream ? selectedCCTV?.videoSrc[0] : selectedCCTV?.originalSrc"
+                        v-if="selectedCCTV && selectedCCTV.status === 'Online'"
+                        :key="modalStreamKey"
+                        :stream-url="selectedCCTV ? selectedCCTV.videoSrc[0] : ''"
+                        :autoplay="true"
+                        :muted="true"
                         @stream-ready="onModalStreamReady"
                         @stream-error="onModalStreamError"
                     />
-                    <div v-else class="offline-message">
-                        <i class="fas fa-video-slash mr-2"></i> Camera Offline
-                    </div>
-                    <div class="feed-overlay">
-                        <div class="feed-timestamp">{{ new Date().toLocaleString() }}</div>
-                        <div class="feed-location">{{ selectedCCTV?.location }}</div>
+                    <div v-else-if="selectedCCTV && selectedCCTV.status === 'Offline'" class="offline-feed">
+                        <i class="fas fa-video-slash"></i>
+                        <p>Camera Offline</p>
                     </div>
                 </div>
                 <div class="cctv-info-large">
@@ -532,20 +507,20 @@ function onModalStreamError(error) {
                         <div class="text-lg font-bold mb-2">Camera Details</div>
                         <div class="detail-item">
                             <span class="detail-label">Name:</span>
-                            <span class="detail-value">{{ selectedCCTV?.name }}</span>
+                            <span class="detail-value">{{ selectedCCTV ? selectedCCTV.name : '' }}</span>
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Location:</span>
-                            <span class="detail-value">{{ selectedCCTV?.location }}</span>
+                            <span class="detail-value">{{ selectedCCTV ? selectedCCTV.location : '' }}</span>
                         </div>
                         <div class="detail-item">
                             <span class="detail-label">Status:</span>
-                            <span class="detail-value" :class="selectedCCTV?.status === 'Online' ? 'text-green-500' : 'text-red-500'">
-                                <i :class="selectedCCTV?.status === 'Online' ? 'fas fa-circle' : 'fas fa-circle-xmark'" class="mr-1"></i>
-                                {{ selectedCCTV?.status }}
+                            <span class="detail-value" :class="selectedCCTV ? (selectedCCTV.status === 'Online' ? 'text-green-500' : 'text-red-500') : ''">
+                                <i :class="selectedCCTV ? (selectedCCTV.status === 'Online' ? 'fas fa-circle' : 'fas fa-circle-xmark') : ''" class="mr-1"></i>
+                                {{ selectedCCTV ? selectedCCTV.status : '' }}
                             </span>
                         </div>
-                        <div v-if="selectedCCTV?.streamInfo" class="detail-item">
+                        <div v-if="selectedCCTV && selectedCCTV.streamInfo" class="detail-item">
                             <span class="detail-label">Stream Type:</span>
                             <span class="detail-value">HLS Stream</span>
                         </div>
@@ -569,9 +544,9 @@ function onModalStreamError(error) {
                 <div class="dialog-actions mt-4">
                     <q-btn class="secondary-btn" icon="notifications" label="Send Alert" />
                     <q-btn class="primary-btn ml-2" icon="save" label="Save Snapshot" />
-                    <q-btn v-if="selectedCCTV?.originalSrc" class="secondary-btn ml-2" icon="switch_video" label="Toggle AI View" @click="toggleAIView" />
+                    <q-btn v-if="selectedCCTV && selectedCCTV.originalSrc" class="secondary-btn ml-2" icon="switch_video" label="Toggle AI View" @click="toggleAIView" />
                 </div>
-            </div>
+            </q-card-section>
         </q-card>
     </q-dialog>
 </template>

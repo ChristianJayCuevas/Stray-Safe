@@ -21,6 +21,7 @@
         </button>
       </div>
     </div>
+    <!-- Use video element for all streams -->
     <video 
       ref="videoElement" 
       class="stream-video" 
@@ -33,8 +34,9 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import Hls from 'hls.js';
+import axios from 'axios';
 
 export default {
   name: 'StreamPlayer',
@@ -66,239 +68,186 @@ export default {
     const hls = ref(null);
     const loading = ref(true);
     const error = ref(null);
+    
+    // Check if the stream is a Flask video stream
+    const isFlaskVideoStream = computed(() => {
+      return props.streamUrl.includes('/video/') && 
+             (props.streamUrl.includes('localhost:5000') || 
+              props.streamUrl.includes('127.0.0.1:5000') || 
+              props.streamUrl.includes('192.168.1.24:5000'));
+    });
 
-    // Function to get proxied stream URL
-    const getProxiedUrl = (url) => {
-      // Check if this is already a local URL
-      if (url.includes('/stream/')) {
-        return url;
+    // Check if the stream is an HLS stream
+    const isHlsStream = computed(() => {
+      return props.streamUrl.includes('.m3u8') || props.streamUrl.includes('/hls/');
+    });
+
+    // Function to get HLS URL from video endpoint
+    const getHlsUrl = async (videoUrl) => {
+      try {
+        const response = await axios.get(videoUrl);
+        if (response.data && response.data.hls_url) {
+          // Convert relative URL to absolute URL if needed
+          let hlsUrl = response.data.hls_url;
+          if (hlsUrl.startsWith('/')) {
+            const baseUrl = new URL(videoUrl);
+            hlsUrl = `${baseUrl.protocol}//${baseUrl.host}${hlsUrl}`;
+          }
+          return hlsUrl;
+        }
+        throw new Error('No HLS URL found in response');
+      } catch (err) {
+        console.error('Error getting HLS URL:', err);
+        throw err;
       }
-      
-      // Convert external URL to our proxy URL
-      // Example: http://20.195.42.135:8888/ai_cam1/index.m3u8 -> /stream/ai_cam1/index.m3u8
-      const urlParts = url.split('://');
-      if (urlParts.length < 2) return url;
-      
-      const hostAndPath = urlParts[1].split('/');
-      if (hostAndPath.length < 2) return url;
-      
-      // Remove the host (e.g., 20.195.42.135:8888) and join the rest
-      const pathParts = hostAndPath.slice(1);
-      return `/stream/${pathParts.join('/')}`;
     };
 
     // Function to initialize HLS player
-    const initializePlayer = () => {
-      loading.value = true;
-      error.value = null;
-
-      if (!videoElement.value) {
-        error.value = 'Video element not found';
-        loading.value = false;
-        emit('stream-error', error.value);
-        return;
-      }
-
+    const initializeHls = (url) => {
       // Clean up existing HLS instance if any
       if (hls.value) {
         hls.value.destroy();
         hls.value = null;
       }
       
-      // Get the proxied URL
-      const proxiedUrl = getProxiedUrl(props.streamUrl);
-      console.log(`Using authenticated URL: ${proxiedUrl}`);
-      
-      // Also log authentication details for debugging
-      console.log(`Authentication: username=${props.username}, password=${props.password}`);
-
       // Check if HLS.js is supported
-      if (!Hls.isSupported()) {
-        // Try native playback with authentication
-        if (videoElement.value.canPlayType('application/vnd.apple.mpegurl')) {
-          videoElement.value.src = proxiedUrl;
+      if (Hls.isSupported()) {
+        console.log('Using HLS.js for stream:', url);
+        hls.value = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 90
+        });
+        
+        hls.value.attachMedia(videoElement.value);
+        hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
+          console.log('HLS media attached');
+          hls.value.loadSource(url);
           
-          videoElement.value.addEventListener('loadedmetadata', () => {
+          hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
+            console.log('HLS manifest parsed');
+            videoElement.value.play().catch(e => {
+              console.warn('Auto-play failed:', e);
+              // Some browsers require user interaction before playing
+            });
             loading.value = false;
             emit('stream-ready');
           });
-          
-          videoElement.value.addEventListener('error', (e) => {
-            error.value = `Native playback error: ${e.message || 'Authentication failed or stream not available'}`;
-            loading.value = false;
-            emit('stream-error', error.value);
-          });
-        } else {
-          error.value = 'HLS is not supported in this browser';
-          loading.value = false;
-          emit('stream-error', error.value);
-        }
-        return;
-      }
-
-      // Configure HLS.js
-      const hlsConfig = {
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 90,
-        // No need for authentication headers as our proxy handles that
-      };
-
-      try {
-        // Create HLS instance
-        hls.value = new Hls(hlsConfig);
-
-        // Bind events
-        hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
-          console.log('HLS: Media attached');
         });
-
-        hls.value.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-          console.log(`HLS: Manifest parsed, found ${data.levels.length} quality levels`);
-          loading.value = false;
-          emit('stream-ready');
-        });
-
+        
         hls.value.on(Hls.Events.ERROR, (event, data) => {
-          console.log('HLS error:', data);
-          
-          // Log more detailed error information
-          if (data.details) {
-            console.log(`HLS error details: ${data.details}`);
-          }
-          
-          if (data.response) {
-            console.log(`HLS response: status=${data.response.code}, url=${data.response.url}`);
-          }
-          
-          if (data.error) {
-            console.log(`HLS error message: ${data.error.message}`);
-            console.log(`HLS error stack: ${data.error.stack}`);
-          }
-          
-          if (data.type === 'networkError') {
-            console.log('HLS network error, trying to recover');
-            
-            // For network errors, try a different authentication approach
-            if (data.details === 'manifestLoadError' && data.response && data.response.code === 401) {
-              console.log('Authentication failed, trying alternative method');
-              
-              // Try with a different authentication method
-              const alternativeUrl = props.streamUrl.replace('http://', 'http://');
-              hls.value.loadSource(alternativeUrl);
-              
-              // Also try with explicit headers
-              const authString = `${props.username}:${props.password}`;
-              const encodedAuth = btoa(authString);
-              console.log(`Using Basic Auth header: ${encodedAuth}`);
-            }
-          }
-          
           if (data.fatal) {
-            switch(data.type) {
+            console.error('Fatal HLS error:', data);
+            switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                console.error('HLS network error, trying to recover');
+                console.log('Network error, trying to recover...');
                 hls.value.startLoad();
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
-                console.error('HLS media error, trying to recover');
+                console.log('Media error, trying to recover...');
                 hls.value.recoverMediaError();
                 break;
               default:
-                console.error('HLS fatal error, cannot recover');
-                error.value = `Stream error: ${data.details}. This may be due to authentication failure or the stream is not available.`;
-                loading.value = false;
+                error.value = `HLS playback error: ${data.details}`;
                 emit('stream-error', error.value);
                 break;
             }
           }
         });
-
-        // Load source and attach media
-        hls.value.loadSource(proxiedUrl);
-        hls.value.attachMedia(videoElement.value);
-      } catch (e) {
-        error.value = `Failed to initialize player: ${e.message}`;
-        loading.value = false;
+      } else if (videoElement.value.canPlayType('application/vnd.apple.mpegurl')) {
+        // For Safari and iOS devices which have built-in HLS support
+        console.log('Using native HLS support for stream:', url);
+        videoElement.value.src = url;
+        videoElement.value.addEventListener('loadedmetadata', () => {
+          videoElement.value.play().catch(e => {
+            console.warn('Auto-play failed:', e);
+          });
+          loading.value = false;
+          emit('stream-ready');
+        });
+        
+        videoElement.value.addEventListener('error', () => {
+          error.value = 'Error loading video stream';
+          emit('stream-error', error.value);
+        });
+      } else {
+        error.value = 'HLS is not supported in this browser';
         emit('stream-error', error.value);
       }
     };
 
-    // Function to retry connection
-    const retryConnection = () => {
-      console.log('Retrying stream connection...');
-      initializePlayer();
+    // Function to initialize player
+    const initializePlayer = async () => {
+      loading.value = true;
+      error.value = null;
+
+      try {
+        if (isFlaskVideoStream.value) {
+          console.log('Flask video stream detected, fetching HLS URL');
+          const hlsUrl = await getHlsUrl(props.streamUrl);
+          console.log('Using HLS URL:', hlsUrl);
+          initializeHls(hlsUrl);
+        } else if (isHlsStream.value) {
+          console.log('Direct HLS stream detected');
+          initializeHls(props.streamUrl);
+        } else {
+          // For direct video streams (not HLS)
+          console.log('Direct video stream detected');
+          videoElement.value.src = props.streamUrl;
+          videoElement.value.addEventListener('loadedmetadata', () => {
+            videoElement.value.play().catch(e => {
+              console.warn('Auto-play failed:', e);
+            });
+            loading.value = false;
+            emit('stream-ready');
+          });
+          
+          videoElement.value.addEventListener('error', () => {
+            error.value = 'Error loading video stream';
+            emit('stream-error', error.value);
+          });
+        }
+      } catch (err) {
+        console.error('Error initializing player:', err);
+        error.value = `Failed to initialize player: ${err.message}`;
+        emit('stream-error', error.value);
+      }
     };
 
-    // Function to retry with alternative authentication method
+    // Function to retry with alternative method
     const retryWithAlternativeMethod = () => {
-      console.log('Retrying with alternative authentication method...');
       error.value = null;
       loading.value = true;
       
-      // Try different authentication methods
-      const authMethods = [
-        // Method 1: Direct URL with embedded credentials
-        () => {
-          const url = props.streamUrl.replace('http://', `http://${props.username}:${props.password}@`);
-          console.log('Trying method 1: URL with embedded credentials', url);
-          return url;
-        },
-        // Method 2: Direct URL without credentials but with Authorization header
-        () => {
-          console.log('Trying method 2: URL without credentials but with Authorization header');
-          // This is handled in the xhrSetup function
-          return props.streamUrl;
-        },
-        // Method 3: Try with a different format of the URL
-        () => {
-          const url = props.streamUrl.replace('http://', 'http://');
-          console.log('Trying method 3: Alternative URL format', url);
-          return url;
-        }
-      ];
-      
-      // Get the current method index from a data attribute
-      const methodIndex = parseInt(videoElement.value.dataset.methodIndex || '0');
-      const nextMethodIndex = (methodIndex + 1) % authMethods.length;
-      
-      // Store the method index for next retry
-      videoElement.value.dataset.methodIndex = nextMethodIndex.toString();
-      
-      // Get the URL from the next method
-      const url = authMethods[nextMethodIndex]();
-      
-      // Clean up existing HLS instance if any
-      if (hls.value) {
-        hls.value.destroy();
-        hls.value = null;
-      }
-      
-      // Initialize a new HLS instance
-      try {
-        hls.value = new Hls(hlsConfig);
-        
-        // Set up event handlers
-        hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
-          console.log('HLS: Media attached');
-          hls.value.loadSource(url);
+      // Try with a different approach
+      if (isFlaskVideoStream.value || isHlsStream.value) {
+        // If we were using HLS, try direct video
+        const directUrl = props.streamUrl.replace('/video/', '/video/direct/');
+        videoElement.value.src = directUrl;
+        videoElement.value.addEventListener('loadedmetadata', () => {
+          videoElement.value.play().catch(e => {
+            console.warn('Auto-play failed:', e);
+          });
+          loading.value = false;
+          emit('stream-ready');
         });
         
-        // Attach to the video element
-        hls.value.attachMedia(videoElement.value);
-      } catch (e) {
-        error.value = `Failed to initialize player: ${e.message}`;
-        loading.value = false;
-        emit('stream-error', error.value);
+        videoElement.value.addEventListener('error', () => {
+          error.value = 'Error loading video stream with alternative method';
+          emit('stream-error', error.value);
+        });
+      } else {
+        // If we were using direct video, try HLS
+        initializeHls(props.streamUrl.replace('.mp4', '.m3u8'));
       }
     };
 
     // Initialize on mount
     onMounted(() => {
+      console.log('StreamPlayer mounted with URL:', props.streamUrl);
       initializePlayer();
     });
-
+    
     // Clean up on unmount
     onUnmounted(() => {
       if (hls.value) {
@@ -306,17 +255,22 @@ export default {
         hls.value = null;
       }
     });
-
-    // Watch for changes in stream URL
-    watch(() => props.streamUrl, () => {
-      initializePlayer();
+    
+    // Watch for changes to the streamUrl
+    watch(() => props.streamUrl, (newUrl, oldUrl) => {
+      if (newUrl !== oldUrl) {
+        console.log('Stream URL changed, reinitializing player');
+        initializePlayer();
+      }
     });
-
+    
     return {
       videoElement,
       loading,
       error,
-      retryConnection,
+      isFlaskVideoStream,
+      isHlsStream,
+      initializePlayer,
       retryWithAlternativeMethod
     };
   }
@@ -335,11 +289,8 @@ export default {
 .stream-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-}
-
-.hidden {
-  display: none;
+  object-fit: contain;
+  background-color: #000;
 }
 
 .loading-container {
@@ -350,8 +301,8 @@ export default {
   height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   background-color: rgba(0, 0, 0, 0.7);
   color: white;
   z-index: 10;
@@ -372,30 +323,7 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
-.error-container {
-  color: #ff6b6b;
-  text-align: center;
-  padding: 20px;
-}
-
-.error-container i {
-  font-size: 2rem;
-  margin-bottom: 10px;
-}
-
-.retry-button {
-  margin-top: 15px;
-  padding: 8px 16px;
-  background-color: #4a90e2;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
-}
-
-.retry-button:hover {
-  background-color: #3a7bc8;
+.hidden {
+  display: none;
 }
 </style>
