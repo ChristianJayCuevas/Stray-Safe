@@ -1,0 +1,73 @@
+name: AzureDeploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Copy .env
+        run: cp .env.example .env
+
+      - name: Install Composer Dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+      - name: Install Node Dependencies and Build Assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install SSH Key
+        run: |
+          mkdir -p ~/.ssh/
+          chmod 700 ~/.ssh/ # Ensure correct permissions for .ssh directory
+          echo "${{ secrets.AZURE_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa # Ensure correct permissions for the private key file
+          touch ~/.ssh/known_hosts # Make sure the known_hosts file exists
+          ssh-keygen -R "${{ secrets.AZURE_HOST }}" -f ~/.ssh/known_hosts # Remove any existing entries for the host
+          ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.AZURE_HOST }} >> ~/.ssh/known_hosts # Add host key
+          chmod 600 ~/.ssh/known_hosts # Ensure correct permissions for known_hosts file
+          cat ~/.ssh/known_hosts # Debugging: check if host key is added
+
+      - name: Deploy to Azure
+        if: ${{ success() }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AZURE_HOST }}
+          username: ${{ secrets.AZURE_USERNAME }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.AZURE_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            sudo git config --global --add safe.directory /var/www/Stray-Safe
+            cd /var/www/Stray-Safe
+            sudo git pull origin main
+            sudo composer install --no-interaction --prefer-dist --optimize-autoloader
+            sudo php artisan migrate --force
+            sudo php artisan config:cache
+            sudo php artisan route:cache
+            sudo php artisan view:cache
+            sudo systemctl reload nginx
+
+      - name: Copy Build Files to Azure Server
+        run: |
+          ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.AZURE_HOST }} >> ~/.ssh/known_hosts # Ensure host key is present
+          cat ~/.ssh/known_hosts # Debugging: check if host key is added
+          rsync -av -e "ssh -v -o UserKnownHostsFile=~/.ssh/known_hosts -p ${{ secrets.SSH_PORT }}" \
+          --rsync-path="sudo rsync" \
+          ${{ github.workspace }}/public/build/ ${{ secrets.AZURE_USERNAME }}@${{ secrets.AZURE_HOST }}:/var/www/Stray-Safe/public/build/
