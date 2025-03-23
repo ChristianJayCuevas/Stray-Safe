@@ -35,17 +35,17 @@ const activeStreamInstances = ref({}); // Store active stream instances by ID
 const activeHlsInstances = ref({}); // Store active HLS instances by ID
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://straysafe.me:5000';
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'https://straysafe.me:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000';
 
-// Server URLs - use the ones from new_stream.py
+// Server URLs - use localhost
 const SERVER_URLS = [
-    'https://straysafe.me:5000'
+    'http://localhost:5000'
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
-    const serverUrl = 'https://straysafe.me:5000';
+    const serverUrl = 'http://localhost:5000';
     try {
         const response = await axios.get(`${serverUrl}/health`, {
             timeout: 5000
@@ -118,20 +118,18 @@ async function fetchCCTVStreams() {
         
         if (response.data?.streams?.length) {
             cctvs.value = response.data.streams.map((stream, index) => {
-                const streamUrl = stream.hls_url || stream.video_url;
-                const secureUrl = streamUrl.startsWith('http') 
-                    ? streamUrl.replace('http:', window.location.protocol)
-                    : `${activeServerUrl.value}${streamUrl.startsWith('/') ? '' : '/'}${streamUrl}`;
+                // Always use local HLS URL
+                const hlsUrl = `http://localhost:5000/hls/${stream.id}/playlist.m3u8`;
                 
                 return {
                     id: stream.id || (index + 1).toString(),
                     name: stream.name || `Camera ${index + 1}`,
                     location: stream.location || `Location ${index + 1}`,
                     status: stream.status === 'active' ? 'Online' : 'Offline',
-                    videoSrc: [secureUrl],
+                    videoSrc: [hlsUrl],
                     originalSrc: stream.url,
                     streamInfo: stream,
-                    isHls: !!stream.hls_url
+                    isHls: true
                 };
             });
             
@@ -155,7 +153,7 @@ async function fetchCCTVStreams() {
 
 // Function to use sample data when API is unavailable
 function useSampleData() {
-    const sampleHlsUrl = `${activeServerUrl.value}/hls/main-camera/playlist.m3u8`;
+    const sampleHlsUrl = 'http://localhost:5000/hls/main-camera/playlist.m3u8';
     
     cctvs.value = [
         {
@@ -375,7 +373,7 @@ function changePage(newPage) {
 }
 
 function openStreamInBrowser() {
-    window.open('https://straysafe.me:8888/ai_cam1/index.m3u8', '_blank');
+    window.open('http://localhost:5000/hls/main-camera/playlist.m3u8', '_blank');
 }
 </script>
 
@@ -463,7 +461,7 @@ function openStreamInBrowser() {
             <div v-else-if="streamError" class="error-container">
                 <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
                 <p class="mb-2">Unable to connect to the stream server at <strong>{{ activeServerUrl.value }}</strong>.</p>
-                <p class="mb-2">Using direct m3u8 URL instead: <strong>http://straysafe.me:8888/ai_cam1/index.m3u8</strong></p>
+                <p class="mb-2">Using direct m3u8 URL instead: <strong>http://localhost:5000/hls/main-camera/playlist.m3u8</strong></p>
                 <p class="mb-4">Note: This stream requires authentication (user: user, password: Straysafeteam3)</p>
                 <div class="flex space-x-2">
                     <q-btn class="secondary-btn" icon="refresh" label="Try Again" @click="fetchCCTVStreams" />

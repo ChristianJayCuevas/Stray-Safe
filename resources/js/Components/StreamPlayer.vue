@@ -101,9 +101,8 @@ export default {
         }
         
         const streamId = match[1];
-        // Use the same server URL as the video URL
-        const baseUrl = videoUrl.substring(0, videoUrl.indexOf('/video/'));
-        const hlsUrl = `${baseUrl}/hls/${streamId}/playlist.m3u8`;
+        // Always use local HLS URL
+        const hlsUrl = `http://localhost:5000/hls/${streamId}/playlist.m3u8`;
         
         // Verify HLS stream is accessible
         try {
@@ -113,7 +112,7 @@ export default {
           }
         } catch (error) {
           console.warn(`HLS stream not accessible at ${hlsUrl}, falling back to video stream`);
-          return videoUrl;
+          return `http://localhost:5000/video/${streamId}`;
         }
       } catch (err) {
         console.warn('Error getting HLS URL:', err);
@@ -123,10 +122,8 @@ export default {
 
     // Function to initialize HLS player
     const initializeHls = (url) => {
-      // Only replace protocol with HTTPS if it's not our domain
-      const secureUrl = url.includes('straysafe.me') 
-          ? url 
-          : url.replace('http:', window.location.protocol);
+      // Always use local URL without protocol changes
+      const streamUrl = url;
       
       // Check if we should use an existing HLS instance
       if (props.useExistingInstance && props.streamId && activeHlsInstances.value[props.streamId]) {
@@ -158,7 +155,7 @@ export default {
           hls.value.attachMedia(videoElement.value);
           hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
             // Use the same source as the existing stream
-            hls.value.loadSource(secureUrl);
+            hls.value.loadSource(streamUrl);
             
             // Sync with the existing player's time
             const existingVideo = activeStreamInstances.value[props.streamId];
@@ -210,8 +207,8 @@ export default {
         
         hls.value.attachMedia(videoElement.value);
         hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
-          hls.value.loadSource(secureUrl);
-          hls.value.url = secureUrl;
+          hls.value.loadSource(streamUrl);
+          hls.value.url = streamUrl;
           
           hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
             videoElement.value.play().catch(() => {
@@ -264,7 +261,7 @@ export default {
         });
       } else if (videoElement.value.canPlayType('application/vnd.apple.mpegurl')) {
         // For Safari and iOS devices which have built-in HLS support
-        videoElement.value.src = secureUrl;
+        videoElement.value.src = streamUrl;
         videoElement.value.addEventListener('loadedmetadata', () => {
           videoElement.value.play().catch(() => {
             // Autoplay failed, user interaction needed
