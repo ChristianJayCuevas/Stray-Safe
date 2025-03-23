@@ -30,6 +30,12 @@ const selectedCCTV = ref(null);
 const useAIStream = ref(false);
 const modalStreamKey = ref(0); // Key to force StreamPlayer refresh in modal
 
+// Dialog state
+const dialogVisible = ref(false);
+const selectedCCTV = ref(null);
+const useAIStream = ref(false);
+const modalStreamKey = ref(0); // Key to force StreamPlayer refresh in modal
+
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Local Flask server
 const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000'; // Local Flask server
