@@ -123,8 +123,8 @@ export default {
 
     // Function to initialize HLS player
     const initializeHls = (url) => {
-      // Only replace protocol with HTTPS if it's not our VPS URL
-      const secureUrl = url.includes('20.6.91.171') 
+      // Only replace protocol with HTTPS if it's not our domain
+      const secureUrl = url.includes('straysafe.me') 
           ? url 
           : url.replace('http:', window.location.protocol);
       

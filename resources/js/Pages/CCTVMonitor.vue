@@ -35,17 +35,17 @@ const activeStreamInstances = ref({}); // Store active stream instances by ID
 const activeHlsInstances = ref({}); // Store active HLS instances by ID
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://20.6.91.171:5000';
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://20.6.91.171:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://straysafe.me:5000';
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://straysafe.me:5000';
 
 // Server URLs - use the ones from new_stream.py
 const SERVER_URLS = [
-    'http://20.6.91.171:5000'
+    'http://straysafe.me:5000'
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
-    const serverUrl = 'http://20.6.91.171:5000';
+    const serverUrl = 'http://straysafe.me:5000';
     try {
         const response = await axios.get(`${serverUrl}/health`, {
             timeout: 5000
@@ -375,7 +375,7 @@ function changePage(newPage) {
 }
 
 function openStreamInBrowser() {
-    window.open('http://20.195.42.135:8888/ai_cam1/index.m3u8', '_blank');
+    window.open('http://straysafe.me:8888/ai_cam1/index.m3u8', '_blank');
 }
 </script>
 
@@ -463,7 +463,7 @@ function openStreamInBrowser() {
             <div v-else-if="streamError" class="error-container">
                 <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
                 <p class="mb-2">Unable to connect to the stream server at <strong>{{ activeServerUrl.value }}</strong>.</p>
-                <p class="mb-2">Using direct m3u8 URL instead: <strong>http://20.195.42.135:8888/ai_cam1/index.m3u8</strong></p>
+                <p class="mb-2">Using direct m3u8 URL instead: <strong>http://straysafe.me:8888/ai_cam1/index.m3u8</strong></p>
                 <p class="mb-4">Note: This stream requires authentication (user: user, password: Straysafeteam3)</p>
                 <div class="flex space-x-2">
                     <q-btn class="secondary-btn" icon="refresh" label="Try Again" @click="fetchCCTVStreams" />
