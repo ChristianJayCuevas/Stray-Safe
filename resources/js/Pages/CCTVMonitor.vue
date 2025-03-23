@@ -38,42 +38,48 @@ const activeHlsInstances = ref({}); // Store active HLS instances by ID
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
 const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
 
-// Server URLs - use secure URLs based on current protocol
+// Server URLs - include VPS URL and local development URLs
 const SERVER_URLS = [
-    `${window.location.protocol}//${window.location.hostname}:5000`,
-    'https://localhost:5000',
-    'https://127.0.0.1:5000'
+    `${window.location.protocol}//${window.location.hostname}:5000`, // VPS URL
+    `${window.location.protocol}//127.0.0.1:5000`,
+    `${window.location.protocol}//localhost:5000`
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
+    // Try VPS URL first (current hostname)
     const vpsUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
     
     try {
-        const response = await axios.get(`${vpsUrl}/streams`, {
-            timeout: 2000
+        const response = await axios.get(`${vpsUrl}/health`, {
+            timeout: 3000
         });
         if (response.status === 200) {
+            console.log('Successfully connected to VPS server');
             return vpsUrl;
         }
     } catch (error) {
-        // Silent fail and try next URL
+        console.warn('Could not connect to VPS server, trying alternative URLs');
     }
     
+    // Try other URLs if VPS fails
     for (const url of SERVER_URLS) {
-        if (url === vpsUrl) continue;
+        if (url === vpsUrl) continue; // Skip VPS URL as we already tried it
         try {
-            const response = await axios.get(`${url}/streams`, {
+            const response = await axios.get(`${url}/health`, {
                 timeout: 2000
             });
             if (response.status === 200) {
+                console.log(`Successfully connected to server at ${url}`);
                 return url;
             }
         } catch (error) {
-            // Silent fail and try next URL
+            console.warn(`Failed to connect to ${url}`);
         }
     }
     
+    // If all attempts fail, return VPS URL as default
+    console.log('All connection attempts failed, defaulting to VPS URL');
     return vpsUrl;
 };
 
@@ -125,6 +131,10 @@ async function fetchCCTVStreams() {
     streamError.value = false;
     
     try {
+        // Try to find the best server URL first
+        activeServerUrl.value = await getBestServerUrl();
+        console.log('Using server URL:', activeServerUrl.value);
+        
         const response = await axios.get(`${activeServerUrl.value}/streams`, {
             headers: {
                 'Accept': 'application/json',
@@ -135,9 +145,11 @@ async function fetchCCTVStreams() {
         
         if (response.data?.streams?.length) {
             cctvs.value = response.data.streams.map((stream, index) => {
+                // Ensure stream URLs use the active server URL
                 const streamUrl = stream.hls_url || stream.video_url;
-                // Ensure URLs are using the same protocol as the website
-                const secureUrl = streamUrl.replace('http:', window.location.protocol);
+                const secureUrl = streamUrl.startsWith('http') 
+                    ? streamUrl.replace('http:', window.location.protocol)
+                    : `${activeServerUrl.value}${streamUrl.startsWith('/') ? '' : '/'}${streamUrl}`;
                 
                 return {
                     id: stream.id || (index + 1).toString(),
@@ -162,6 +174,7 @@ async function fetchCCTVStreams() {
             streamError.value = true;
         }
     } catch (error) {
+        console.error('Error fetching CCTV streams:', error);
         useSampleData();
         streamError.value = true;
     } finally {
@@ -171,7 +184,7 @@ async function fetchCCTVStreams() {
 
 // Function to use sample data when API is unavailable
 function useSampleData() {
-    const sampleHlsUrl = `${window.location.protocol}//${window.location.hostname}:5000/hls/main-camera/playlist.m3u8`;
+    const sampleHlsUrl = `${activeServerUrl.value}/hls/main-camera/playlist.m3u8`;
     
     cctvs.value = [
         {

@@ -101,12 +101,23 @@ export default {
         }
         
         const streamId = match[1];
-        // Construct HLS URL from the same base URL
+        // Use the same server URL as the video URL
         const baseUrl = videoUrl.substring(0, videoUrl.indexOf('/video/'));
-        return `${baseUrl}/hls/${streamId}/playlist.m3u8`;
+        const hlsUrl = `${baseUrl}/hls/${streamId}/playlist.m3u8`;
+        
+        // Verify HLS stream is accessible
+        try {
+          const response = await axios.head(hlsUrl);
+          if (response.status === 200) {
+            return hlsUrl;
+          }
+        } catch (error) {
+          console.warn(`HLS stream not accessible at ${hlsUrl}, falling back to video stream`);
+          return videoUrl;
+        }
       } catch (err) {
-        console.error('Error getting HLS URL:', err);
-        throw err;
+        console.warn('Error getting HLS URL:', err);
+        return videoUrl; // Fall back to original video URL
       }
     };
 
@@ -134,6 +145,10 @@ export default {
           liveDurationInfinity: true,
           enableWorker: true,
           lowLatencyMode: true,
+          maxBufferLength: 10,
+          maxMaxBufferLength: 15,
+          startLevel: -1, // Auto quality selection
+          debug: false
         });
         
         // Attach to our video element
@@ -180,13 +195,15 @@ export default {
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 30,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 30,
-          maxBufferSize: 30 * 1000 * 1000,
+          maxBufferLength: 10,
+          maxMaxBufferLength: 15,
+          maxBufferSize: 15 * 1000 * 1000,
           maxBufferHole: 0.3,
           liveSyncDurationCount: 3,
           liveMaxLatencyDurationCount: 5,
           liveDurationInfinity: true,
+          startLevel: -1, // Auto quality selection
+          debug: false
         });
         
         hls.value.attachMedia(videoElement.value);
@@ -208,11 +225,17 @@ export default {
           });
         });
         
+        // Enhanced error handling
         hls.value.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.value.startLoad();
+                if (data.response?.code === 403) {
+                  error.value = 'Access denied to stream';
+                  emit('stream-error', error.value);
+                } else {
+                  hls.value.startLoad();
+                }
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
                 hls.value.recoverMediaError();
