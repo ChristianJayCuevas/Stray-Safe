@@ -123,31 +123,48 @@ export default {
         }
         
         // Use the existing HLS instance
-        hls.value = activeHlsInstances.value[props.streamId];
+        const existingHls = activeHlsInstances.value[props.streamId];
         
-        // Attach to our video element WITHOUT detaching from the original
-        // This allows both players to show the same stream simultaneously
+        // Create a new media source for this player that shares the same stream
+        hls.value = new Hls({
+          ...existingHls.config,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 5,
+          liveDurationInfinity: true,
+          enableWorker: true,
+          lowLatencyMode: true,
+        });
+        
+        // Attach to our video element
         if (videoElement.value) {
-          // Create a new media attachment without detaching the existing one
-          const newHls = new Hls(hls.value.config);
-          newHls.attachMedia(videoElement.value);
-          newHls.on(Hls.Events.MEDIA_ATTACHED, () => {
-            newHls.loadSource(url);
+          hls.value.attachMedia(videoElement.value);
+          hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
+            // Use the same source as the existing stream
+            hls.value.loadSource(existingHls.url);
+            
+            // Sync with the existing player's time
+            const existingVideo = activeStreamInstances.value[props.streamId];
+            if (existingVideo) {
+              const syncInterval = setInterval(() => {
+                if (Math.abs(videoElement.value.currentTime - existingVideo.currentTime) > 0.3) {
+                  videoElement.value.currentTime = existingVideo.currentTime;
+                }
+              }, 1000); // Check sync every second
+              
+              // Clean up interval when component is destroyed
+              onUnmounted(() => {
+                clearInterval(syncInterval);
+              });
+            }
+            
             videoElement.value.play().catch(e => {
               console.warn('Auto-play failed:', e);
             });
           });
-          
-          // Store the new HLS instance but don't replace the shared one
-          // This is just for cleanup purposes
-          if (props.useExistingInstance) {
-            hls.value = newHls;
-          }
-          
-          loading.value = false;
-          emit('stream-ready');
         }
         
+        loading.value = false;
+        emit('stream-ready');
         return;
       }
       
@@ -163,29 +180,29 @@ export default {
         hls.value = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          backBufferLength: 90,
+          backBufferLength: 30,
           maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          maxBufferSize: 60 * 1000 * 1000, // 60MB
-          maxBufferHole: 0.5,
-          liveSyncDuration: 3,
-          liveMaxLatencyDuration: 10,
-          liveDurationInfinity: true
+          maxMaxBufferLength: 30,
+          maxBufferSize: 30 * 1000 * 1000, // 30MB
+          maxBufferHole: 0.3,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 5,
+          liveDurationInfinity: true,
         });
         
         hls.value.attachMedia(videoElement.value);
         hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
           console.log('HLS media attached');
           hls.value.loadSource(url);
+          hls.value.url = url; // Store URL for reference
           
           hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
             console.log('HLS manifest parsed');
             videoElement.value.play().catch(e => {
               console.warn('Auto-play failed:', e);
-              // Some browsers require user interaction before playing
             });
             loading.value = false;
-            retryCount.value = 0; // Reset retry count on success
+            retryCount.value = 0;
             emit('stream-ready');
             
             // Register this instance if requested

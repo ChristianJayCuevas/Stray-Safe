@@ -35,24 +35,42 @@ const activeStreamInstances = ref({}); // Store active stream instances by ID
 const activeHlsInstances = ref({}); // Store active HLS instances by ID
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Local Flask server
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000'; // Local Flask server
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Flask server
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000'; // Flask server
 
-// Server URLs - add your production server URL here
+// Server URLs - add your VPS URL here
 const SERVER_URLS = [
     'http://localhost:5000',
     'http://127.0.0.1:5000',
-    'http://10.0.0.4:5000'
+    window.location.protocol + '//' + window.location.hostname + ':5000', // Automatically use the current hostname
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
+    // If we're running on the VPS, prefer the hostname-based URL
+    const vpsUrl = window.location.protocol + '//' + window.location.hostname + ':5000';
+    
+    // Try VPS URL first
+    try {
+        console.log(`Testing VPS URL: ${vpsUrl}`);
+        const response = await axios.get(`${vpsUrl}/streams`, {
+            timeout: 2000
+        });
+        if (response.status === 200) {
+            console.log(`Using VPS URL: ${vpsUrl}`);
+            return vpsUrl;
+        }
+    } catch (error) {
+        console.warn(`VPS URL ${vpsUrl} is not accessible:`, error.message);
+    }
+    
     // Try each server URL to find one that's accessible
     for (const url of SERVER_URLS) {
+        if (url === vpsUrl) continue; // Skip VPS URL as we already tried it
         try {
             console.log(`Testing server URL: ${url}`);
             const response = await axios.get(`${url}/streams`, {
-                timeout: 2000 // Short timeout for quick checking
+                timeout: 2000
             });
             if (response.status === 200) {
                 console.log(`Using server URL: ${url}`);
@@ -63,9 +81,9 @@ const getBestServerUrl = async () => {
         }
     }
     
-    // If none are accessible, return the default
-    console.warn('No server URLs are accessible, using default');
-    return FLASK_SERVER_URL;
+    // If none are accessible, return the VPS URL as default
+    console.warn('No server URLs are accessible, using VPS URL');
+    return vpsUrl;
 };
 
 // Store the active server URL
@@ -122,7 +140,7 @@ async function fetchCCTVStreams() {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            timeout: 10000 // 10 second timeout
+            timeout: 10000
         });
         
         console.log('Flask API response:', response.data);
@@ -130,22 +148,22 @@ async function fetchCCTVStreams() {
         if (response.data && response.data.streams && Array.isArray(response.data.streams)) {
             // Transform Flask API data to match our CCTV data structure
             cctvs.value = response.data.streams.map((stream, index) => {
-                // The stream URLs should now be absolute from the server
                 let videoUrl = stream.video_url;
                 let hlsUrl = stream.hls_url;
                 
-                console.log(`Stream ${stream.id}: Using video URL: ${videoUrl}`);
-                console.log(`Stream ${stream.id}: Using HLS URL: ${hlsUrl}`);
+                // Prefer HLS URL for better streaming performance
+                const streamUrl = hlsUrl || videoUrl;
+                console.log(`Stream ${stream.id}: Using stream URL: ${streamUrl}`);
                 
                 return {
-                    id: stream.id || (index + 1),
+                    id: stream.id || (index + 1).toString(),
                     name: stream.name || `Camera ${index + 1}`,
                     location: stream.location || `Location ${index + 1}`,
                     status: stream.status === 'active' ? 'Online' : 'Offline',
-                    videoSrc: [hlsUrl || videoUrl], // Use HLS URL if available, otherwise fallback to video URL
-                    originalSrc: stream.url, // Store original RTSP URL
+                    videoSrc: [streamUrl],
+                    originalSrc: stream.url,
                     streamInfo: stream,
-                    isHls: !!stream.hls_url // Flag to indicate if this is an HLS stream
+                    isHls: !!stream.hls_url
                 };
             });
             
@@ -153,12 +171,11 @@ async function fetchCCTVStreams() {
             systemStats.value = {
                 totalCameras: cctvs.value.length,
                 onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
-                detectionsToday: Math.floor(Math.random() * 30), // This would come from the API in a real implementation
-                storageUsed: '1.2 TB' // This would come from the API in a real implementation
+                detectionsToday: Math.floor(Math.random() * 30),
+                storageUsed: '1.2 TB'
             };
         } else {
             console.warn('No streams found in Flask API response or invalid format, using sample data');
-            // If no streams are available, use sample data
             useSampleData();
             streamError.value = true;
         }
@@ -206,16 +223,23 @@ function openDialog(cctv) {
     selectedCCTV.value = { ...cctv }; // Create a copy to avoid reference issues
     useAIStream.value = false; // Start with regular stream
     dialogVisible.value = true;
+    modalStreamKey.value++; // Force StreamPlayer refresh in modal
     
     console.log(`Opening modal for stream ${cctv.id}`);
+    
+    // Ensure the modal stream uses the existing instance
+    nextTick(() => {
+        if (activeStreamInstances.value[cctv.id]) {
+            console.log(`Using existing stream instance for modal: ${cctv.id}`);
+        }
+    });
 }
 
 // Function to close the dialog
 function closeDialog() {
     dialogVisible.value = false;
-    // Don't set selectedCCTV to null immediately to prevent stream interruption
-    // This allows the stream to continue in the background
-    // selectedCCTV.value = null;
+    // Keep the selectedCCTV to maintain stream state
+    // It will be cleaned up when switching to a different camera
 }
 
 // Toggle between AI and regular stream view
@@ -255,9 +279,49 @@ function onModalStreamError(error) {
 // Register a stream instance
 function registerStreamInstance(id, videoElement, hlsInstance) {
     console.log(`Registering stream instance for ${id}`);
+    
+    // If we already have an instance for this stream, clean it up first
+    if (activeHlsInstances.value[id] && activeHlsInstances.value[id] !== hlsInstance) {
+        console.log(`Cleaning up existing HLS instance for ${id}`);
+        activeHlsInstances.value[id].destroy();
+    }
+    
     activeStreamInstances.value[id] = videoElement;
     if (hlsInstance) {
         activeHlsInstances.value[id] = hlsInstance;
+        
+        // Set up quality levels if available
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+            if (data.levels.length > 1) {
+                // Start with the second highest quality for better performance
+                hlsInstance.currentLevel = 1;
+            }
+        });
+        
+        // Monitor for stalls and automatically recover
+        let lastTime = 0;
+        let stallCount = 0;
+        
+        const checkStall = setInterval(() => {
+            if (videoElement && !videoElement.paused) {
+                if (videoElement.currentTime === lastTime) {
+                    stallCount++;
+                    if (stallCount > 5) { // If stalled for more than 5 seconds
+                        console.log(`Stream ${id} appears stalled, attempting recovery`);
+                        hlsInstance.recoverMediaError();
+                        stallCount = 0;
+                    }
+                } else {
+                    stallCount = 0;
+                }
+                lastTime = videoElement.currentTime;
+            }
+        }, 1000);
+        
+        // Clean up interval when HLS instance is destroyed
+        hlsInstance.on(Hls.Events.DESTROYING, () => {
+            clearInterval(checkStall);
+        });
     }
 }
 

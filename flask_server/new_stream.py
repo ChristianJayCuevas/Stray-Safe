@@ -35,7 +35,7 @@ RESNET_PATH = os.getenv('RESNET_PATH', 'resnet.pth')
 API_ENDPOINT = os.getenv('API_ENDPOINT', 'http://127.0.0.1:8000/api/pin')
 API_TOKEN = os.getenv('API_TOKEN', 'StraySafeTeam3')
 # Updated RTSP URL format
-BASE_RTSP_URL = os.getenv('BASE_RTSP_URL', 'rtsp://ADMIN:12345@192.168.1.5:554/cam/realmonitor?channel=2&subtype=0')
+BASE_RTSP_URL = os.getenv('BASE_RTSP_URL', 'rtsp://10.0.0.3:8554/cam1')
 EXTERNAL_STREAMS_API = os.getenv('EXTERNAL_STREAMS_API', 'http://192.168.1.24:5000/streams')
 DEFAULT_CONFIDENCE = float(os.getenv('DEFAULT_CONFIDENCE', '0.5'))
 REQUIRED_CONSECUTIVE_FRAMES = int(os.getenv('REQUIRED_CONSECUTIVE_FRAMES', '20'))
@@ -44,9 +44,11 @@ FRAME_WIDTH = int(os.getenv('FRAME_WIDTH', '960'))
 FRAME_HEIGHT = int(os.getenv('FRAME_HEIGHT', '544'))
 
 # Server configuration
-SERVER_HOST = os.getenv('SERVER_HOST', '0.0.0.0')
+SERVER_HOST = os.getenv('SERVER_HOST', '0.0.0.0')  # Listen on all interfaces
 SERVER_PORT = int(os.getenv('SERVER_PORT', '5000'))
-SERVER_URLS = os.getenv('SERVER_URLS', 'http://127.0.0.1:5000,http://10.0.0.4:5000').split(',')
+# Update SERVER_URLS to include potential VPS URL
+SERVER_URLS = os.getenv('SERVER_URLS', 'http://127.0.0.1:5000,http://localhost:5000').split(',')
+# Allow CORS from any origin by default, can be restricted through env var
 CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
 
 # Constants
@@ -64,7 +66,15 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logger.info(f"Using {device} for inference")
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": CORS_ORIGINS.split(',') if CORS_ORIGINS != '*' else '*'}})
+CORS(app, resources={
+    r"/*": {
+        "origins": CORS_ORIGINS.split(',') if CORS_ORIGINS != '*' else '*',
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "expose_headers": ["Content-Range", "X-Content-Range"],
+        "supports_credentials": True
+    }
+})
 
 # Store active stream objects
 active_streams = {}
