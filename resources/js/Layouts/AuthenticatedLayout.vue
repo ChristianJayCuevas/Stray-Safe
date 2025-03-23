@@ -1,4 +1,3 @@
-
 <script setup>
 import { ref, computed, onMounted, defineEmits, provide, watch } from "vue";
 import { Link, usePage, router } from "@inertiajs/vue3";
@@ -131,6 +130,18 @@ const submit = () => {
     });
 };
 
+// Handle logout with confirmation
+const handleLogout = () => {
+  $q.dialog({
+    title: 'Confirm Logout',
+    message: 'Are you sure you want to logout?',
+    cancel: true,
+    persistent: true
+  }).onOk(() => {
+    router.post(route('logout'));
+  });
+};
+
 </script>
 <template>
     <div :class="{'bg-website': !isDarkMode, 'bg-dark': isDarkMode}">
@@ -241,16 +252,16 @@ const submit = () => {
                   <q-item-label>{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}</q-item-label>
                 </q-item-section>
               </q-item>
-              <Link :href="route('logout')" method="post">
-                <q-item clickable class="GPL__drawer-item">
-                  <q-item-section avatar>
-                    <q-icon name="logout" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label>Logout</q-item-label>
-                  </q-item-section>
-                </q-item>
-              </Link>
+
+              <!-- Replace the Link component with q-item for logout -->
+              <q-item clickable class="GPL__drawer-item" @click="handleLogout">
+                <q-item-section avatar>
+                  <q-icon name="logout" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>Logout</q-item-label>
+                </q-item-section>
+              </q-item>
    
   
             </q-list>

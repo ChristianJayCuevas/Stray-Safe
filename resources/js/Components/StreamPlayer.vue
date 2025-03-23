@@ -112,10 +112,11 @@ export default {
 
     // Function to initialize HLS player
     const initializeHls = (url) => {
+      // Ensure URL uses same protocol as website
+      const secureUrl = url.replace('http:', window.location.protocol);
+      
       // Check if we should use an existing HLS instance
       if (props.useExistingInstance && props.streamId && activeHlsInstances.value[props.streamId]) {
-        console.log(`Using existing HLS instance for stream ${props.streamId}`);
-        
         // Clean up any existing instance for this component
         if (hls.value && hls.value !== activeHlsInstances.value[props.streamId]) {
           hls.value.destroy();
@@ -140,7 +141,7 @@ export default {
           hls.value.attachMedia(videoElement.value);
           hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
             // Use the same source as the existing stream
-            hls.value.loadSource(existingHls.url);
+            hls.value.loadSource(secureUrl);
             
             // Sync with the existing player's time
             const existingVideo = activeStreamInstances.value[props.streamId];
@@ -149,16 +150,15 @@ export default {
                 if (Math.abs(videoElement.value.currentTime - existingVideo.currentTime) > 0.3) {
                   videoElement.value.currentTime = existingVideo.currentTime;
                 }
-              }, 1000); // Check sync every second
+              }, 1000);
               
-              // Clean up interval when component is destroyed
               onUnmounted(() => {
                 clearInterval(syncInterval);
               });
             }
             
-            videoElement.value.play().catch(e => {
-              console.warn('Auto-play failed:', e);
+            videoElement.value.play().catch(() => {
+              // Autoplay failed, user interaction needed
             });
           });
         }
@@ -176,14 +176,13 @@ export default {
       
       // Check if HLS.js is supported
       if (Hls.isSupported()) {
-        console.log('Using HLS.js for stream:', url);
         hls.value = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 30,
           maxBufferLength: 30,
           maxMaxBufferLength: 30,
-          maxBufferSize: 30 * 1000 * 1000, // 30MB
+          maxBufferSize: 30 * 1000 * 1000,
           maxBufferHole: 0.3,
           liveSyncDurationCount: 3,
           liveMaxLatencyDurationCount: 5,
@@ -192,20 +191,17 @@ export default {
         
         hls.value.attachMedia(videoElement.value);
         hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
-          console.log('HLS media attached');
-          hls.value.loadSource(url);
-          hls.value.url = url; // Store URL for reference
+          hls.value.loadSource(secureUrl);
+          hls.value.url = secureUrl;
           
           hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-            console.log('HLS manifest parsed');
-            videoElement.value.play().catch(e => {
-              console.warn('Auto-play failed:', e);
+            videoElement.value.play().catch(() => {
+              // Autoplay failed, user interaction needed
             });
             loading.value = false;
             retryCount.value = 0;
             emit('stream-ready');
             
-            // Register this instance if requested
             if (props.registerInstance && props.streamId) {
               emit('register-instance', props.streamId, videoElement.value, hls.value);
             }
@@ -214,34 +210,27 @@ export default {
         
         hls.value.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
-            console.error('Fatal HLS error:', data);
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                console.log('Network error, trying to recover...');
                 hls.value.startLoad();
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
-                console.log('Media error, trying to recover...');
                 hls.value.recoverMediaError();
                 break;
               default:
                 if (retryCount.value < props.maxRetries) {
                   retryCount.value++;
-                  console.log(`Retry attempt ${retryCount.value}/${props.maxRetries}`);
                   
-                  // Clear any existing timeout
                   if (retryTimeout.value) {
                     clearTimeout(retryTimeout.value);
                   }
                   
-                  // Retry with exponential backoff
                   const delay = Math.min(1000 * Math.pow(2, retryCount.value - 1), 10000);
                   retryTimeout.value = setTimeout(() => {
-                    console.log(`Retrying stream after ${delay}ms delay`);
                     initializePlayer();
                   }, delay);
                 } else {
-                  error.value = `HLS playback error: ${data.details}`;
+                  error.value = `Stream playback error`;
                   emit('stream-error', error.value);
                 }
                 break;
@@ -250,16 +239,14 @@ export default {
         });
       } else if (videoElement.value.canPlayType('application/vnd.apple.mpegurl')) {
         // For Safari and iOS devices which have built-in HLS support
-        console.log('Using native HLS support for stream:', url);
-        videoElement.value.src = url;
+        videoElement.value.src = secureUrl;
         videoElement.value.addEventListener('loadedmetadata', () => {
-          videoElement.value.play().catch(e => {
-            console.warn('Auto-play failed:', e);
+          videoElement.value.play().catch(() => {
+            // Autoplay failed, user interaction needed
           });
           loading.value = false;
           emit('stream-ready');
           
-          // Register this instance if requested
           if (props.registerInstance && props.streamId) {
             emit('register-instance', props.streamId, videoElement.value, null);
           }
@@ -268,26 +255,17 @@ export default {
         videoElement.value.addEventListener('error', () => {
           if (retryCount.value < props.maxRetries) {
             retryCount.value++;
-            console.log(`Retry attempt ${retryCount.value}/${props.maxRetries}`);
-            
-            // Clear any existing timeout
-            if (retryTimeout.value) {
-              clearTimeout(retryTimeout.value);
-            }
-            
-            // Retry with exponential backoff
             const delay = Math.min(1000 * Math.pow(2, retryCount.value - 1), 10000);
             setTimeout(() => {
-              console.log(`Retrying stream after ${delay}ms delay`);
               initializePlayer();
             }, delay);
           } else {
-            error.value = 'Error loading video stream';
+            error.value = 'Stream playback error';
             emit('stream-error', error.value);
           }
         });
       } else {
-        error.value = 'HLS is not supported in this browser';
+        error.value = 'HLS playback not supported in this browser';
         emit('stream-error', error.value);
       }
     };

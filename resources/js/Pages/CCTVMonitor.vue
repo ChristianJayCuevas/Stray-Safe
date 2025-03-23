@@ -35,54 +35,45 @@ const activeStreamInstances = ref({}); // Store active stream instances by ID
 const activeHlsInstances = ref({}); // Store active HLS instances by ID
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Flask server
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000'; // Flask server
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
 
-// Server URLs - add your VPS URL here
+// Server URLs - use secure URLs based on current protocol
 const SERVER_URLS = [
-    'http://localhost:5000',
-    'http://127.0.0.1:5000',
-    window.location.protocol + '//' + window.location.hostname + ':5000', // Automatically use the current hostname
+    `${window.location.protocol}//${window.location.hostname}:5000`,
+    'https://localhost:5000',
+    'https://127.0.0.1:5000'
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
-    // If we're running on the VPS, prefer the hostname-based URL
-    const vpsUrl = window.location.protocol + '//' + window.location.hostname + ':5000';
+    const vpsUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
     
-    // Try VPS URL first
     try {
-        console.log(`Testing VPS URL: ${vpsUrl}`);
         const response = await axios.get(`${vpsUrl}/streams`, {
             timeout: 2000
         });
         if (response.status === 200) {
-            console.log(`Using VPS URL: ${vpsUrl}`);
             return vpsUrl;
         }
     } catch (error) {
-        console.warn(`VPS URL ${vpsUrl} is not accessible:`, error.message);
+        // Silent fail and try next URL
     }
     
-    // Try each server URL to find one that's accessible
     for (const url of SERVER_URLS) {
-        if (url === vpsUrl) continue; // Skip VPS URL as we already tried it
+        if (url === vpsUrl) continue;
         try {
-            console.log(`Testing server URL: ${url}`);
             const response = await axios.get(`${url}/streams`, {
                 timeout: 2000
             });
             if (response.status === 200) {
-                console.log(`Using server URL: ${url}`);
                 return url;
             }
         } catch (error) {
-            console.warn(`Server URL ${url} is not accessible:`, error.message);
+            // Silent fail and try next URL
         }
     }
     
-    // If none are accessible, return the VPS URL as default
-    console.warn('No server URLs are accessible, using VPS URL');
     return vpsUrl;
 };
 
@@ -134,7 +125,6 @@ async function fetchCCTVStreams() {
     streamError.value = false;
     
     try {
-        console.log('Fetching CCTV streams from Flask server...');
         const response = await axios.get(`${activeServerUrl.value}/streams`, {
             headers: {
                 'Accept': 'application/json',
@@ -143,31 +133,24 @@ async function fetchCCTVStreams() {
             timeout: 10000
         });
         
-        console.log('Flask API response:', response.data);
-        
-        if (response.data && response.data.streams && Array.isArray(response.data.streams)) {
-            // Transform Flask API data to match our CCTV data structure
+        if (response.data?.streams?.length) {
             cctvs.value = response.data.streams.map((stream, index) => {
-                let videoUrl = stream.video_url;
-                let hlsUrl = stream.hls_url;
-                
-                // Prefer HLS URL for better streaming performance
-                const streamUrl = hlsUrl || videoUrl;
-                console.log(`Stream ${stream.id}: Using stream URL: ${streamUrl}`);
+                const streamUrl = stream.hls_url || stream.video_url;
+                // Ensure URLs are using the same protocol as the website
+                const secureUrl = streamUrl.replace('http:', window.location.protocol);
                 
                 return {
                     id: stream.id || (index + 1).toString(),
                     name: stream.name || `Camera ${index + 1}`,
                     location: stream.location || `Location ${index + 1}`,
                     status: stream.status === 'active' ? 'Online' : 'Offline',
-                    videoSrc: [streamUrl],
+                    videoSrc: [secureUrl],
                     originalSrc: stream.url,
                     streamInfo: stream,
                     isHls: !!stream.hls_url
                 };
             });
             
-            // Update system stats
             systemStats.value = {
                 totalCameras: cctvs.value.length,
                 onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
@@ -175,13 +158,10 @@ async function fetchCCTVStreams() {
                 storageUsed: '1.2 TB'
             };
         } else {
-            console.warn('No streams found in Flask API response or invalid format, using sample data');
             useSampleData();
             streamError.value = true;
         }
     } catch (error) {
-        console.error("Failed to fetch CCTV streams from Flask server:", error);
-        console.log("Using sample data instead");
         useSampleData();
         streamError.value = true;
     } finally {
@@ -191,11 +171,7 @@ async function fetchCCTVStreams() {
 
 // Function to use sample data when API is unavailable
 function useSampleData() {
-    console.log('Using sample CCTV data');
-    
-    // Create sample data with the proxied stream URL
-    const sampleHlsUrl = `${activeServerUrl.value}/hls/main-camera/playlist.m3u8`;
-    console.log('Using sample HLS URL:', sampleHlsUrl);
+    const sampleHlsUrl = `${window.location.protocol}//${window.location.hostname}:5000/hls/main-camera/playlist.m3u8`;
     
     cctvs.value = [
         {
@@ -204,12 +180,11 @@ function useSampleData() {
             location: 'Main Gate',
             status: 'Online',
             videoSrc: [sampleHlsUrl],
-            originalSrc: 'rtsp://ADMIN:12345@192.168.1.5:554/cam/realmonitor?channel=2&subtype=0',
+            originalSrc: 'rtsp://localhost:8554/cam1',
             isHls: true
         }
     ];
     
-    // Update system stats with sample data
     systemStats.value = {
         totalCameras: 1,
         onlineCameras: 1,
