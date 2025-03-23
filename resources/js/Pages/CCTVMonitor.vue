@@ -35,17 +35,17 @@ const activeStreamInstances = ref({}); // Store active stream instances by ID
 const activeHlsInstances = ref({}); // Store active HLS instances by ID
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://straysafe.me:5000';
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://straysafe.me:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://straysafe.me:5000';
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'https://straysafe.me:5000';
 
 // Server URLs - use the ones from new_stream.py
 const SERVER_URLS = [
-    'http://straysafe.me:5000'
+    'https://straysafe.me:5000'
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
-    const serverUrl = 'http://straysafe.me:5000';
+    const serverUrl = 'https://straysafe.me:5000';
     try {
         const response = await axios.get(`${serverUrl}/health`, {
             timeout: 5000
@@ -375,7 +375,7 @@ function changePage(newPage) {
 }
 
 function openStreamInBrowser() {
-    window.open('http://straysafe.me:8888/ai_cam1/index.m3u8', '_blank');
+    window.open('https://straysafe.me:8888/ai_cam1/index.m3u8', '_blank');
 }
 </script>
 
