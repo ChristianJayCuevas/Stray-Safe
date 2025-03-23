@@ -35,33 +35,30 @@ const activeStreamInstances = ref({}); // Store active stream instances by ID
 const activeHlsInstances = ref({}); // Store active HLS instances by ID
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://20.6.91.171:5000';
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://20.6.91.171:5000';
 
 // Server URLs - use the ones from new_stream.py
 const SERVER_URLS = [
-    'http://localhost:5000',
-    'http://127.0.0.1:5000'
+    'http://20.6.91.171:5000'
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
-    // Try local URLs first
-    for (const url of SERVER_URLS) {
-        try {
-            const response = await axios.get(`${url}/health`, {
-                timeout: 2000
-            });
-            if (response.status === 200) {
-                return url;
-            }
-        } catch (error) {
-            // Continue to next URL
+    const serverUrl = 'http://20.6.91.171:5000';
+    try {
+        const response = await axios.get(`${serverUrl}/health`, {
+            timeout: 5000
+        });
+        if (response.status === 200) {
+            return serverUrl;
         }
+    } catch (error) {
+        console.error('Error connecting to server:', error);
     }
     
-    // If no local URLs work, return the first one as default
-    return SERVER_URLS[0];
+    // Return the server URL even if health check fails
+    return serverUrl;
 };
 
 // Store the active server URL
