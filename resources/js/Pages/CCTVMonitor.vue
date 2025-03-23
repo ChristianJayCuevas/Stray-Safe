@@ -38,16 +38,15 @@ const activeHlsInstances = ref({}); // Store active HLS instances by ID
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
 const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
 
-// Server URLs - include VPS URL and local development URLs
+// Server URLs - use the ones from new_stream.py
 const SERVER_URLS = [
-    `${window.location.protocol}//${window.location.hostname}:5000`, // VPS URL
+    `${window.location.protocol}//${window.location.hostname}:5000`,
     `${window.location.protocol}//127.0.0.1:5000`,
     `${window.location.protocol}//localhost:5000`
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
-    // Try VPS URL first (current hostname)
     const vpsUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
     
     try {
@@ -55,39 +54,31 @@ const getBestServerUrl = async () => {
             timeout: 3000
         });
         if (response.status === 200) {
-            console.log('Successfully connected to VPS server');
             return vpsUrl;
         }
     } catch (error) {
-        console.warn('Could not connect to VPS server, trying alternative URLs');
+        // Try other URLs if VPS fails
     }
     
-    // Try other URLs if VPS fails
     for (const url of SERVER_URLS) {
-        if (url === vpsUrl) continue; // Skip VPS URL as we already tried it
+        if (url === vpsUrl) continue;
         try {
             const response = await axios.get(`${url}/health`, {
                 timeout: 2000
             });
             if (response.status === 200) {
-                console.log(`Successfully connected to server at ${url}`);
                 return url;
             }
         } catch (error) {
-            console.warn(`Failed to connect to ${url}`);
+            // Continue to next URL
         }
     }
     
-    // If all attempts fail, return VPS URL as default
-    console.log('All connection attempts failed, defaulting to VPS URL');
     return vpsUrl;
 };
 
 // Store the active server URL
 const activeServerUrl = ref(FLASK_SERVER_URL);
-
-console.log('Initial API base URL:', API_BASE_URL);
-console.log('Initial Flask server URL:', FLASK_SERVER_URL);
 
 // Check if HLS.js is available
 const hlsAvailable = ref(Hls.isSupported());
@@ -131,9 +122,7 @@ async function fetchCCTVStreams() {
     streamError.value = false;
     
     try {
-        // Try to find the best server URL first
         activeServerUrl.value = await getBestServerUrl();
-        console.log('Using server URL:', activeServerUrl.value);
         
         const response = await axios.get(`${activeServerUrl.value}/streams`, {
             headers: {
@@ -145,7 +134,6 @@ async function fetchCCTVStreams() {
         
         if (response.data?.streams?.length) {
             cctvs.value = response.data.streams.map((stream, index) => {
-                // Ensure stream URLs use the active server URL
                 const streamUrl = stream.hls_url || stream.video_url;
                 const secureUrl = streamUrl.startsWith('http') 
                     ? streamUrl.replace('http:', window.location.protocol)
@@ -174,7 +162,6 @@ async function fetchCCTVStreams() {
             streamError.value = true;
         }
     } catch (error) {
-        console.error('Error fetching CCTV streams:', error);
         useSampleData();
         streamError.value = true;
     } finally {
@@ -208,19 +195,10 @@ function useSampleData() {
 
 // Function to open the dialog for a specific CCTV
 function openDialog(cctv) {
-    selectedCCTV.value = { ...cctv }; // Create a copy to avoid reference issues
-    useAIStream.value = false; // Start with regular stream
+    selectedCCTV.value = { ...cctv };
+    useAIStream.value = false;
     dialogVisible.value = true;
-    modalStreamKey.value++; // Force StreamPlayer refresh in modal
-    
-    console.log(`Opening modal for stream ${cctv.id}`);
-    
-    // Ensure the modal stream uses the existing instance
-    nextTick(() => {
-        if (activeStreamInstances.value[cctv.id]) {
-            console.log(`Using existing stream instance for modal: ${cctv.id}`);
-        }
-    });
+    modalStreamKey.value++;
 }
 
 // Function to close the dialog

@@ -297,14 +297,10 @@ export default {
     const initializePlayer = async () => {
       // Check if we should use an existing video element
       if (props.useExistingInstance && props.streamId && activeStreamInstances.value[props.streamId]) {
-        console.log(`Using existing video instance for stream ${props.streamId}`);
-        
         // If we have a video element and it's different from the existing one
         if (videoElement.value) {
           // If there's an HLS instance, use it
           if (activeHlsInstances.value[props.streamId]) {
-            console.log(`Using existing HLS instance for stream ${props.streamId}`);
-            
             // Clean up any existing instance for this component
             if (hls.value && hls.value !== activeHlsInstances.value[props.streamId]) {
               hls.value.destroy();
@@ -315,10 +311,9 @@ export default {
             hls.value = activeHlsInstances.value[props.streamId];
             
             // Clone the stream instead of detaching from the original
-            // This allows both players to show the same stream simultaneously
             hls.value.attachMedia(videoElement.value);
-            videoElement.value.play().catch(e => {
-              console.warn('Auto-play failed:', e);
+            videoElement.value.play().catch(() => {
+              // Autoplay failed
             });
           } else {
             // For non-HLS streams, we need to clone the stream
@@ -327,8 +322,8 @@ export default {
             
             // Try to sync the time position
             videoElement.value.currentTime = existingVideo.currentTime;
-            videoElement.value.play().catch(e => {
-              console.warn('Auto-play failed:', e);
+            videoElement.value.play().catch(() => {
+              // Autoplay failed
             });
           }
           
@@ -347,28 +342,21 @@ export default {
           throw new Error('No stream URL provided');
         }
         
-        console.log('StreamPlayer mounted with URL:', props.streamUrl);
-        
         if (isFlaskVideoStream.value) {
-          console.log('Flask video stream detected, fetching HLS URL');
           const hlsUrl = await getHlsUrl(props.streamUrl);
-          console.log('Using HLS URL:', hlsUrl);
           initializeHls(hlsUrl);
         } else if (isHlsStream.value) {
-          console.log('Direct HLS stream detected');
           initializeHls(props.streamUrl);
         } else {
           // For direct video streams (not HLS)
-          console.log('Direct video stream detected');
           videoElement.value.src = props.streamUrl;
           videoElement.value.addEventListener('loadedmetadata', () => {
-            videoElement.value.play().catch(e => {
-              console.warn('Auto-play failed:', e);
+            videoElement.value.play().catch(() => {
+              // Autoplay failed
             });
             loading.value = false;
             emit('stream-ready');
             
-            // Register this instance if requested
             if (props.registerInstance && props.streamId) {
               emit('register-instance', props.streamId, videoElement.value, null);
             }
@@ -377,12 +365,8 @@ export default {
           videoElement.value.addEventListener('error', () => {
             if (retryCount.value < props.maxRetries) {
               retryCount.value++;
-              console.log(`Retry attempt ${retryCount.value}/${props.maxRetries}`);
-              
-              // Retry with exponential backoff
               const delay = Math.min(1000 * Math.pow(2, retryCount.value - 1), 10000);
               setTimeout(() => {
-                console.log(`Retrying stream after ${delay}ms delay`);
                 initializePlayer();
               }, delay);
             } else {
@@ -392,7 +376,6 @@ export default {
           });
         }
       } catch (err) {
-        console.error('Error initializing player:', err);
         error.value = `Failed to initialize player: ${err.message}`;
         emit('stream-error', error.value);
       }
@@ -403,10 +386,8 @@ export default {
       if (isHlsStream.value || isFlaskVideoStream.value) {
         // If HLS failed, try direct video URL
         const videoUrl = props.streamUrl.replace('/hls/', '/video/').replace('/playlist.m3u8', '');
-        console.log('Retrying with direct video URL:', videoUrl);
         videoElement.value.src = videoUrl;
-        videoElement.value.play().catch(e => {
-          console.warn('Auto-play failed:', e);
+        videoElement.value.play().catch(() => {
           error.value = 'Failed to play stream with alternative method';
           emit('stream-error', error.value);
         });
@@ -414,10 +395,8 @@ export default {
         // If direct video failed, try HLS
         try {
           const hlsUrl = props.streamUrl.replace('/video/', '/hls/') + '/playlist.m3u8';
-          console.log('Retrying with HLS URL:', hlsUrl);
           initializeHls(hlsUrl);
         } catch (err) {
-          console.error('Error retrying with alternative method:', err);
           error.value = 'Failed to play stream with alternative method';
           emit('stream-error', error.value);
         }
@@ -426,7 +405,6 @@ export default {
 
     // Initialize player on mount
     onMounted(() => {
-      console.log('StreamPlayer mounted with URL:', props.streamUrl);
       if (videoElement.value) {
         initializePlayer();
       }
@@ -434,17 +412,12 @@ export default {
 
     // Clean up on unmount
     onUnmounted(() => {
-      console.log('StreamPlayer unmounted');
-      
-      // Only destroy the HLS instance if we're not using a shared instance
-      // or if we're the "owner" of the shared instance
       if (hls.value && (!props.useExistingInstance || 
           (props.registerInstance && props.streamId && 
            activeHlsInstances.value[props.streamId] === hls.value))) {
         hls.value.destroy();
         hls.value = null;
         
-        // Remove from active instances if this is the registered instance
         if (props.registerInstance && props.streamId) {
           delete activeHlsInstances.value[props.streamId];
           delete activeStreamInstances.value[props.streamId];
@@ -458,9 +431,8 @@ export default {
 
     // Watch for changes to stream URL
     watch(() => props.streamUrl, (newUrl, oldUrl) => {
-      console.log('Stream URL changed:', newUrl);
       if (newUrl !== oldUrl) {
-        retryCount.value = 0; // Reset retry count
+        retryCount.value = 0;
         initializePlayer();
       }
     });
