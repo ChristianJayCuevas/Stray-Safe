@@ -37,8 +37,42 @@ const activeHlsInstances = ref({}); // Store active HLS instances by ID
 // API configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Local Flask server
 const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000'; // Local Flask server
-console.log('Using API base URL:', API_BASE_URL);
-console.log('Using Flask server URL:', FLASK_SERVER_URL);
+
+// Server URLs - add your production server URL here
+const SERVER_URLS = [
+    'http://localhost:5000',
+    'http://127.0.0.1:5000',
+    'http://10.0.0.4:5000'
+];
+
+// Function to get the best server URL
+const getBestServerUrl = async () => {
+    // Try each server URL to find one that's accessible
+    for (const url of SERVER_URLS) {
+        try {
+            console.log(`Testing server URL: ${url}`);
+            const response = await axios.get(`${url}/streams`, {
+                timeout: 2000 // Short timeout for quick checking
+            });
+            if (response.status === 200) {
+                console.log(`Using server URL: ${url}`);
+                return url;
+            }
+        } catch (error) {
+            console.warn(`Server URL ${url} is not accessible:`, error.message);
+        }
+    }
+    
+    // If none are accessible, return the default
+    console.warn('No server URLs are accessible, using default');
+    return FLASK_SERVER_URL;
+};
+
+// Store the active server URL
+const activeServerUrl = ref(FLASK_SERVER_URL);
+
+console.log('Initial API base URL:', API_BASE_URL);
+console.log('Initial Flask server URL:', FLASK_SERVER_URL);
 
 // Check if HLS.js is available
 const hlsAvailable = ref(Hls.isSupported());
@@ -46,13 +80,19 @@ const hlsAvailable = ref(Hls.isSupported());
 // Provide the active stream instances to child components
 provide('activeStreamInstances', activeStreamInstances);
 provide('activeHlsInstances', activeHlsInstances);
+provide('activeServerUrl', activeServerUrl);
 
 // Sync local theme with global theme on mount and when global theme changes
-onMounted(() => {
+onMounted(async () => {
     console.log('Component mounted');
     if (!hlsAvailable.value) {
         console.warn('HLS.js is not available - video playback may be limited');
     }
+    
+    // Find the best server URL
+    activeServerUrl.value = await getBestServerUrl();
+    console.log('Active server URL:', activeServerUrl.value);
+    
     fetchCCTVStreams();
     fetchRecentSnapshots();
 });
@@ -76,8 +116,8 @@ async function fetchCCTVStreams() {
     streamError.value = false;
     
     try {
-        console.log('Fetching CCTV streams from local Flask server...');
-        const response = await axios.get(`${FLASK_SERVER_URL}/streams`, {
+        console.log('Fetching CCTV streams from Flask server...');
+        const response = await axios.get(`${activeServerUrl.value}/streams`, {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
@@ -90,31 +130,19 @@ async function fetchCCTVStreams() {
         if (response.data && response.data.streams && Array.isArray(response.data.streams)) {
             // Transform Flask API data to match our CCTV data structure
             cctvs.value = response.data.streams.map((stream, index) => {
-                // Check if HLS URL is available and construct the full URL
-                let videoUrl;
-                if (stream.hls_url) {
-                    // Make sure the HLS URL is absolute
-                    videoUrl = stream.hls_url.startsWith('http') 
-                        ? stream.hls_url 
-                        : `${FLASK_SERVER_URL}${stream.hls_url}`;
-                } else if (stream.video_url) {
-                    // Use video URL as fallback
-                    videoUrl = stream.video_url.startsWith('http')
-                        ? stream.video_url
-                        : `${FLASK_SERVER_URL}${stream.video_url}`;
-                } else {
-                    // Default fallback
-                    videoUrl = `${FLASK_SERVER_URL}/video/${stream.id || 'main-camera'}`;
-                }
+                // The stream URLs should now be absolute from the server
+                let videoUrl = stream.video_url;
+                let hlsUrl = stream.hls_url;
                 
                 console.log(`Stream ${stream.id}: Using video URL: ${videoUrl}`);
+                console.log(`Stream ${stream.id}: Using HLS URL: ${hlsUrl}`);
                 
                 return {
                     id: stream.id || (index + 1),
                     name: stream.name || `Camera ${index + 1}`,
                     location: stream.location || `Location ${index + 1}`,
                     status: stream.status === 'active' ? 'Online' : 'Offline',
-                    videoSrc: [videoUrl], // Use HLS URL if available, otherwise fallback to video URL
+                    videoSrc: [hlsUrl || videoUrl], // Use HLS URL if available, otherwise fallback to video URL
                     originalSrc: stream.url, // Store original RTSP URL
                     streamInfo: stream,
                     isHls: !!stream.hls_url // Flag to indicate if this is an HLS stream
@@ -135,7 +163,7 @@ async function fetchCCTVStreams() {
             streamError.value = true;
         }
     } catch (error) {
-        console.error("Failed to fetch CCTV streams from local Flask server:", error);
+        console.error("Failed to fetch CCTV streams from Flask server:", error);
         console.log("Using sample data instead");
         useSampleData();
         streamError.value = true;
@@ -149,7 +177,7 @@ function useSampleData() {
     console.log('Using sample CCTV data');
     
     // Create sample data with the proxied stream URL
-    const sampleHlsUrl = `${FLASK_SERVER_URL}/hls/main-camera/playlist.m3u8`;
+    const sampleHlsUrl = `${activeServerUrl.value}/hls/main-camera/playlist.m3u8`;
     console.log('Using sample HLS URL:', sampleHlsUrl);
     
     cctvs.value = [
@@ -420,7 +448,7 @@ function openStreamInBrowser() {
             <!-- Error message -->
             <div v-else-if="streamError" class="error-container">
                 <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
-                <p class="mb-2">Unable to connect to the stream server at <strong>{{ API_BASE_URL }}</strong>.</p>
+                <p class="mb-2">Unable to connect to the stream server at <strong>{{ activeServerUrl.value }}</strong>.</p>
                 <p class="mb-2">Using direct m3u8 URL instead: <strong>http://20.195.42.135:8888/ai_cam1/index.m3u8</strong></p>
                 <p class="mb-4">Note: This stream requires authentication (user: user, password: Straysafeteam3)</p>
                 <div class="flex space-x-2">

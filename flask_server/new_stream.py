@@ -29,10 +29,6 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-# Enable CORS for integration with Laravel/Vue frontend - allow all origins
-CORS(app, resources={r"/*": {"origins": "*"}})
-
 # Environment variables with defaults
 MODEL_PATH = os.getenv('MODEL_PATH', 'best.pt')
 RESNET_PATH = os.getenv('RESNET_PATH', 'resnet.pth')
@@ -47,19 +43,28 @@ DOG_CLASS_ID = int(os.getenv('DOG_CLASS_ID', '1'))
 FRAME_WIDTH = int(os.getenv('FRAME_WIDTH', '960'))
 FRAME_HEIGHT = int(os.getenv('FRAME_HEIGHT', '544'))
 
+# Server configuration
+SERVER_HOST = os.getenv('SERVER_HOST', '0.0.0.0')
+SERVER_PORT = int(os.getenv('SERVER_PORT', '5000'))
+SERVER_URLS = os.getenv('SERVER_URLS', 'http://127.0.0.1:5000,http://10.0.0.4:5000').split(',')
+CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
+
 # Constants
 MAX_HLS_DIR_SIZE_MB = 100  # Maximum size for HLS directory in MB
 HLS_CLEANUP_INTERVAL = 60  # Check HLS directory size every 60 seconds
 HLS_SEGMENT_DURATION = 4  # Duration of each HLS segment in seconds
 
 # Directory for HLS files
-HLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hls_streams')
+HLS_DIR = os.getenv('HLS_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hls_streams'))
 os.makedirs(HLS_DIR, exist_ok=True)
 logger.info(f"HLS directory created at: {HLS_DIR}")
 
 # Setup CUDA if available
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logger.info(f"Using {device} for inference")
+
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": CORS_ORIGINS.split(',') if CORS_ORIGINS != '*' else '*'}})
 
 # Store active stream objects
 active_streams = {}
@@ -542,9 +547,29 @@ def cleanup_hls_directory():
         # Sleep for the specified interval
         time.sleep(HLS_CLEANUP_INTERVAL)
 
-# Start the cleanup thread
-cleanup_thread = threading.Thread(target=cleanup_hls_directory, daemon=True)
-cleanup_thread.start()
+# Function to get the server's public URL
+def get_server_url(request=None):
+    """Get the server's public URL based on the request or environment variables"""
+    if request:
+        # Try to determine URL from request
+        host = request.headers.get('Host')
+        if host:
+            scheme = request.headers.get('X-Forwarded-Proto', 'http')
+            return f"{scheme}://{host}"
+    
+    # If we can't determine from request, use the first URL from SERVER_URLS
+    return SERVER_URLS[0] if SERVER_URLS else "http://localhost:5000"
+
+# Function to get absolute URL for a stream
+def get_absolute_url(relative_url, request=None):
+    """Convert a relative URL to an absolute URL"""
+    base_url = get_server_url(request)
+    if relative_url.startswith('http'):
+        return relative_url
+    elif relative_url.startswith('/'):
+        return f"{base_url}{relative_url}"
+    else:
+        return f"{base_url}/{relative_url}"
 
 @app.route('/hls/<stream_id>/<path:filename>', methods=['GET'])
 def hls_stream(stream_id, filename):
@@ -698,8 +723,8 @@ def get_streams():
                 'location': 'Main Location',
                 'status': 'active',
                 'url': stream.rtsp_url,
-                'video_url': f'/video/{stream_id}',
-                'hls_url': f'/hls/{stream_id}/playlist.m3u8',
+                'video_url': get_absolute_url(f'/video/{stream_id}', request),
+                'hls_url': get_absolute_url(f'/hls/{stream_id}/playlist.m3u8', request),
                 'type': 'rtsp'
             }
             streams_list.append(stream_info)
@@ -723,8 +748,8 @@ def get_streams():
                     'location': 'Main Location',
                     'status': 'active',
                     'url': rtsp_url,
-                    'video_url': '/video/main-camera',
-                    'hls_url': '/hls/main-camera/playlist.m3u8',
+                    'video_url': get_absolute_url(f'/video/main-camera', request),
+                    'hls_url': get_absolute_url(f'/hls/main-camera/playlist.m3u8', request),
                     'type': 'rtsp'
                 })
             except Exception as e:
@@ -736,8 +761,8 @@ def get_streams():
                     'location': 'Main Location',
                     'status': 'inactive',
                     'url': '',
-                    'video_url': '/video/main-camera',
-                    'hls_url': '/hls/main-camera/playlist.m3u8',
+                    'video_url': get_absolute_url(f'/video/main-camera', request),
+                    'hls_url': get_absolute_url(f'/hls/main-camera/playlist.m3u8', request),
                     'type': 'rtsp'
                 })
     
@@ -799,6 +824,14 @@ if __name__ == '__main__':
     # Start periodic scanner in background
     threading.Thread(target=periodic_stream_scanner, daemon=True).start()
     
-    # Run Flask app
-    logger.info("Starting Flask web server")
-    app.run(debug=False, host='0.0.0.0', port=5000, threaded=True)
+    # Start the cleanup thread
+    cleanup_thread = threading.Thread(target=cleanup_hls_directory, daemon=True)
+    cleanup_thread.start()
+    
+    # Print server URLs for convenience
+    print("\nServer URLs:")
+    for url in SERVER_URLS:
+        print(f" * {url}")
+    
+    # Run the Flask app
+    app.run(host=SERVER_HOST, port=SERVER_PORT, debug=True, threaded=True)
