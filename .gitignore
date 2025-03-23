@@ -24,3 +24,6 @@ yarn-error.log
 /model
 /runs
 /public/hls
+flask_server/best.pt
+flask_server/hls_streams/
+flask_server/resnet.pth

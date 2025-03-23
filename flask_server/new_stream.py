@@ -6,7 +6,7 @@ import base64
 import threading
 import socket
 import json
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 from flask_cors import CORS
 from ultralytics import RTDETR
 from torchvision import models, transforms
@@ -15,6 +15,12 @@ import torch.nn as nn
 import os
 import logging
 from dotenv import load_dotenv
+import numpy as np
+import io
+import shutil
+import subprocess
+import glob
+from datetime import datetime
 
 # Load environment variables from .env file if it exists
 load_dotenv()
@@ -24,7 +30,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Enable CORS for integration with Laravel/Vue frontend
+# Enable CORS for integration with Laravel/Vue frontend - allow all origins
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Environment variables with defaults
@@ -32,12 +38,23 @@ MODEL_PATH = os.getenv('MODEL_PATH', 'best.pt')
 RESNET_PATH = os.getenv('RESNET_PATH', 'resnet.pth')
 API_ENDPOINT = os.getenv('API_ENDPOINT', 'http://127.0.0.1:8000/api/pin')
 API_TOKEN = os.getenv('API_TOKEN', 'StraySafeTeam3')
-BASE_RTSP_URL = os.getenv('BASE_RTSP_URL', 'rtsp://10.0.0.{}:8554/cam{}')
+# Updated RTSP URL format
+BASE_RTSP_URL = os.getenv('BASE_RTSP_URL', 'rtsp://ADMIN:12345@192.168.1.5:554/cam/realmonitor?channel=2&subtype=0')
+EXTERNAL_STREAMS_API = os.getenv('EXTERNAL_STREAMS_API', 'http://192.168.1.24:5000/streams')
 DEFAULT_CONFIDENCE = float(os.getenv('DEFAULT_CONFIDENCE', '0.5'))
 REQUIRED_CONSECUTIVE_FRAMES = int(os.getenv('REQUIRED_CONSECUTIVE_FRAMES', '20'))
 DOG_CLASS_ID = int(os.getenv('DOG_CLASS_ID', '1'))
 FRAME_WIDTH = int(os.getenv('FRAME_WIDTH', '960'))
 FRAME_HEIGHT = int(os.getenv('FRAME_HEIGHT', '544'))
+
+# Constants
+MAX_HLS_DIR_SIZE_MB = 100  # Maximum size for HLS directory in MB
+HLS_CLEANUP_INTERVAL = 60  # Check HLS directory size every 60 seconds
+HLS_SEGMENT_DURATION = 4  # Duration of each HLS segment in seconds
+
+# Directory for HLS files
+HLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hls_streams')
+os.makedirs(HLS_DIR, exist_ok=True)
 
 # Setup CUDA if available
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -60,12 +77,17 @@ class RTSPStream:
         self.last_error_time = 0
         self.error_count = 0
         self.coordinates = self._generate_coordinates(stream_id)
+        self.hls_path = os.path.join(HLS_DIR, stream_id)
+        os.makedirs(self.hls_path, exist_ok=True)
+        self.ffmpeg_process = None
         
     def _generate_coordinates(self, stream_id):
-        # Mock coordinates based on stream ID - replace with real coordinates in production
+        # Fixed default coordinates for the fixed camera
+        # Using base coordinates from the original code
         base_lat, base_lng = 14.631141, 121.039295
-        offset = (int(stream_id) * 0.001)
-        return [base_lng + offset, base_lat + offset]
+        # Since we're using a fixed camera, we can just use a fixed offset
+        # or return the base coordinates directly
+        return [base_lng, base_lat]
         
     def connect(self):
         if self.cap is not None and self.cap.isOpened():
@@ -110,7 +132,7 @@ class RTSPStream:
             return
             
         self.is_running = True
-        threading.Thread(target=self.process_stream, daemon=True).start()
+        threading.Thread(target=self._process_stream, daemon=True).start()
         logger.info(f"Started processing stream {self.stream_id}: {self.rtsp_url}")
     
     def stop(self):
@@ -120,54 +142,146 @@ class RTSPStream:
             self.cap = None
         logger.info(f"Stopped stream {self.stream_id}: {self.rtsp_url}")
     
-    def process_stream(self):
+    def _start_ffmpeg(self):
+        """Start ffmpeg process for HLS streaming"""
+        # Create the HLS directory if it doesn't exist
+        os.makedirs(self.hls_path, exist_ok=True)
+        
+        # Path to the HLS playlist and segments
+        playlist_path = os.path.join(self.hls_path, 'playlist.m3u8')
+        segment_path = os.path.join(self.hls_path, 'segment_%03d.ts')
+        
+        # FFmpeg command to create HLS stream
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-f', 'rawvideo',
+            '-pix_fmt', 'bgr24',
+            '-s', f'{FRAME_WIDTH}x{FRAME_HEIGHT}',
+            '-r', '30',  # 30 fps
+            '-i', 'pipe:',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-tune', 'zerolatency',
+            '-profile:v', 'baseline',
+            '-level', '3.0',
+            '-pix_fmt', 'yuv420p',
+            '-f', 'hls',
+            '-hls_time', str(HLS_SEGMENT_DURATION),
+            '-hls_list_size', '10',
+            '-hls_flags', 'delete_segments',
+            '-hls_segment_filename', segment_path,
+            playlist_path
+        ]
+        
+        try:
+            # Start ffmpeg process
+            self.ffmpeg_process = subprocess.Popen(
+                ffmpeg_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            logger.info(f"Started HLS streaming for {self.stream_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start ffmpeg: {str(e)}")
+            return False
+    
+    def _process_stream(self):
+        """Process frames from the RTSP stream"""
+        reconnect_delay = 1  # Initial reconnect delay in seconds
+        max_reconnect_delay = 30  # Maximum reconnect delay in seconds
+        
+        # Start ffmpeg process for HLS streaming
+        if not self._start_ffmpeg():
+            logger.error(f"Failed to start HLS streaming for {self.stream_id}")
+            self.is_running = False
+            return
+        
         while self.is_running:
-            frame = self.read_frame()
-            if frame is None:
-                continue
+            if not self.cap or not self.cap.isOpened():
+                if not self.connect():
+                    # Exponential backoff for reconnection attempts
+                    time.sleep(reconnect_delay)
+                    reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
+                    continue
+                else:
+                    reconnect_delay = 1  # Reset reconnect delay on successful connection
+            
+            try:
+                ret, frame = self.cap.read()
+                if not ret:
+                    logger.warning(f"Failed to read frame from {self.rtsp_url}")
+                    self.cap.release()
+                    self.cap = None
+                    continue
                 
-            # Resize frame for processing
-            resized_frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
-            
-            # Process with object detection model
-            with torch.no_grad():
-                results = model.predict(resized_frame, imgsz=(FRAME_WIDTH, FRAME_HEIGHT))
-            
-            detected_dog = False
-            
-            for result in results:
-                for det in result.boxes.data:
-                    class_id = int(det[-1])
-                    confidence = float(det[-2])
-                    x1, y1, x2, y2 = map(int, det[:4])
+                # Resize frame to desired dimensions
+                frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
+                
+                # Process with object detection model
+                with torch.no_grad():
+                    results = model.predict(frame, imgsz=(FRAME_WIDTH, FRAME_HEIGHT))
+                
+                detected_dog = False
+                
+                for result in results:
+                    for det in result.boxes.data:
+                        class_id = int(det[-1])
+                        confidence = float(det[-2])
+                        x1, y1, x2, y2 = map(int, det[:4])
+                        
+                        if class_id == DOG_CLASS_ID and confidence >= 0.6:
+                            detected_dog = True
+                            if confidence > self.highest_confidence_score:
+                                self.highest_confidence_score = confidence
+                                cropped_image = frame[y1:y2, x1:x2]
+                                self.highest_confidence_frame = cropped_image
+                
+                if detected_dog:
+                    self.consecutive_detections += 1
                     
-                    if class_id == DOG_CLASS_ID and confidence >= 0.6:
-                        detected_dog = True
-                        if confidence > self.highest_confidence_score:
-                            self.highest_confidence_score = confidence
-                            cropped_image = resized_frame[y1:y2, x1:x2]
-                            self.highest_confidence_frame = cropped_image
-            
-            if detected_dog:
-                self.consecutive_detections += 1
+                    if (self.consecutive_detections >= REQUIRED_CONSECUTIVE_FRAMES and 
+                        self.highest_confidence_frame is not None):
+                        # Process the detection
+                        self._process_detection()
+                else:
+                    self.consecutive_detections = 0
+                    self.highest_confidence_frame = None
+                    self.highest_confidence_score = 0
                 
-                if (self.consecutive_detections >= REQUIRED_CONSECUTIVE_FRAMES and 
-                    self.highest_confidence_frame is not None):
-                    # Process the detection
-                    self._process_detection()
-            else:
-                self.consecutive_detections = 0
-                self.highest_confidence_frame = None
-                self.highest_confidence_score = 0
-            
-            # Store the annotated frame in buffer for streaming
-            with self.lock:
-                self.frame_buffer = results[0].plot()
-            
-            # Don't process too quickly to save resources
-            time.sleep(0.01)
+                # Store the annotated frame in buffer for streaming
+                with self.lock:
+                    self.frame_buffer = results[0].plot()
+                
+                # Write frame to ffmpeg process
+                if self.ffmpeg_process and self.ffmpeg_process.poll() is None:
+                    try:
+                        # Use the annotated frame for HLS streaming
+                        self.ffmpeg_process.stdin.write(self.frame_buffer.tobytes())
+                    except (BrokenPipeError, IOError) as e:
+                        logger.error(f"Error writing to ffmpeg: {str(e)}")
+                        # Restart ffmpeg
+                        if self.ffmpeg_process:
+                            try:
+                                self.ffmpeg_process.terminate()
+                                self.ffmpeg_process.wait(timeout=5)
+                            except:
+                                pass
+                        self._start_ffmpeg()
+                else:
+                    # Restart ffmpeg if it has stopped
+                    self._start_ffmpeg()
+                
+            except Exception as e:
+                logger.error(f"Error processing stream {self.stream_id}: {str(e)}")
+                if self.cap:
+                    self.cap.release()
+                    self.cap = None
+                time.sleep(1)
     
     def _process_detection(self):
+        """Process a detected dog and send to the API"""
         try:
             leash_prediction = classify_leash(self.highest_confidence_frame)
             status_text = "Not Stray" if leash_prediction == "dog_with_leash" else "Stray Dog"
@@ -199,199 +313,361 @@ class RTSPStream:
         except Exception as e:
             logger.error(f"Error processing detection from stream {self.stream_id}: {e}")
         
-        # Reset detection state
+        # Reset detection tracking
         self.consecutive_detections = 0
         self.highest_confidence_frame = None
         self.highest_confidence_score = 0
     
     def get_frame(self):
+        """Get the latest frame from the buffer"""
         with self.lock:
             if self.frame_buffer is None:
                 return None
             return self.frame_buffer.copy()
 
-# Global variables for ML models
-model = None
-leash_classifier = None
-
 def load_models():
-    global model, leash_classifier
+    logger.info("Loading detection model...")
+    global model, resnet_model, class_names, resnet_transform
     
-    try:
-        # Load RTDETR model for dog detection
-        logger.info(f"Loading RTDETR model from {MODEL_PATH}")
-        model = RTDETR(MODEL_PATH)
-        model.to(device)
-        
-        # Load ResNet model for leash classification
-        logger.info(f"Loading ResNet model from {RESNET_PATH}")
-        leash_classifier = models.resnet50(pretrained=False)
-        num_ftrs = leash_classifier.fc.in_features
-        leash_classifier.fc = nn.Linear(num_ftrs, 2)  # 2 classes: with leash, without leash
-        
-        if os.path.exists(RESNET_PATH):
-            leash_classifier.load_state_dict(torch.load(RESNET_PATH, map_location=device))
-            leash_classifier.to(device)
-            leash_classifier.eval()
-            logger.info("ResNet model loaded successfully")
-        else:
-            logger.warning(f"ResNet model file not found at {RESNET_PATH}, using pretrained model")
-            leash_classifier = models.resnet50(pretrained=True)
-            leash_classifier.to(device)
-            leash_classifier.eval()
+    # Load the RTDETR model for object detection
+    model = RTDETR(MODEL_PATH)
+    model.conf = DEFAULT_CONFIDENCE
+    model.to(device)
     
-    except Exception as e:
-        logger.error(f"Error loading models: {e}")
-        raise
+    # Load the ResNet model for leash classification
+    logger.info("Loading classification model...")
+    resnet_model = models.resnet50(weights=None)
+    resnet_model.fc = nn.Linear(in_features=2048, out_features=2)
+    
+    # Load state dict with weights_only=True for security
+    resnet_model.load_state_dict(
+        torch.load(
+            RESNET_PATH,
+            map_location=torch.device(device),
+            weights_only=True
+        )
+    )
+    resnet_model.to(device)
+    resnet_model.eval()
+    
+    # Image transformation pipeline
+    resnet_transform = transforms.Compose([
+        transforms.Resize((640, 640)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    
+    class_names = ['dog_with_leash', 'dog_without_leash']
+    logger.info("Models loaded successfully")
 
 def encode_image_to_base64(image):
-    """Convert OpenCV image to base64 string"""
     _, buffer = cv2.imencode('.jpg', image)
     return base64.b64encode(buffer).decode('utf-8')
 
 def classify_leash(cropped_image):
-    """Classify if the dog has a leash or not"""
-    if cropped_image is None or leash_classifier is None:
-        return "dog_without_leash"  # Default to no leash if no image or model
-    
-    # Convert to PIL and preprocess
-    pil_image = Image.fromarray(cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB))
-    preprocess = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
-    
-    input_tensor = preprocess(pil_image).unsqueeze(0).to(device)
-    
-    with torch.no_grad():
-        output = leash_classifier(input_tensor)
-        _, predicted = torch.max(output, 1)
-    
-    return "dog_with_leash" if predicted.item() == 1 else "dog_without_leash"
+    image_pil = Image.fromarray(cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB))
+    image_tensor = resnet_transform(image_pil).unsqueeze(0).to(device)
 
-# Scan for available RTSP streams on the network
+    with torch.no_grad():
+        outputs = resnet_model(image_tensor)
+        _, predicted_class = torch.max(outputs, 1)
+        predicted_label = class_names[predicted_class.item()]
+
+    return predicted_label
+
 def scan_rtsp_streams():
+    """Initialize with fixed RTSP URL instead of scanning"""
     available_streams = []
     
-    # Try to get local IP address
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-        
-        ip_prefix = '.'.join(local_ip.split('.')[:3])
-        logger.info(f"Scanning for RTSP streams on network: {ip_prefix}.*")
-    except:
-        # Fallback to default
-        ip_prefix = "10.0.0"
-        logger.warning(f"Could not determine local network, using default: {ip_prefix}.*")
+    # Using the fixed RTSP URL directly
+    rtsp_url = BASE_RTSP_URL
+    stream_id = "main-camera"
     
-    # For testing purposes, add some sample RTSP streams
-    # In production, you would scan the network or read from a configuration
-    sample_streams = [
-        # Sample RTSP streams - replace with real ones in production
-        {"id": "1", "url": "rtsp://wowzaec2demo.streamlock.net/vod/mp4:BigBuckBunny_115k.mp4"},
-        {"id": "2", "url": "rtsp://wowzaec2demo.streamlock.net/vod/mp4:BigBuckBunny_115k.mp4"},
-        
-        # You can also use local video files for testing
-        {"id": "3", "url": "sample_videos/dog_video.mp4"},
-        {"id": "4", "url": "sample_videos/street_video.mp4"},
-        
-        # Add more streams as needed
-    ]
+    logger.info(f"Testing RTSP stream: {rtsp_url}")
+    cap = cv2.VideoCapture(rtsp_url)
     
-    # Add sample streams to available streams
-    available_streams.extend(sample_streams)
-    
-    # In a real implementation, you would scan the network for RTSP cameras
-    # This is just a placeholder for the actual scanning logic
-    
-    logger.info(f"Found {len(available_streams)} RTSP streams")
+    if cap.isOpened():
+        ret, _ = cap.read()
+        if ret:
+            available_streams.append({
+                "stream_id": stream_id,
+                "rtsp_url": rtsp_url,
+                "ip": "192.168.1.5",
+                "camera": "channel-2"
+            })
+            logger.info(f"Found working RTSP stream: {rtsp_url}")
+        cap.release()
+    else:
+        logger.error(f"Could not connect to RTSP stream: {rtsp_url}")
+                
     return available_streams
 
-# Initialize and start processing for all available RTSP streams
 def initialize_streams():
+    """Initialize and start processing for all available RTSP streams"""
+    global active_streams
+    
+    # Get the available stream (fixed URL)
     available_streams = scan_rtsp_streams()
+    logger.info(f"Found {len(available_streams)} available RTSP streams")
     
-    # Create stream objects for new streams
+    # Initialize streams
     for stream_info in available_streams:
-        stream_id = stream_info["id"]
-        rtsp_url = stream_info["url"]
+        stream_id = stream_info["stream_id"]
+        rtsp_url = stream_info["rtsp_url"]
         
-        # Skip if already active
-        if stream_id in active_streams and active_streams[stream_id].is_running:
-            continue
-            
-        # Create new stream object
-        stream = RTSPStream(rtsp_url, stream_id)
-        active_streams[stream_id] = stream
-        
-        # Start processing
-        try:
+        if stream_id not in active_streams:
+            stream = RTSPStream(rtsp_url, stream_id)
+            active_streams[stream_id] = stream
             stream.start()
-        except Exception as e:
-            logger.error(f"Error starting stream {stream_id}: {e}")
     
-    # Return list of active streams
-    return [
-        {
-            "id": stream_id,
-            "url": stream.rtsp_url,
-            "status": "active" if stream.is_running else "inactive"
-        }
-        for stream_id, stream in active_streams.items()
-    ]
+    # Clean up any streams that are no longer available
+    current_ids = [s["stream_id"] for s in available_streams]
+    for stream_id in list(active_streams.keys()):
+        if stream_id not in current_ids:
+            active_streams[stream_id].stop()
+            del active_streams[stream_id]
+    
+    return available_streams
 
-# Generator for video frames from a specific stream
 def generate_frames(stream_id):
-    """Generate frames for video streaming"""
+    """Generator for video frames from a specific stream"""
     if stream_id not in active_streams:
-        logger.error(f"Stream {stream_id} not found")
+        logger.error(f"Stream {stream_id} not found in generate_frames")
         return
         
     stream = active_streams[stream_id]
     
+    # Add a small delay to ensure the stream is initialized
+    time.sleep(0.5)
+    
     while True:
-        # Get the latest frame
-        frame = stream.get_frame()
+        with stream.lock:
+            if stream.frame_buffer is None:
+                # If no frame is available yet, send a blank frame
+                blank_frame = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), np.uint8)
+                _, frame_bytes = cv2.imencode('.jpg', blank_frame)
+                yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes.tobytes() + b'\r\n')
+                time.sleep(0.5)  # Wait a bit longer for the first frame
+                continue
+                
+            # Get the latest frame
+            frame = stream.frame_buffer.copy()
         
-        if frame is None:
-            # If no frame is available, send a blank frame
-            blank_frame = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
-            _, buffer = cv2.imencode('.jpg', blank_frame)
-        else:
-            # Encode the frame as JPEG
-            _, buffer = cv2.imencode('.jpg', frame)
-            
-        # Convert to bytes and yield
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        # Encode the frame as JPEG
+        _, frame_bytes = cv2.imencode('.jpg', frame)
+        frame_bytes = frame_bytes.tobytes()
         
-        # Don't generate frames too quickly
+        # Yield the frame with proper multipart format
+        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        
+        # Control the frame rate to avoid overwhelming the client
         time.sleep(0.033)  # ~30 FPS
 
-@app.route('/video/<stream_id>')
+def cleanup_hls_directory():
+    """Check HLS directory size and clean up old files if needed"""
+    while True:
+        try:
+            total_size = 0
+            for dirpath, dirnames, filenames in os.walk(HLS_DIR):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    total_size += os.path.getsize(fp)
+            
+            # Convert to MB
+            total_size_mb = total_size / (1024 * 1024)
+            
+            # If size exceeds limit, remove oldest files
+            if total_size_mb > MAX_HLS_DIR_SIZE_MB:
+                logger.info(f"HLS directory size ({total_size_mb:.2f} MB) exceeds limit. Cleaning up...")
+                
+                # Get all .ts files sorted by modification time
+                ts_files = []
+                for dirpath, dirnames, filenames in os.walk(HLS_DIR):
+                    for f in filenames:
+                        if f.endswith('.ts'):
+                            fp = os.path.join(dirpath, f)
+                            ts_files.append((fp, os.path.getmtime(fp)))
+                
+                # Sort by modification time (oldest first)
+                ts_files.sort(key=lambda x: x[1])
+                
+                # Remove oldest files until we're under the limit
+                for file_path, _ in ts_files:
+                    if total_size_mb <= MAX_HLS_DIR_SIZE_MB * 0.8:  # Remove until we're at 80% of the limit
+                        break
+                    
+                    file_size = os.path.getsize(file_path) / (1024 * 1024)
+                    os.remove(file_path)
+                    total_size_mb -= file_size
+                    logger.info(f"Removed old HLS segment: {file_path}")
+        
+        except Exception as e:
+            logger.error(f"Error in HLS cleanup: {str(e)}")
+        
+        # Sleep for the specified interval
+        time.sleep(HLS_CLEANUP_INTERVAL)
+
+# Start the cleanup thread
+cleanup_thread = threading.Thread(target=cleanup_hls_directory, daemon=True)
+cleanup_thread.start()
+
+@app.route('/hls/<stream_id>/<path:filename>', methods=['GET'])
+def hls_stream(stream_id, filename):
+    """Serve HLS stream files"""
+    stream_dir = os.path.join(HLS_DIR, stream_id)
+    
+    # Check if the stream directory exists
+    if not os.path.exists(stream_dir):
+        # Try to start the stream if it doesn't exist
+        if stream_id in active_streams:
+            # Stream exists but directory doesn't, create it
+            os.makedirs(stream_dir, exist_ok=True)
+        else:
+            # Try to fetch from external source
+            try:
+                external_response = requests.get(f"{EXTERNAL_STREAMS_API}?internal=true", timeout=3)
+                if external_response.status_code == 200:
+                    external_data = external_response.json()
+                    if 'streams' in external_data and isinstance(external_data['streams'], list):
+                        for ext_stream in external_data['streams']:
+                            if ext_stream['id'] == stream_id and 'url' in ext_stream and ext_stream['url'].startswith('rtsp://'):
+                                # Create a new stream instance
+                                try:
+                                    new_stream = RTSPStream(ext_stream['url'], stream_id)
+                                    new_stream.start()
+                                    active_streams[stream_id] = new_stream
+                                    logger.info(f"Added external stream on-demand: {stream_id}")
+                                    # Create the directory
+                                    os.makedirs(stream_dir, exist_ok=True)
+                                    # Give it a moment to initialize
+                                    time.sleep(1)
+                                    break
+                                except Exception as e:
+                                    logger.error(f"Failed to initialize external stream {stream_id}: {str(e)}")
+            except Exception as e:
+                logger.error(f"Failed to fetch external stream {stream_id}: {str(e)}")
+    
+    # If the directory still doesn't exist or the file doesn't exist, return an error
+    if not os.path.exists(stream_dir) or not os.path.exists(os.path.join(stream_dir, filename)):
+        return jsonify({"error": f"Stream {stream_id} not found or file {filename} not available"}), 404
+    
+    # Add CORS headers
+    response = send_from_directory(stream_dir, filename)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Cache-Control', 'no-cache, no-store, must-revalidate')
+    
+    return response
+
+@app.route('/video/<stream_id>', methods=['GET', 'OPTIONS'])
 def video(stream_id):
     """Stream video for a specific stream ID"""
-    return Response(generate_frames(stream_id), 
-                   mimetype='multipart/x-mixed-replace; boundary=frame')
+    # Add CORS headers for video streaming
+    if request.method == 'OPTIONS':
+        # Handle preflight request
+        response = Response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
+        return response
+    
+    # Check if the client wants a single frame (for img tag) or streaming
+    single_frame = request.args.get('frame', 'false').lower() == 'true'
+    
+    # Check if the stream exists
+    if stream_id not in active_streams:
+        # Try to fetch from external source if not in our active streams
+        try:
+            # Use internal flag to prevent recursion
+            external_response = requests.get(f"{EXTERNAL_STREAMS_API}?internal=true", timeout=3)
+            if external_response.status_code == 200:
+                external_data = external_response.json()
+                if 'streams' in external_data and isinstance(external_data['streams'], list):
+                    for ext_stream in external_data['streams']:
+                        if ext_stream['id'] == stream_id and 'url' in ext_stream and ext_stream['url'].startswith('rtsp://'):
+                            # Create a new stream instance
+                            try:
+                                new_stream = RTSPStream(ext_stream['url'], stream_id)
+                                new_stream.start()
+                                active_streams[stream_id] = new_stream
+                                logger.info(f"Added external stream on-demand: {stream_id}")
+                                # Give it a moment to initialize
+                                time.sleep(0.5)
+                                break
+                            except Exception as e:
+                                logger.error(f"Failed to initialize external stream {stream_id}: {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to fetch external stream {stream_id}: {str(e)}")
+            
+    # If stream still doesn't exist, return an error
+    if stream_id not in active_streams:
+        logger.error(f"Stream {stream_id} not found")
+        return jsonify({"error": f"Stream {stream_id} not found"}), 404
+    
+    # If client wants a single frame, return the current frame as a JPEG
+    if single_frame:
+        stream = active_streams[stream_id]
+        with stream.lock:
+            if stream.frame_buffer is None:
+                # If no frame is available, send a blank frame
+                blank_frame = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), np.uint8)
+                cv2.putText(blank_frame, "Waiting for stream...", (50, FRAME_HEIGHT//2), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                _, frame_bytes = cv2.imencode('.jpg', blank_frame)
+                frame_data = io.BytesIO(frame_bytes.tobytes())
+            else:
+                # Get the latest frame
+                frame = stream.frame_buffer.copy()
+                _, frame_bytes = cv2.imencode('.jpg', frame)
+                frame_data = io.BytesIO(frame_bytes.tobytes())
+        
+        frame_data.seek(0)
+        response = send_file(frame_data, mimetype='image/jpeg')
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Cache-Control', 'no-cache, no-store, must-revalidate')
+        return response
+    
+    # Otherwise, redirect to HLS stream
+    hls_url = f"/hls/{stream_id}/playlist.m3u8"
+    return jsonify({"hls_url": hls_url}), 200
 
 @app.route('/streams', methods=['GET'])
 def get_streams():
-    """API endpoint to get all available streams"""
+    """Get available streams"""
     streams = []
+    
+    # Check if this is an internal request to prevent recursion
+    is_internal = request.args.get('internal', 'false').lower() == 'true'
+    
+    # Add local streams
     for stream_id, stream in active_streams.items():
         streams.append({
             "id": stream_id,
-            "name": f"Camera {stream_id}",
-            "location": f"Location {stream_id}",
             "url": stream.rtsp_url,
             "status": "active" if stream.is_running else "inactive",
-            "video_url": f"/video/{stream_id}"
+            "video_url": f"/video/{stream_id}",
+            "hls_url": f"/hls/{stream_id}/playlist.m3u8"
         })
+    
+    # Only fetch external streams if this is not an internal request
+    if not is_internal and EXTERNAL_STREAMS_API and EXTERNAL_STREAMS_API != f"http://{request.host}/streams":
+        try:
+            # Add the internal flag to prevent recursion
+            external_url = f"{EXTERNAL_STREAMS_API}?internal=true"
+            external_response = requests.get(external_url, timeout=3)
+            if external_response.status_code == 200:
+                external_data = external_response.json()
+                if 'streams' in external_data and isinstance(external_data['streams'], list):
+                    # Add external streams to our list
+                    for ext_stream in external_data['streams']:
+                        # Make sure we don't add duplicates
+                        if not any(s['id'] == ext_stream['id'] for s in streams):
+                            # Add HLS URL if not present
+                            if 'hls_url' not in ext_stream:
+                                ext_stream['hls_url'] = f"/hls/{ext_stream['id']}/playlist.m3u8"
+                            streams.append(ext_stream)
+        except Exception as e:
+            logger.error(f"Failed to fetch external streams: {str(e)}")
+    
     return jsonify({"streams": streams})
 
 @app.route('/scan', methods=['GET'])
@@ -410,13 +686,13 @@ def health_check():
     })
 
 def periodic_stream_scanner():
-    """Periodically scan for new streams"""
+    """Periodically check the fixed stream connection"""
     while True:
         try:
             initialize_streams()
         except Exception as e:
             logger.error(f"Error in periodic stream scanner: {e}")
-        time.sleep(60)  # Scan every minute
+        time.sleep(60)  # Check every minute
 
 if __name__ == '__main__':
     # Load ML models
@@ -425,7 +701,7 @@ if __name__ == '__main__':
     # Import numpy here to avoid circular imports
     import numpy as np
     
-    # Initial scan for streams
+    # Initial stream initialization
     initialize_streams()
     
     # Start periodic scanner in background
