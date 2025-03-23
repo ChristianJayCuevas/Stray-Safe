@@ -25,8 +25,8 @@ const loading = ref(true);
 const streamError = ref(false);
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://YOUR_VPS_IP:5000'; // Replace with your VPS IP
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://YOUR_VPS_IP:5000'; // Flask server URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'; // Local Flask server
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000'; // Local Flask server
 console.log('Using API base URL:', API_BASE_URL);
 console.log('Using Flask server URL:', FLASK_SERVER_URL);
 
@@ -54,7 +54,7 @@ async function fetchCCTVStreams() {
     streamError.value = false;
     
     try {
-        console.log('Fetching CCTV streams from Flask server...');
+        console.log('Fetching CCTV streams from local Flask server...');
         const response = await axios.get(`${FLASK_SERVER_URL}/streams`, {
             headers: {
                 'Accept': 'application/json',
@@ -93,7 +93,7 @@ async function fetchCCTVStreams() {
             streamError.value = true;
         }
     } catch (error) {
-        console.error("Failed to fetch CCTV streams from Flask server:", error);
+        console.error("Failed to fetch CCTV streams from local Flask server:", error);
         console.log("Using sample data instead");
         useSampleData();
         streamError.value = true;

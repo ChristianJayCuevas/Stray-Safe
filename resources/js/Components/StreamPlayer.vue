@@ -69,6 +69,12 @@ export default {
 
     // Function to get proxied stream URL
     const getProxiedUrl = (url) => {
+      // If the URL is already a Flask server URL, return it as is
+      if (url.includes('/video/') || url.includes('localhost:5000') || url.includes('127.0.0.1:5000')) {
+        console.log('Using direct Flask video URL:', url);
+        return url;
+      }
+      
       // Check if this is already a local URL
       if (url.includes('/stream/')) {
         return url;
@@ -107,10 +113,43 @@ export default {
       
       // Get the proxied URL
       const proxiedUrl = getProxiedUrl(props.streamUrl);
-      console.log(`Using authenticated URL: ${proxiedUrl}`);
+      console.log(`Using stream URL: ${proxiedUrl}`);
       
-      // Also log authentication details for debugging
-      console.log(`Authentication: username=${props.username}, password=${props.password}`);
+      // For local Flask server, we don't need authentication
+      const isLocalFlaskUrl = proxiedUrl.includes('localhost:5000') || 
+                              proxiedUrl.includes('127.0.0.1:5000') || 
+                              proxiedUrl.includes('/video/');
+      
+      if (!isLocalFlaskUrl) {
+        // Log authentication details for non-local streams
+        console.log(`Authentication: username=${props.username}, password=${props.password}`);
+      }
+
+      // Check if the URL is a direct video stream (not HLS)
+      const isDirectVideoStream = proxiedUrl.includes('/video/');
+      
+      // If it's a direct video stream from Flask, use the video element directly
+      if (isDirectVideoStream && videoElement.value) {
+        try {
+          console.log('Using direct video stream from Flask');
+          videoElement.value.src = proxiedUrl;
+          videoElement.value.addEventListener('loadeddata', () => {
+            loading.value = false;
+            emit('stream-ready');
+          });
+          
+          videoElement.value.addEventListener('error', (e) => {
+            error.value = `Video playback error: ${e.message || 'Stream not available'}`;
+            loading.value = false;
+            emit('stream-error', error.value);
+          });
+          
+          return;
+        } catch (e) {
+          console.error('Error setting up direct video stream:', e);
+          // Fall back to HLS if direct stream fails
+        }
+      }
 
       // Check if HLS.js is supported
       if (!Hls.isSupported()) {
