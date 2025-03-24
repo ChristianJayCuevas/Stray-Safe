@@ -699,7 +699,7 @@ export default {
             const streamId = match[1];
             const hlsUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8?t=${Date.now()}`;
             console.log('Trying Flask HLS API fallback:', hlsUrl);
-          initializeHls(hlsUrl);
+            initializeHls(hlsUrl);
           } else {
             error.value = 'Failed to parse stream URL for alternative method';
             emit('stream-error', error.value);
