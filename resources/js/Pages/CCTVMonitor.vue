@@ -108,42 +108,83 @@ async function fetchCCTVStreams() {
     try {
         activeServerUrl.value = await getBestServerUrl();
         
-        const response = await axios.get(`${activeServerUrl.value}/streams`, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            timeout: 10000
-        });
+        // Use direct URL for straysafe.me
+        const directHlsUrl = 'https://straysafe.me/api/hls/main-camera/playlist.m3u8';
         
-        if (response.data?.streams?.length) {
-            cctvs.value = response.data.streams.map((stream, index) => {
-                // Always use local HLS URL
-                const hlsUrl = `http://localhost:5000/hls/${stream.id}/playlist.m3u8`;
-                
-                return {
-                    id: stream.id || (index + 1).toString(),
-                    name: stream.name || `Camera ${index + 1}`,
-                    location: stream.location || `Location ${index + 1}`,
-                    status: stream.status === 'active' ? 'Online' : 'Offline',
-                    videoSrc: [hlsUrl],
-                    originalSrc: stream.url,
-                    streamInfo: stream,
-                    isHls: true
-                };
+        // Try to get streams from API first
+        let useDirectHls = false;
+        
+        try {
+            const response = await axios.get(`${activeServerUrl.value}/streams`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                timeout: 5000 // Shorter timeout to fall back faster
             });
             
+            if (response.data?.streams?.length) {
+                cctvs.value = response.data.streams.map((stream, index) => {
+                    // Get the best HLS URL from the stream data
+                    // Prefer the Nginx HLS URL
+                    const hlsUrl = stream.hls_url || stream.flask_hls_url || `http://localhost:5000/hls/${stream.rtmp_key || stream.id}/playlist.m3u8`;
+                    
+                    // If this is the main camera, use the direct URL that works
+                    const finalUrl = (stream.id === 'main-camera') ? directHlsUrl : hlsUrl;
+                    
+                    console.log(`Stream ${stream.id}: Using HLS URL ${finalUrl}`);
+                    
+                    return {
+                        id: stream.id || (index + 1).toString(),
+                        name: stream.name || `Camera ${index + 1}`,
+                        location: stream.location || `Location ${index + 1}`,
+                        status: stream.status === 'active' ? 'Online' : 'Offline',
+                        videoSrc: [finalUrl],
+                        originalSrc: stream.url,
+                        streamInfo: stream,
+                        isHls: true,
+                        rtmpKey: stream.rtmp_key
+                    };
+                });
+                
+                systemStats.value = {
+                    totalCameras: cctvs.value.length,
+                    onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
+                    detectionsToday: Math.floor(Math.random() * 30),
+                    storageUsed: '1.2 TB'
+                };
+            } else {
+                useDirectHls = true;
+            }
+        } catch (error) {
+            console.error("Error fetching streams from API:", error);
+            useDirectHls = true;
+        }
+        
+        // If API failed or returned no streams, use direct HLS URL
+        if (useDirectHls) {
+            console.log("Using direct HLS URL:", directHlsUrl);
+            cctvs.value = [
+                {
+                    id: 'main-camera',
+                    name: 'Main Camera',
+                    location: 'Main Gate',
+                    status: 'Online',
+                    videoSrc: [directHlsUrl],
+                    originalSrc: 'rtsp://localhost:8554/cam1',
+                    isHls: true
+                }
+            ];
+            
             systemStats.value = {
-                totalCameras: cctvs.value.length,
-                onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
-                detectionsToday: Math.floor(Math.random() * 30),
+                totalCameras: 1,
+                onlineCameras: 1,
+                detectionsToday: 5,
                 storageUsed: '1.2 TB'
             };
-        } else {
-            useSampleData();
-            streamError.value = true;
         }
     } catch (error) {
+        console.error("Error in fetchCCTVStreams:", error);
         useSampleData();
         streamError.value = true;
     } finally {
@@ -153,7 +194,8 @@ async function fetchCCTVStreams() {
 
 // Function to use sample data when API is unavailable
 function useSampleData() {
-    const sampleHlsUrl = 'http://localhost:5000/hls/main-camera/playlist.m3u8';
+    // Use the direct straysafe.me URL 
+    const sampleHlsUrl = 'https://straysafe.me/api/hls/main-camera/playlist.m3u8';
     
     cctvs.value = [
         {
@@ -373,7 +415,16 @@ function changePage(newPage) {
 }
 
 function openStreamInBrowser() {
-    window.open('http://localhost:5000/hls/main-camera/playlist.m3u8', '_blank');
+    // Direct URL for the HLS stream
+    const directHlsUrl = 'https://straysafe.me/api/hls/main-camera/playlist.m3u8';
+    
+    // If we have any cameras, open the first one's HLS URL
+    if (cctvs.value.length > 0) {
+        window.open(cctvs.value[0].videoSrc[0], '_blank');
+    } else {
+        // Fallback to the direct URL
+        window.open(directHlsUrl, '_blank');
+    }
 }
 </script>
 
@@ -461,7 +512,7 @@ function openStreamInBrowser() {
             <div v-else-if="streamError" class="error-container">
                 <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
                 <p class="mb-2">Unable to connect to the stream server at <strong>{{ activeServerUrl.value }}</strong>.</p>
-                <p class="mb-2">Using direct m3u8 URL instead: <strong>http://localhost:5000/hls/main-camera/playlist.m3u8</strong></p>
+                <p class="mb-2">Using direct HTTPS URL instead: <strong>https://straysafe.me/api/hls/main-camera/playlist.m3u8</strong></p>
                 <p class="mb-4">Note: This stream requires authentication (user: user, password: Straysafeteam3)</p>
                 <div class="flex space-x-2">
                     <q-btn class="secondary-btn" icon="refresh" label="Try Again" @click="fetchCCTVStreams" />

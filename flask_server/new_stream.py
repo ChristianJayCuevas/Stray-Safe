@@ -159,65 +159,65 @@ class RTSPStream:
         logger.info(f"Stopped stream {self.stream_id}: {self.rtsp_url}")
     
     def _start_ffmpeg(self):
-        """Start ffmpeg process for HLS streaming"""
+        """Start ffmpeg process for RTMP streaming (without direct HLS output)"""
+
         # Ensure HLS directory exists
         os.makedirs(self.hls_path, exist_ok=True)
         logger.info(f"HLS path for stream {self.stream_id}: {self.hls_path}")
+
+        # Define RTMP Output URL with unique stream key to avoid "already publishing" error
+        # Use timestamp as part of stream key to make it unique
+        timestamp = int(time.time())
+        rtmp_stream_key = f"{self.stream_id}_{timestamp}"
+        rtmp_url = f"rtmp://127.0.0.1/live/{rtmp_stream_key}"  # RTMP Output URL
         
-        # Clean up any existing files to avoid conflicts
-        for file in glob.glob(os.path.join(self.hls_path, '*.ts')):
+        # Store stream key for reference
+        self.rtmp_stream_key = rtmp_stream_key
+        
+        # Kill any existing ffmpeg processes for this stream to avoid conflicts
+        if self.ffmpeg_process:
             try:
-                os.remove(file)
-                logger.debug(f"Removed old segment file: {file}")
+                self.ffmpeg_process.terminate()
+                self.ffmpeg_process.wait(timeout=5)
             except Exception as e:
-                logger.warning(f"Failed to remove old segment file {file}: {str(e)}")
-        
-        # Remove old playlist if it exists
-        playlist_path = os.path.join(self.hls_path, 'playlist.m3u8')
-        if os.path.exists(playlist_path):
+                logger.warning(f"Failed to terminate existing ffmpeg process: {str(e)}")
             try:
-                os.remove(playlist_path)
-                logger.debug(f"Removed old playlist: {playlist_path}")
-            except Exception as e:
-                logger.warning(f"Failed to remove old playlist {playlist_path}: {str(e)}")
-        
-        segment_path = os.path.join(self.hls_path, 'segment_%03d.ts')
-        
-        # FFmpeg command to create HLS stream
+                self.ffmpeg_process.kill()
+            except:
+                pass
+            self.ffmpeg_process = None
+
+        # FFmpeg command for RTMP streaming only (let nginx handle HLS conversion)
         ffmpeg_cmd = [
             'ffmpeg',
-            '-f', 'rawvideo',
-            '-pix_fmt', 'bgr24',
-            '-s', f'{FRAME_WIDTH}x{FRAME_HEIGHT}',
-            '-r', '30',  # 30 fps
-            '-i', 'pipe:',
-            '-c:v', 'libx264',
+            '-i', self.rtsp_url,      # RTSP input
+            '-c:v', 'libx264',        # Video codec
             '-preset', 'ultrafast',
             '-tune', 'zerolatency',
-            '-profile:v', 'baseline',
-            '-level', '3.0',
-            '-pix_fmt', 'yuv420p',
-            '-f', 'hls',
-            '-hls_time', str(HLS_SEGMENT_DURATION),
-            '-hls_list_size', '10',
-            '-hls_flags', 'delete_segments+append_list',
-            '-hls_segment_filename', segment_path,
-            '-hls_allow_cache', '0',
-            playlist_path
+            '-profile:v', 'baseline', # More compatible profile
+            '-b:v', '1500k',          # Video bitrate
+            '-maxrate', '1500k',      # Maximum bitrate
+            '-bufsize', '3000k',      # Buffer size
+            '-r', '30',               # Frame rate
+            '-g', '60',               # Keyframe interval (2 seconds at 30fps)
+            '-keyint_min', '60',      # Minimum keyframe interval
+            '-sc_threshold', '0',     # Scene change threshold
+            '-f', 'flv',              # Output format for RTMP
+            rtmp_url                  # RTMP output URL
         ]
-        
+
         try:
-            # Start ffmpeg process
-            logger.info(f"Starting ffmpeg with command: {' '.join(ffmpeg_cmd)}")
+            # Start FFmpeg process
+            logger.info(f"Starting FFmpeg for stream {self.stream_id} with key {rtmp_stream_key}: {' '.join(ffmpeg_cmd)}")
             self.ffmpeg_process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,  # Capture stdout for debugging
-                stderr=subprocess.PIPE,  # Capture stderr for debugging
-                bufsize=10**8  # Use a large buffer
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=10**8  # Large buffer
             )
-            
-            # Start a thread to log ffmpeg output for debugging
+
+            # Log FFmpeg output in a separate thread
             def log_ffmpeg_output():
                 while self.ffmpeg_process and self.ffmpeg_process.poll() is None:
                     try:
@@ -225,16 +225,17 @@ class RTSPStream:
                         if stderr_line:
                             logger.debug(f"FFmpeg [{self.stream_id}]: {stderr_line}")
                     except Exception as e:
-                        logger.error(f"Error reading ffmpeg output: {str(e)}")
+                        logger.error(f"Error reading FFmpeg output: {str(e)}")
                         break
                     time.sleep(0.1)
-            
+
             threading.Thread(target=log_ffmpeg_output, daemon=True).start()
-            
-            logger.info(f"Started HLS streaming for {self.stream_id}")
+
+            logger.info(f"Started RTMP streaming for {self.stream_id} with stream key {rtmp_stream_key}")
             return True
+
         except Exception as e:
-            logger.error(f"Failed to start ffmpeg: {str(e)}")
+            logger.error(f"Failed to start FFmpeg: {str(e)}")
             return False
     
     def _process_stream(self):
@@ -727,14 +728,27 @@ def get_streams():
     # Add active streams to the list
     for stream_id, stream in active_streams.items():
         if isinstance(stream, RTSPStream):
+            # Get the stream key if available
+            rtmp_stream_key = getattr(stream, 'rtmp_stream_key', stream_id)
+            
+            # Build URLs
+            # For Nginx-served HLS (preferred for browser)
+            nginx_hls_url = f"/hls/{rtmp_stream_key}/playlist.m3u8"
+            # Fallback Flask-served HLS
+            flask_hls_url = f"/api/hls/{stream_id}/playlist.m3u8"
+            # Video direct URL
+            video_url = f"/api/video/{stream_id}"
+            
             stream_info = {
                 'id': stream_id,
                 'name': f'Camera {stream_id}',
                 'location': 'Main Location',
                 'status': 'active',
                 'url': stream.rtsp_url,
-                'video_url': get_absolute_url(f'/video/{stream_id}', request),
-                'hls_url': get_absolute_url(f'/hls/{stream_id}/playlist.m3u8', request),
+                'video_url': get_absolute_url(video_url, request),
+                'hls_url': get_absolute_url(nginx_hls_url, request),  # Primary HLS URL (Nginx)
+                'flask_hls_url': get_absolute_url(flask_hls_url, request),  # Backup HLS URL (Flask)
+                'rtmp_key': rtmp_stream_key,  # Include the RTMP stream key
                 'type': 'rtsp'
             }
             streams_list.append(stream_info)
@@ -751,15 +765,23 @@ def get_streams():
                 active_streams['main-camera'] = new_stream
                 logger.info(f"Created default main-camera stream with URL: {rtsp_url}")
                 
-                # Add it to the streams list
+                # Wait a moment for ffmpeg to start and create the RTMP stream
+                time.sleep(2)
+                
+                # Get the stream key if available
+                rtmp_stream_key = getattr(new_stream, 'rtmp_stream_key', 'main-camera')
+                
+                # Add it to the streams list with proper URLs
                 streams_list.append({
                     'id': 'main-camera',
                     'name': 'Main Camera',
                     'location': 'Main Location',
                     'status': 'active',
                     'url': rtsp_url,
-                    'video_url': get_absolute_url(f'/video/main-camera', request),
-                    'hls_url': get_absolute_url(f'/hls/main-camera/playlist.m3u8', request),
+                    'video_url': get_absolute_url(f'/api/video/main-camera', request),
+                    'hls_url': get_absolute_url(f'/hls/{rtmp_stream_key}/playlist.m3u8', request),
+                    'flask_hls_url': get_absolute_url(f'/api/hls/main-camera/playlist.m3u8', request),
+                    'rtmp_key': rtmp_stream_key,
                     'type': 'rtsp'
                 })
             except Exception as e:
@@ -771,29 +793,11 @@ def get_streams():
                     'location': 'Main Location',
                     'status': 'inactive',
                     'url': '',
-                    'video_url': get_absolute_url(f'/video/main-camera', request),
+                    'video_url': get_absolute_url(f'/api/video/main-camera', request),
                     'hls_url': get_absolute_url(f'/hls/main-camera/playlist.m3u8', request),
+                    'flask_hls_url': get_absolute_url(f'/api/hls/main-camera/playlist.m3u8', request),
                     'type': 'rtsp'
                 })
-    
-    # Try to fetch from external source if not in our active streams
-    try:
-        # Use internal flag to prevent recursion
-        external_url = f"{EXTERNAL_STREAMS_API}?internal=true"
-        external_response = requests.get(external_url, timeout=3)
-        if external_response.status_code == 200:
-            external_data = external_response.json()
-            if 'streams' in external_data and isinstance(external_data['streams'], list):
-                # Add external streams to our list
-                for ext_stream in external_data['streams']:
-                    # Make sure we don't add duplicates
-                    if not any(s['id'] == ext_stream['id'] for s in streams_list):
-                        # Add HLS URL if not present
-                        if 'hls_url' not in ext_stream:
-                            ext_stream['hls_url'] = f"/hls/{ext_stream['id']}/playlist.m3u8"
-                        streams_list.append(ext_stream)
-    except Exception as e:
-        logger.error(f"Failed to fetch external streams: {str(e)}")
     
     return jsonify({'streams': streams_list})
 

@@ -122,8 +122,18 @@ export default {
 
     // Function to initialize HLS player
     const initializeHls = (url) => {
-      // Always use local URL without protocol changes
-      const streamUrl = url;
+      // If using straysafe.me URL, ensure we use the HTTPS version
+      let streamUrl = url;
+      if (url.includes('straysafe.me') && url.startsWith('http://')) {
+        streamUrl = url.replace('http://', 'https://');
+        console.log('Converted to HTTPS URL:', streamUrl);
+      }
+      
+      // Always use the direct URL from props without modifying protocol
+      if (url === 'http://straysafe.me/api/hls/main-camera/playlist.m3u8') {
+        streamUrl = 'https://straysafe.me/api/hls/main-camera/playlist.m3u8';
+        console.log('Using direct HTTPS URL for main camera:', streamUrl);
+      }
       
       // Check if we should use an existing HLS instance
       if (props.useExistingInstance && props.streamId && activeHlsInstances.value[props.streamId]) {
@@ -207,6 +217,7 @@ export default {
         
         hls.value.attachMedia(videoElement.value);
         hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
+          console.log('Loading HLS source:', streamUrl);
           hls.value.loadSource(streamUrl);
           hls.value.url = streamUrl;
           
@@ -226,6 +237,8 @@ export default {
         
         // Enhanced error handling
         hls.value.on(Hls.Events.ERROR, (event, data) => {
+          console.error('HLS Error:', data.type, data.details, data);
+          
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
@@ -233,10 +246,12 @@ export default {
                   error.value = 'Access denied to stream';
                   emit('stream-error', error.value);
                 } else {
+                  console.log('Network error - restarting stream');
                   hls.value.startLoad();
                 }
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('Media error - attempting recovery');
                 hls.value.recoverMediaError();
                 break;
               default:
@@ -248,6 +263,7 @@ export default {
                   }
                   
                   const delay = Math.min(1000 * Math.pow(2, retryCount.value - 1), 10000);
+                  console.log(`Retrying in ${delay}ms (attempt ${retryCount.value})`);
                   retryTimeout.value = setTimeout(() => {
                     initializePlayer();
                   }, delay);

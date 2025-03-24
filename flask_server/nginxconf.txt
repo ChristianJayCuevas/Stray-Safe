@@ -1,0 +1,115 @@
+server {
+    listen 443 ssl;
+    server_name straysafe.me;
+    # SSL Config (managed by Certbot)
+    ssl_certificate /etc/letsencrypt/live/straysafe.me/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/straysafe.me/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    # Root directory for Laravel
+    root /var/www/Stray-Safe/public;
+    index index.php index.html index.htm;
+    charset utf-8;
+    # Laravel Routing
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+    # Laravel PHP Processing
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+    
+    # HLS Stream Serving (serve directly from nginx)
+    location /hls/ {
+        alias /var/hls/;
+        types {
+            application/vnd.apple.mpegurl m3u8;
+            video/mp2t ts;
+        }
+        add_header Cache-Control no-cache;
+        add_header Access-Control-Allow-Origin *;
+        
+        # Nginx specific HLS settings
+        add_header Access-Control-Allow-Headers '*';
+        add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS';
+        
+        # Keep connection alive
+        keepalive_timeout 65;
+        
+        # HLS needs chunked transfer
+        chunked_transfer_encoding on;
+    }
+    
+    # Also allow access to streams via the Flask API
+    location /api/hls/ {
+        proxy_pass http://localhost:5000/hls/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_buffering off;
+        proxy_cache off;
+        add_header Cache-Control no-cache;
+        add_header Access-Control-Allow-Origin *;
+    }
+    
+    # Reverse Proxy for Flask API
+    location /api/ {
+        proxy_pass http://localhost:5000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        # Timeout settings
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+    
+    # Health Check endpoint
+    location /health {
+        proxy_pass http://localhost:5000/health;
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+    
+    # Error page
+    error_page 404 /index.php;
+}
+
+# HTTP to HTTPS Redirect (Certbot-managed)
+server {
+    listen 80;
+    server_name straysafe.me;
+    return 301 https://$host$request_uri;
+}
+
+# Add RTMP server configuration (this should be outside the http block in nginx.conf)
+# You need to add this to the main nginx.conf or include it from there:
+# rtmp {
+#     server {
+#         listen 1935;
+#         chunk_size 4000;
+#         
+#         application live {
+#             live on;
+#             record off;
+#             
+#             # Allow multiple ffmpeg instances by using different stream keys
+#             allow publish all;
+#             
+#             # Convert RTMP to HLS
+#             hls on;
+#             hls_path /var/hls;
+#             hls_fragment 4s;
+#             hls_playlist_length 20s;
+#             
+#             # Enable nested applications
+#             notify_method get;
+#             
+#             # Disable consuming bandwidth when nobody is watching
+#             idle_streams off;
+#         }
+#     }
+# }
