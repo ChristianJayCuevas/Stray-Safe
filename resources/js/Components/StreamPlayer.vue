@@ -111,7 +111,7 @@ onMounted(() => {
   refreshInterval = setInterval(() => {
     console.log('Auto-refreshing stream...')
     initializeHls(getFreshUrl(props.streamUrl))
-  }, 5000)
+  }, 15000)
 })
 
 onUnmounted(() => {
