@@ -43,7 +43,7 @@ const segmentCount = ref(0)
 
 function getFreshUrl(url) {
   const timestamp = Date.now()
-  return url.includes('?') ? `${url}&t=${timestamp}` : `${url}?t=${timestamp}`
+  return url.includes('?') ? `${url}` : `${url}`
 }
 
 function initializeHls(url) {
