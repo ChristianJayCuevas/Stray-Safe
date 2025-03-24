@@ -15,5 +15,9 @@ class MapPin extends Model
         'latitude',
         'longitude',
         'snapshot_path',
+        'is_camera',
+        'camera_id',
+        'camera_name',
+        'hls_url',
     ];
 }

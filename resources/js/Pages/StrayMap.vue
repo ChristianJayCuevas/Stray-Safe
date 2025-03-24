@@ -1,9 +1,10 @@
 <script setup>
 import Map from '@/Components/MapComponent.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { ref, onMounted, inject } from 'vue';
-import { QCard, QCardSection, QBtn, QIcon, QBadge, QSeparator, QTooltip } from 'quasar';
+import { ref, onMounted, inject, computed } from 'vue';
+import { QCard, QCardSection, QBtn, QIcon, QBadge, QSeparator, QTooltip, QDialog, QSelect, QSpinner, QSpace } from 'quasar';
 import '../../css/stray-map.css';
+import axios from 'axios';
 
 // Get the global dark mode state from the AuthenticatedLayout
 const isDarkMode = inject('isDarkMode', ref(false));
@@ -24,6 +25,18 @@ const selectedTimeframe = ref('all');
 // Toggle filter panel
 const showFilters = ref(false);
 
+// Camera pin dialog
+const showCameraDialog = ref(false);
+const mapRef = ref(null); // Reference to the Map component
+const availableCCTVs = ref([]);
+const selectedCamera = ref(null);
+const loadingCCTVs = ref(false);
+const cameraSelectError = ref('');
+const addingPin = ref(false);
+const addPinError = ref(null);
+const placingPinMode = ref(false);
+const addPinSuccess = ref('');
+
 function toggleFilters() {
     showFilters.value = !showFilters.value;
 }
@@ -37,6 +50,194 @@ function resetFilters() {
     selectedAnimal.value = 'all';
     selectedTimeframe.value = 'all';
     filterActive.value = false;
+}
+
+// Fetch available cameras from the CCTV API
+async function fetchCCTVs() {
+    loadingCCTVs.value = true;
+    selectedCamera.value = null;
+    
+    try {
+        console.log('Fetching cameras from API...');
+        const response = await axios.get('https://straysafe.me/api/streams');
+        const streams = response.data?.streams || [];
+        
+        console.log('Received streams:', streams);
+        
+        // Transform the data for the select dropdown
+        availableCCTVs.value = streams
+            .filter(stream => stream.status === 'active') // Only show online cameras
+            .map(stream => {
+                const camera = {
+                    id: stream.id,
+                    name: stream.name || 'Unnamed Camera',
+                    location: stream.location || 'Unknown Location',
+                    videoSrc: [stream.hls_url.replace('http://', 'https://')]
+                };
+                
+                console.log('Mapped camera:', camera);
+                return camera;
+            });
+            
+        console.log('Available cameras:', availableCCTVs.value);
+        
+        if (availableCCTVs.value.length === 0) {
+            cameraSelectError.value = 'No active cameras found. Please try again later.';
+        }
+    } catch (error) {
+        console.error('Failed to fetch cameras:', error);
+        cameraSelectError.value = 'Failed to fetch cameras: ' + (error.message || 'Unknown error');
+        
+        // Use sample data if API fails
+        availableCCTVs.value = [{
+            id: 'main-camera',
+            name: 'Main Camera',
+            location: 'Main Gate',
+            videoSrc: ['https://straysafe.me/hls/main-camera.m3u8']
+        }];
+        
+        console.log('Using fallback camera data:', availableCCTVs.value);
+    } finally {
+        loadingCCTVs.value = false;
+    }
+}
+
+// Open the add camera dialog and fetch available cameras
+function openAddCameraDialog() {
+    console.log('Opening camera dialog');
+    selectedCamera.value = null;
+    addPinError.value = '';
+    cameraSelectError.value = '';
+    
+    // Fetch available cameras
+    fetchCCTVs()
+        .catch(error => {
+            console.error('Error fetching cameras:', error);
+            cameraSelectError.value = 'Failed to load cameras. Please try again.';
+        });
+    
+    showCameraDialog.value = true;
+}
+
+// Start the camera pin placement mode
+function startPinPlacement() {
+    console.log('Starting pin placement with selected camera:', selectedCamera.value);
+    
+    if (!selectedCamera.value) {
+        alert('Please select a camera first');
+        return;
+    }
+    
+    // Fetch the full camera object using the selected ID
+    const cameraInfo = availableCCTVs.value.find(cam => cam.id === selectedCamera.value);
+    
+    if (!cameraInfo) {
+        console.error('Selected camera not found in available cameras list:', selectedCamera.value, availableCCTVs.value);
+        alert('Selected camera information not found. Please try selecting again.');
+        return;
+    }
+    
+    console.log('Found camera info:', cameraInfo);
+    placingPinMode.value = true;
+    showCameraDialog.value = false;
+    
+    // Display clear instructions to the user
+    alert('Click on the map to place the camera pin. You can click the Cancel button to exit placement mode.');
+    
+    // Enable pin placement mode in the map component
+    if (mapRef.value) {
+        try {
+            mapRef.value.enablePinPlacementMode((coordinates) => {
+                console.log('User clicked map at coordinates:', coordinates);
+                // When user clicks on map, add the camera pin with the selected camera
+                addCameraPin(coordinates, cameraInfo)
+                    .then(response => {
+                        if (response && response.success === false) {
+                            console.error('Pin was added visually but failed to save to server:', response.error);
+                            alert('Pin was placed on map but could not be saved to the server. The pin will be visible until you refresh the page.');
+                        } else {
+                            console.log('Camera pin added successfully:', response);
+                            alert('Camera pin placed successfully!');
+                        }
+                        // Reset placement mode regardless of success/failure
+                        placingPinMode.value = false;
+                    })
+                    .catch(error => {
+                        console.error('Error adding camera pin:', error);
+                        alert('Failed to place camera pin. Please try again.');
+                        // Don't reset placement mode on error to allow user to try again
+                        // placingPin.value = false;
+                    });
+            });
+        } catch (error) {
+            console.error('Failed to enable pin placement mode:', error);
+            alert('Failed to enter pin placement mode. Please try again.');
+            placingPinMode.value = false;
+        }
+    } else {
+        console.error('Map reference not available');
+        alert('Map is not ready. Please try again in a moment.');
+        placingPinMode.value = false;
+    }
+}
+
+// Cancel the pin placement mode
+function cancelPinPlacement() {
+    console.log('Cancelling pin placement mode');
+    placingPinMode.value = false;
+    
+    // Disable pin placement mode in the map component
+    if (mapRef.value) {
+        try {
+            mapRef.value.disablePinPlacementMode();
+        } catch (error) {
+            console.error('Error disabling pin placement mode:', error);
+        }
+    }
+}
+
+// Function to add a camera pin to the map
+async function addCameraPin(coordinates, cameraInfo) {
+    try {
+        console.log('Adding camera pin with coordinates:', coordinates, 'and camera:', cameraInfo);
+        
+        if (!mapRef.value) {
+            throw new Error('Map reference not available');
+        }
+        
+        // Forward the addCameraPin call to the map component
+        const result = await mapRef.value.addCameraPin(coordinates, cameraInfo);
+        
+        console.log('Camera pin add result:', result);
+        
+        if (result && result.success === false) {
+            // Handle partial success (pin is visible but not saved)
+            console.warn('Pin added visually but failed to save to server:', result.error);
+            addPinError.value = 'Camera pin was added to map but could not be saved to server';
+        } else {
+            // Handle complete success
+            console.log('Camera pin added successfully:', result);
+            addPinSuccess.value = 'Camera pin added successfully';
+            
+            // Clear success message after 3 seconds
+            setTimeout(() => {
+                addPinSuccess.value = '';
+            }, 3000);
+        }
+        
+        // Return the result for further processing
+        return result;
+    } catch (error) {
+        console.error('Error in addCameraPin:', error);
+        addPinError.value = `Failed to add camera pin: ${error.message}`;
+        
+        // Clear error message after 5 seconds
+        setTimeout(() => {
+            addPinError.value = '';
+        }, 5000);
+        
+        throw error;
+    }
 }
 </script>
 
@@ -68,6 +269,25 @@ function resetFilters() {
                         <q-icon name="refresh" class="q-mr-sm" />
                         Refresh
                         <q-tooltip>Refresh map data</q-tooltip>
+                    </q-btn>
+                    <q-btn 
+                        class="primary-btn"
+                        @click="openAddCameraDialog"
+                        :disable="placingPinMode"
+                    >
+                        <q-icon name="add_location" class="q-mr-sm" />
+                        Add Camera Pin
+                        <q-tooltip>Select a camera and place it on the map</q-tooltip>
+                    </q-btn>
+                    <q-btn 
+                        v-if="placingPinMode"
+                        class="cancel-btn"
+                        color="red"
+                        @click="cancelPinPlacement"
+                    >
+                        <q-icon name="cancel" class="q-mr-sm" />
+                        Cancel Pin Placement
+                        <q-tooltip>Exit pin placement mode</q-tooltip>
                     </q-btn>
                 </div>
             </div>
@@ -145,6 +365,21 @@ function resetFilters() {
             </q-card>
         </div>
         
+        <!-- Placement Mode Alert -->
+        <div v-if="placingPinMode" class="placement-alert mx-6 mb-4">
+            <q-card class="bg-blue-100 dark:bg-blue-900">
+                <q-card-section class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <q-icon name="info" size="md" color="primary" class="mr-3" />
+                        <span class="text-blue-800 dark:text-blue-100">
+                            Click anywhere on the map to place the camera pin
+                        </span>
+                    </div>
+                    <q-btn flat round color="primary" icon="close" size="sm" @click="cancelPinPlacement" />
+                </q-card-section>
+            </q-card>
+        </div>
+        
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mx-6 mb-4">
             <div class="stat-card">
@@ -190,7 +425,169 @@ function resetFilters() {
         
         <!-- Map Container -->
         <div class="mx-6 mb-6 map-container">
-            <Map />
+            <Map ref="mapRef" />
+        </div>
+        
+        <!-- Add Camera Dialog -->
+        <q-dialog v-model="showCameraDialog" persistent>
+            <q-card class="add-camera-dialog">
+                <q-card-section class="row items-center q-pb-none">
+                    <div class="text-h6">Add Camera Pin</div>
+                    <q-space />
+                    <q-btn icon="close" flat round dense v-close-popup />
+                </q-card-section>
+
+                <q-card-section>
+                    <p>Select a camera to add to the map. After selection, you will be prompted to click on the map to place the camera pin at the desired location.</p>
+                    
+                    <div v-if="cameraSelectError" class="text-negative q-mb-md">{{ cameraSelectError }}</div>
+                    
+                    <q-select
+                        v-model="selectedCamera"
+                        :options="availableCCTVs"
+                        option-value="id"
+                        option-label="name"
+                        label="Select Camera"
+                        emit-value
+                        map-options
+                        :loading="loadingCCTVs"
+                        :disable="loadingCCTVs || addingPin"
+                    >
+                        <template v-slot:option="scope">
+                            <q-item v-bind="scope.itemProps">
+                                <q-item-section>
+                                    <q-item-label>{{ scope.opt.name }}</q-item-label>
+                                    <q-item-label caption>{{ scope.opt.location }}</q-item-label>
+                                </q-item-section>
+                            </q-item>
+                        </template>
+                        
+                        <template v-slot:no-option>
+                            <q-item>
+                                <q-item-section class="text-grey">
+                                    No cameras found
+                                </q-item-section>
+                            </q-item>
+                        </template>
+                        
+                        <template v-slot:loading>
+                            <q-item>
+                                <q-item-section class="text-grey">
+                                    <q-spinner color="primary" />
+                                    Loading cameras...
+                                </q-item-section>
+                            </q-item>
+                        </template>
+                    </q-select>
+                </q-card-section>
+
+                <q-card-section class="q-pt-none">
+                    <p class="text-caption text-grey">
+                        Tip: After selecting a camera, click on the map to place the pin at the exact location.
+                    </p>
+                </q-card-section>
+
+                <q-card-actions align="right">
+                    <q-btn flat label="Cancel" color="negative" v-close-popup />
+                    <q-btn flat label="Place on Map" color="primary" @click="startPinPlacement" :loading="addingPin" :disable="!selectedCamera || addingPin" />
+                </q-card-actions>
+            </q-card>
+        </q-dialog>
+
+        <!-- Placement mode indicator -->
+        <div v-if="placingPinMode" class="placement-mode-indicator">
+            <div class="indicator-content">
+                <q-icon name="place" size="md" class="q-mr-sm" color="primary" />
+                <span>Click on the map to place the camera pin</span>
+                <q-space />
+                <q-btn color="negative" label="Cancel" @click="cancelPinPlacement" flat />
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="map-action-buttons">
+            <!-- Error/Success message display -->
+            <div v-if="addPinError" class="error-banner">
+                {{ addPinError }}
+            </div>
+            <div v-if="addPinSuccess" class="success-banner">
+                {{ addPinSuccess }}
+            </div>
         </div>
     </AuthenticatedLayout>
 </template>
+
+<style scoped>
+.add-camera-dialog {
+    width: 500px;
+    max-width: 90vw;
+}
+
+.placement-alert {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.8;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.8;
+    }
+}
+
+.cancel-btn {
+    background-color: rgba(244, 67, 54, 0.8);
+    color: white;
+}
+
+.cancel-btn:hover {
+    background-color: rgb(244, 67, 54);
+}
+
+.placement-mode-indicator {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    z-index: 1000;
+}
+
+.indicator-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.map-action-buttons {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.error-banner {
+  background-color: #f44336;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.success-banner {
+  background-color: #4caf50;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+</style>

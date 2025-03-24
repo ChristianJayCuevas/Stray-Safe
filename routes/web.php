@@ -6,6 +6,7 @@ use App\Http\Controllers\{
     DeleteTemporaryImageController,
     CommentController,
     CCTVController,
+    CameraPinController,
 };
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -67,6 +68,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->where('path', '.*');
     Route::get('api/streams', [StreamController::class, 'getStreams']);
     Route::get('api/streams/test/{streamId}', [StreamController::class, 'testStream']);
+
+    Route::post('/pin', [MapPinController::class, 'store']); // For regular pins
+    Route::post('/camera-pin', [CameraPinController::class, 'store']); // Camera pin with dedicated controller
+    Route::get('/pins', [MapPinController::class, 'index']);
 
     //For the profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

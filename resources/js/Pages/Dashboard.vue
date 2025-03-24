@@ -67,29 +67,28 @@ onMounted(() => {
     fetchRecentSightings();
     filterDataByDate(); // Initial data load based on default date
     
-    // Show Swal2 popup if the user is new
-    if (authUser.value.isNewUser) {
-        Swal.fire({
-            title: 'Welcome to StraySafe!',
-            text: 'Please select your barangay or create your own map.',
-            icon: 'info',
-            showCancelButton: true,
-            confirmButtonText: 'Select Barangay',
-            cancelButtonText: 'Create Own Map',
-            allowOutsideClick: false,  // Prevent clicking outside to close
-            allowEscapeKey: false,  
-        }).then((result) => {
-            if (result.isConfirmed) {
-                // Redirect or open barangay selection
-                console.log('User selected barangay');
-                // You can redirect or show barangay selection component here
-            } else if (result.dismiss === Swal.DismissReason.cancel) {
-                // Open MapBox or create your own map logic
-                console.log('User wants to create their own map');
-                // You can open the map creation logic or redirect to the map creation page
-            }
-        });
-    }
+    // if (authUser.value.isNewUser) {
+    //     Swal.fire({
+    //         title: 'Welcome to StraySafe!',
+    //         text: 'Please select your barangay or create your own map.',
+    //         icon: 'info',
+    //         showCancelButton: true,
+    //         confirmButtonText: 'Select Barangay',
+    //         cancelButtonText: 'Create Own Map',
+    //         allowOutsideClick: false,  
+    //         allowEscapeKey: false,  
+    //     }).then((result) => {
+    //         if (result.isConfirmed) {
+             
+    //             console.log('User selected barangay');
+      
+    //         } else if (result.dismiss === Swal.DismissReason.cancel) {
+
+    //             console.log('User wants to create their own map');
+  
+    //         }
+    //     });
+    // }
 });
 
 // Line chart for detected animals over time

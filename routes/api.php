@@ -4,15 +4,23 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\MapPinController;
 use App\Http\Controllers\API\UserController;
+use App\Http\Controllers\API\CameraPinController;
 use App\Http\Middleware\ValidateStaticToken;
 use App\Http\Controllers\API\MobileRegisteredAnimalController;
 use App\Http\Controllers\RegisteredAnimalController;
 use App\Http\Controllers\PushTokenController;
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
-Route::post('/pin', [MapPinController::class, 'store']);
-Route::get('/pins', [MapPinController::class, 'index']);
+
+// Routes that require authentication
+Route::middleware('auth:sanctum')->group(function() {
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+});
+
+// Public routes - no middleware
+// Route::post('/pin', [MapPinController::class, 'store']);
+// Route::post('/camera-pin', [CameraPinController::class, 'store']);
+// Route::get('/pins', [MapPinController::class, 'index']);
 Route::get('/recent-sightings', [MapPinController::class, 'recentSightings']);
 Route::get('/snapshots', [MapPinController::class, 'getSnapshots']);
 Route::get('/snapshots/recent', [MapPinController::class, 'getRecentSnapshots']);
