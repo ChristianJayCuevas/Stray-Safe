@@ -609,7 +609,7 @@ function openStreamInBrowser() {
                 <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
                     <div class="cctv-feed">
                         <div v-for="cctv in cctvs" :key="cctv.id">
-                            <StreamPlayer :stream-url="cctv.videoSrc[0]" :stream-id="cctv.id" />
+                            <StreamPlayer :streamUrl="cctv.videoSrc[0]" />
                         </div>
                     </div>
                     <div class="cctv-info">
@@ -666,7 +666,7 @@ function openStreamInBrowser() {
             <q-card-section class="dialog-content">
                 <div class="dialog-video-container">
                     <div v-for="cctv in cctvs" :key="cctv.id">
-                        <StreamPlayer :stream-url="cctv.videoSrc[0]" :stream-id="cctv.id" />
+                        <StreamPlayer :streamUrl="cctv.videoSrc[0]" />
                     </div>
                 </div>
                 <div class="cctv-info-large">
