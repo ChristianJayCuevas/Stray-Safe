@@ -207,63 +207,6 @@ export default {
       // Log the final URL being used
       console.log('Final HLS URL:', streamUrl);
       
-      // Check if we should use an existing HLS instance
-      if (props.useExistingInstance && props.streamId && activeHlsInstances.value[props.streamId]) {
-        // Clean up any existing instance for this component
-        if (hls.value && hls.value !== activeHlsInstances.value[props.streamId]) {
-          hls.value.destroy();
-          hls.value = null;
-        }
-        
-        // Use the existing HLS instance
-        const existingHls = activeHlsInstances.value[props.streamId];
-        
-        // Create a new media source for this player that shares the same stream
-        hls.value = new Hls({
-          ...existingHls.config,
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 5,
-          liveDurationInfinity: true,
-          enableWorker: true,
-          lowLatencyMode: true,
-          maxBufferLength: 10,
-          maxMaxBufferLength: 15,
-          startLevel: -1, // Auto quality selection
-          debug: false
-        });
-        
-        // Attach to our video element
-        if (videoElement.value) {
-          hls.value.attachMedia(videoElement.value);
-          hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
-            // Use the same source as the existing stream
-            hls.value.loadSource(streamUrl);
-            
-            // Sync with the existing player's time
-            const existingVideo = activeStreamInstances.value[props.streamId];
-            if (existingVideo) {
-              const syncInterval = setInterval(() => {
-                if (Math.abs(videoElement.value.currentTime - existingVideo.currentTime) > 0.3) {
-                  videoElement.value.currentTime = existingVideo.currentTime;
-                }
-              }, 1000);
-              
-              onUnmounted(() => {
-                clearInterval(syncInterval);
-              });
-            }
-            
-            videoElement.value.play().catch(() => {
-              // Autoplay failed, user interaction needed
-            });
-          });
-        }
-        
-        loading.value = false;
-        emit('stream-ready');
-        return;
-      }
-      
       // Clean up existing HLS instance if any
       if (hls.value) {
         hls.value.destroy();
@@ -296,6 +239,10 @@ export default {
             xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
             xhr.setRequestHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
             xhr.setRequestHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            // Add cache control headers
+            xhr.setRequestHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            xhr.setRequestHeader('Pragma', 'no-cache');
+            xhr.setRequestHeader('Expires', '0');
           },
           // Add HLS specific settings for better error recovery
           fragLoadingMaxRetry: 6,

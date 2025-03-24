@@ -96,6 +96,16 @@ class RTSPStream:
         self.hls_path = os.path.join(HLS_DIR, stream_id)
         os.makedirs(self.hls_path, exist_ok=True)
         self.ffmpeg_process = None
+        self.ffmpeg_restart_count = 0
+        self.max_ffmpeg_restarts = 5
+        self.ffmpeg_restart_delay = 1  # Initial delay in seconds
+        self.max_ffmpeg_restart_delay = 30  # Maximum delay in seconds
+        self.last_ffmpeg_restart = 0
+        self.ffmpeg_monitor_thread = None
+        self.ffmpeg_health_check_interval = 1  # Check FFmpeg health every second
+        self.ffmpeg_health_timeout = 5  # Timeout for health check in seconds
+        self.last_frame_time = time.time()
+        self.frame_timeout = 10  # Maximum time without frames before considering FFmpeg dead
         
     def _generate_coordinates(self, stream_id):
         # Fixed default coordinates for the fixed camera
@@ -158,64 +168,138 @@ class RTSPStream:
             self.cap = None
         logger.info(f"Stopped stream {self.stream_id}: {self.rtsp_url}")
     
-    def _start_ffmpeg(self):
-        """Start ffmpeg process for RTMP streaming (without direct HLS output)"""
-
-        # Ensure HLS directory exists
-        os.makedirs(self.hls_path, exist_ok=True)
-        logger.info(f"HLS path for stream {self.stream_id}: {self.hls_path}")
-
-        # Define RTMP Output URL with unique stream key to avoid "already publishing" error
-        # Use timestamp as part of stream key to make it unique
-        timestamp = int(time.time())
-        rtmp_stream_key = f"{self.stream_id}_{timestamp}"
-        rtmp_url = f"rtmp://127.0.0.1/live/{rtmp_stream_key}"  # RTMP Output URL
-        
-        # Store stream key for reference
-        self.rtmp_stream_key = rtmp_stream_key
-        
-        # Kill any existing ffmpeg processes for this stream to avoid conflicts
-        if self.ffmpeg_process:
+    def _monitor_ffmpeg_health(self):
+        """Monitor FFmpeg process health and handle recovery"""
+        while self.is_running and self.ffmpeg_process:
             try:
-                self.ffmpeg_process.terminate()
-                self.ffmpeg_process.wait(timeout=5)
+                # Check if process is still running
+                if self.ffmpeg_process.poll() is not None:
+                    logger.error(f"FFmpeg process terminated unexpectedly for stream {self.stream_id}")
+                    self._restart_ffmpeg()
+                    continue
+
+                # Check if we're receiving frames
+                current_time = time.time()
+                if current_time - self.last_frame_time > self.frame_timeout:
+                    logger.warning(f"No frames received for {self.frame_timeout} seconds, restarting FFmpeg")
+                    self._restart_ffmpeg()
+                    continue
+
+                # Check if stdin pipe is still open
+                if self.ffmpeg_process.stdin:
+                    try:
+                        self.ffmpeg_process.stdin.write(b'')  # Test write
+                    except (BrokenPipeError, IOError):
+                        logger.error(f"FFmpeg stdin pipe broken for stream {self.stream_id}")
+                        self._restart_ffmpeg()
+                        continue
+
+                time.sleep(self.ffmpeg_health_check_interval)
+
             except Exception as e:
-                logger.warning(f"Failed to terminate existing ffmpeg process: {str(e)}")
-            try:
-                self.ffmpeg_process.kill()
-            except:
-                pass
-            self.ffmpeg_process = None
+                logger.error(f"Error in FFmpeg health monitoring: {str(e)}")
+                self._restart_ffmpeg()
+                time.sleep(self.ffmpeg_health_check_interval)
 
-        # FFmpeg command for RTMP streaming only (let nginx handle HLS conversion)
-        ffmpeg_cmd = [
-            'ffmpeg',
-            '-i', self.rtsp_url,      # RTSP input
-            '-c:v', 'libx264',        # Video codec
-            '-preset', 'ultrafast',
-            '-tune', 'zerolatency',
-            '-profile:v', 'baseline', # More compatible profile
-            '-b:v', '1500k',          # Video bitrate
-            '-maxrate', '1500k',      # Maximum bitrate
-            '-bufsize', '3000k',      # Buffer size
-            '-r', '30',               # Frame rate
-            '-g', '60',               # Keyframe interval (2 seconds at 30fps)
-            '-keyint_min', '60',      # Minimum keyframe interval
-            '-sc_threshold', '0',     # Scene change threshold
-            '-f', 'flv',              # Output format for RTMP
-            rtmp_url                  # RTMP output URL
-        ]
+    def _restart_ffmpeg(self):
+        """Restart FFmpeg process with exponential backoff"""
+        current_time = time.time()
+        
+        # Check if we've restarted too recently
+        if current_time - self.last_ffmpeg_restart < self.ffmpeg_restart_delay:
+            logger.warning(f"Too soon to restart FFmpeg, waiting {self.ffmpeg_restart_delay} seconds")
+            return
+
+        # Check if we've exceeded max restarts
+        if self.ffmpeg_restart_count >= self.max_ffmpeg_restarts:
+            logger.error(f"Max FFmpeg restarts ({self.max_ffmpeg_restarts}) exceeded for stream {self.stream_id}")
+            self.is_running = False
+            return
 
         try:
-            # Start FFmpeg process
+            # Clean up existing process
+            if self.ffmpeg_process:
+                try:
+                    self.ffmpeg_process.terminate()
+                    self.ffmpeg_process.wait(timeout=5)
+                except Exception as e:
+                    logger.warning(f"Error terminating FFmpeg process: {str(e)}")
+                try:
+                    self.ffmpeg_process.kill()
+                except:
+                    pass
+                self.ffmpeg_process = None
+
+            # Start new FFmpeg process
+            if self._start_ffmpeg():
+                self.ffmpeg_restart_count = 0  # Reset restart count on success
+                self.ffmpeg_restart_delay = 1  # Reset delay on success
+                self.last_ffmpeg_restart = current_time
+                logger.info(f"Successfully restarted FFmpeg for stream {self.stream_id}")
+            else:
+                self.ffmpeg_restart_count += 1
+                self.ffmpeg_restart_delay = min(self.ffmpeg_restart_delay * 2, self.max_ffmpeg_restart_delay)
+                logger.warning(f"Failed to restart FFmpeg for stream {self.stream_id}, attempt {self.ffmpeg_restart_count}")
+
+        except Exception as e:
+            logger.error(f"Error during FFmpeg restart: {str(e)}")
+            self.ffmpeg_restart_count += 1
+            self.ffmpeg_restart_delay = min(self.ffmpeg_restart_delay * 2, self.max_ffmpeg_restart_delay)
+
+    def _start_ffmpeg(self):
+        """Start ffmpeg process for RTMP streaming"""
+        try:
+            # Ensure HLS directory exists
+            os.makedirs(self.hls_path, exist_ok=True)
+            logger.info(f"HLS path for stream {self.stream_id}: {self.hls_path}")
+
+            # Define RTMP Output URL with unique stream key
+            timestamp = int(time.time())
+            rtmp_stream_key = f"{self.stream_id}_{timestamp}"
+            rtmp_url = f"rtmp://127.0.0.1/live/{rtmp_stream_key}"
+            
+            # Store stream key for reference
+            self.rtmp_stream_key = rtmp_stream_key
+            
+            # FFmpeg command with improved settings
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-i', self.rtsp_url,
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-tune', 'zerolatency',
+                '-profile:v', 'baseline',
+                '-b:v', '1500k',
+                '-maxrate', '1500k',
+                '-bufsize', '3000k',
+                '-r', '30',
+                '-g', '60',
+                '-keyint_min', '60',
+                '-sc_threshold', '0',
+                '-f', 'flv',
+                '-flvflags', 'no_duration_filesize',  # Add this to prevent file size issues
+                '-stimeout', '5000000',  # Add socket timeout
+                rtmp_url
+            ]
+
+            # Start FFmpeg process with improved error handling
             logger.info(f"Starting FFmpeg for stream {self.stream_id} with key {rtmp_stream_key}: {' '.join(ffmpeg_cmd)}")
             self.ffmpeg_process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                bufsize=10**8  # Large buffer
+                bufsize=10**8,
+                close_fds=True
             )
+
+            # Start monitoring thread if not already running
+            if not self.ffmpeg_monitor_thread or not self.ffmpeg_monitor_thread.is_alive():
+                self.ffmpeg_monitor_thread = threading.Thread(
+                    target=self._monitor_ffmpeg_health,
+                    daemon=True
+                )
+                self.ffmpeg_monitor_thread.start()
 
             # Log FFmpeg output in a separate thread
             def log_ffmpeg_output():
@@ -229,6 +313,7 @@ class RTSPStream:
                         break
                     time.sleep(0.1)
 
+            # Start output logging thread
             threading.Thread(target=log_ffmpeg_output, daemon=True).start()
 
             logger.info(f"Started RTMP streaming for {self.stream_id} with stream key {rtmp_stream_key}")
@@ -236,12 +321,23 @@ class RTSPStream:
 
         except Exception as e:
             logger.error(f"Failed to start FFmpeg: {str(e)}")
+            if self.ffmpeg_process:
+                try:
+                    self.ffmpeg_process.terminate()
+                    self.ffmpeg_process.wait(timeout=5)
+                except:
+                    pass
+                try:
+                    self.ffmpeg_process.kill()
+                except:
+                    pass
+                self.ffmpeg_process = None
             return False
-    
+
     def _process_stream(self):
         """Process frames from the RTSP stream"""
-        reconnect_delay = 1  # Initial reconnect delay in seconds
-        max_reconnect_delay = 30  # Maximum reconnect delay in seconds
+        reconnect_delay = 1
+        max_reconnect_delay = 30
         
         # Start ffmpeg process for HLS streaming
         if not self._start_ffmpeg():
@@ -252,12 +348,11 @@ class RTSPStream:
         while self.is_running:
             if not self.cap or not self.cap.isOpened():
                 if not self.connect():
-                    # Exponential backoff for reconnection attempts
                     time.sleep(reconnect_delay)
                     reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
                     continue
                 else:
-                    reconnect_delay = 1  # Reset reconnect delay on successful connection
+                    reconnect_delay = 1
             
             try:
                 ret, frame = self.cap.read()
@@ -266,6 +361,9 @@ class RTSPStream:
                     self.cap.release()
                     self.cap = None
                     continue
+                
+                # Update last frame time for health monitoring
+                self.last_frame_time = time.time()
                 
                 # Resize frame to desired dimensions
                 frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
@@ -294,7 +392,6 @@ class RTSPStream:
                     
                     if (self.consecutive_detections >= REQUIRED_CONSECUTIVE_FRAMES and 
                         self.highest_confidence_frame is not None):
-                        # Process the detection
                         self._process_detection()
                 else:
                     self.consecutive_detections = 0
@@ -305,24 +402,17 @@ class RTSPStream:
                 with self.lock:
                     self.frame_buffer = results[0].plot()
                 
-                # Write frame to ffmpeg process
+                # Write frame to ffmpeg process with improved error handling
                 if self.ffmpeg_process and self.ffmpeg_process.poll() is None:
                     try:
                         # Use the annotated frame for HLS streaming
                         self.ffmpeg_process.stdin.write(self.frame_buffer.tobytes())
                     except (BrokenPipeError, IOError) as e:
                         logger.error(f"Error writing to ffmpeg: {str(e)}")
-                        # Restart ffmpeg
-                        if self.ffmpeg_process:
-                            try:
-                                self.ffmpeg_process.terminate()
-                                self.ffmpeg_process.wait(timeout=5)
-                            except:
-                                pass
-                        self._start_ffmpeg()
+                        self._restart_ffmpeg()
                 else:
                     # Restart ffmpeg if it has stopped
-                    self._start_ffmpeg()
+                    self._restart_ffmpeg()
                 
             except Exception as e:
                 logger.error(f"Error processing stream {self.stream_id}: {str(e)}")
@@ -435,21 +525,26 @@ def scan_rtsp_streams():
     stream_id = "main-camera"
     
     logger.info(f"Testing RTSP stream: {rtsp_url}")
-    cap = cv2.VideoCapture(rtsp_url)
-    
-    if cap.isOpened():
-        ret, _ = cap.read()
-        if ret:
-            available_streams.append({
-                "stream_id": stream_id,
-                "rtsp_url": rtsp_url,
-                "ip": "192.168.1.5",
-                "camera": "channel-2"
-            })
-            logger.info(f"Found working RTSP stream: {rtsp_url}")
-        cap.release()
-    else:
-        logger.error(f"Could not connect to RTSP stream: {rtsp_url}")
+    try:
+        cap = cv2.VideoCapture(rtsp_url)
+        
+        if cap.isOpened():
+            ret, _ = cap.read()
+            if ret:
+                available_streams.append({
+                    "stream_id": stream_id,
+                    "rtsp_url": rtsp_url,
+                    "ip": "192.168.1.5",
+                    "camera": "channel-2"
+                })
+                logger.info(f"Found working RTSP stream: {rtsp_url}")
+            else:
+                logger.error(f"Could not read frame from RTSP stream: {rtsp_url}")
+            cap.release()
+        else:
+            logger.error(f"Could not connect to RTSP stream: {rtsp_url}")
+    except Exception as e:
+        logger.error(f"Error testing RTSP stream: {str(e)}")
                 
     return available_streams
 
@@ -466,15 +561,41 @@ def initialize_streams():
         stream_id = stream_info["stream_id"]
         rtsp_url = stream_info["rtsp_url"]
         
-        if stream_id not in active_streams:
+        # Check if stream already exists and is running
+        if stream_id in active_streams:
+            existing_stream = active_streams[stream_id]
+            if existing_stream.is_running:
+                logger.info(f"Stream {stream_id} is already running, skipping initialization")
+                continue
+            else:
+                logger.info(f"Stream {stream_id} exists but is not running, restarting")
+                existing_stream.stop()
+        
+        try:
+            logger.info(f"Creating new stream instance for {stream_id}")
             stream = RTSPStream(rtsp_url, stream_id)
-            active_streams[stream_id] = stream
+            
+            # Start the stream processing
+            logger.info(f"Starting stream processing for {stream_id}")
             stream.start()
+            
+            # Store the stream instance
+            active_streams[stream_id] = stream
+            logger.info(f"Successfully initialized and started stream {stream_id}")
+            
+            # Add a small delay between stream initializations
+            time.sleep(1)
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize stream {stream_id}: {str(e)}")
+            if stream_id in active_streams:
+                del active_streams[stream_id]
     
     # Clean up any streams that are no longer available
     current_ids = [s["stream_id"] for s in available_streams]
     for stream_id in list(active_streams.keys()):
         if stream_id not in current_ids:
+            logger.info(f"Cleaning up stream {stream_id} that is no longer available")
             active_streams[stream_id].stop()
             del active_streams[stream_id]
     
@@ -820,9 +941,27 @@ def periodic_stream_scanner():
     """Periodically check the fixed stream connection"""
     while True:
         try:
+            logger.info("Starting periodic stream scan")
             initialize_streams()
+            
+            # Log current active streams
+            active_count = len([s for s in active_streams.values() if s.is_running])
+            logger.info(f"Currently active streams: {active_count}")
+            
+            # Check each active stream
+            for stream_id, stream in active_streams.items():
+                if not stream.is_running:
+                    logger.warning(f"Stream {stream_id} is not running, attempting restart")
+                    try:
+                        stream.start()
+                        logger.info(f"Successfully restarted stream {stream_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to restart stream {stream_id}: {str(e)}")
+            
         except Exception as e:
             logger.error(f"Error in periodic stream scanner: {e}")
+        
+        # Wait before next scan
         time.sleep(60)  # Check every minute
 
 if __name__ == '__main__':
@@ -833,14 +972,18 @@ if __name__ == '__main__':
     import numpy as np
     
     # Initial stream initialization
+    logger.info("Starting initial stream initialization")
     initialize_streams()
     
     # Start periodic scanner in background
-    threading.Thread(target=periodic_stream_scanner, daemon=True).start()
+    scanner_thread = threading.Thread(target=periodic_stream_scanner, daemon=True)
+    scanner_thread.start()
+    logger.info("Started periodic stream scanner")
     
     # Start the cleanup thread
     cleanup_thread = threading.Thread(target=cleanup_hls_directory, daemon=True)
     cleanup_thread.start()
+    logger.info("Started HLS cleanup thread")
     
     # Print server URLs for convenience
     print("\nServer URLs:")

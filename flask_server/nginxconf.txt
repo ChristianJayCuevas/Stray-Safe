@@ -29,18 +29,42 @@ server {
             application/vnd.apple.mpegurl m3u8;
             video/mp2t ts;
         }
-        add_header Cache-Control no-cache;
-        add_header Access-Control-Allow-Origin *;
         
-        # Nginx specific HLS settings
-        add_header Access-Control-Allow-Headers '*';
-        add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS';
+        # Disable caching for HLS
+        add_header Cache-Control no-cache;
+        add_header Cache-Control no-store;
+        add_header Cache-Control must-revalidate;
+        expires -1;
+        
+        # CORS headers
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Headers '*' always;
+        add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS' always;
+        add_header Access-Control-Expose-Headers '*' always;
+        
+        # Handle OPTIONS method
+        if ($request_method = 'OPTIONS') {
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Allow-Headers '*' always;
+            add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS' always;
+            add_header Access-Control-Max-Age 1728000;
+            add_header Content-Type 'text/plain charset=UTF-8';
+            add_header Content-Length 0;
+            return 204;
+        }
         
         # Keep connection alive
         keepalive_timeout 65;
         
         # HLS needs chunked transfer
         chunked_transfer_encoding on;
+        
+        # Allow range requests
+        add_header Accept-Ranges bytes;
+        
+        # Enable gzip compression for m3u8 files
+        gzip on;
+        gzip_types application/vnd.apple.mpegurl;
     }
     
     # Also allow access to streams via the Flask API
@@ -51,8 +75,29 @@ server {
         proxy_cache_bypass $http_upgrade;
         proxy_buffering off;
         proxy_cache off;
+        
+        # CORS headers for API endpoint
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Headers '*' always;
+        add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS' always;
+        add_header Access-Control-Expose-Headers '*' always;
+        
+        # Disable caching
         add_header Cache-Control no-cache;
-        add_header Access-Control-Allow-Origin *;
+        add_header Cache-Control no-store;
+        add_header Cache-Control must-revalidate;
+        expires -1;
+        
+        # Handle OPTIONS method
+        if ($request_method = 'OPTIONS') {
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Allow-Headers '*' always;
+            add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS' always;
+            add_header Access-Control-Max-Age 1728000;
+            add_header Content-Type 'text/plain charset=UTF-8';
+            add_header Content-Length 0;
+            return 204;
+        }
     }
     
     # Reverse Proxy for Flask API
