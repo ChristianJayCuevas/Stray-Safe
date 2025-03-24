@@ -443,16 +443,16 @@ function openStreamInBrowser() {
                 `https://straysafe.me/api/hls/main-camera/playlist.m3u8`;
                 
             // Add timestamp to URL
-            const finalUrl = `${streamUrl}${streamUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+            const finalUrl = `${streamUrl}${streamUrl.includes('?') ? '&' : '?'}`;
             window.open(finalUrl, '_blank');
         } else {
             // Fallback direct URL
-            window.open(`https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`, '_blank');
+            window.open(`https://straysafe.me/api/hls/main-camera/playlist.m3u8`, '_blank');
         }
     }).catch(error => {
         // Fallback direct URL on error
         console.error("Error getting streams for browser:", error);
-        window.open(`https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`, '_blank');
+        window.open(`https://straysafe.me/api/hls/main-camera/playlist.m3u8`, '_blank');
     });
 }
 </script>
