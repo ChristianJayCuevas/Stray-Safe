@@ -93,7 +93,7 @@ class RTSPStream:
         self.last_error_time = 0
         self.error_count = 0
         self.coordinates = self._generate_coordinates(stream_id)
-        self.hls_path = os.path.join(HLS_DIR, stream_id)
+        self.hls_path = HLS_DIR
         os.makedirs(self.hls_path, exist_ok=True)
         self.ffmpeg_process = None
         self.ffmpeg_restart_count = 0

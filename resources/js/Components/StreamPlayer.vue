@@ -188,17 +188,20 @@ export default {
       
       // 2. DO NOT modify the URL format for the fixed stream key format
       // Only fix the format if it's the Flask HLS URL format
-      if (url.includes('/api/hls/') && url.includes('/playlist.m3u8')) {
-        const match = url.match(/\/api\/hls\/([^\/]+)\/playlist.m3u8/);
-        if (match) {
-          const key = match[1];
-          // Check if we have a direct HLS URL available in the stream data
-          const directHlsUrl = `https://straysafe.me/hls/${key}.m3u8`;
-          console.log('Trying direct HLS URL:', directHlsUrl);
-          streamUrl = directHlsUrl;
+      if (
+          url.includes('/api/hls/') &&
+          url.includes('/playlist.m3u8') &&
+          !url.includes('straysafe.me/hls/') // prevent overwriting known-good URL
+        ) {
+          const match = url.match(/\/api\/hls\/([^\/]+)\/playlist.m3u8/);
+          if (match) {
+            const key = match[1];
+            const directHlsUrl = `https://straysafe.me/hls/${key}.m3u8`;
+            console.log('Trying direct HLS URL:', directHlsUrl);
+            streamUrl = directHlsUrl;
+          }
         }
-      }
-      
+              
       // 3. Add timestamp for cache-busting if needed
       // if (!streamUrl.includes('?t=') && !streamUrl.includes('&t=')) {
       //   const timestamp = Date.now();
@@ -302,7 +305,7 @@ export default {
                   if (rtmpKeyMatch) {
                     const rtmpKey = rtmpKeyMatch[1].split('_')[0] || rtmpKeyMatch[1];
                     const timestamp = Date.now();
-                    const flaskApiUrl = `https://straysafe.me/api/hls/${rtmpKey}/playlist.m3u8?t=${timestamp}`;
+                    const flaskApiUrl = `https://straysafe.me/api/hls/${rtmpKey}/playlist.m3u8`;
                     
                     console.log('Trying Flask API URL as fallback:', flaskApiUrl);
                     
@@ -559,7 +562,7 @@ export default {
                 }
                 
                 // Build a Flask API URL as fallback
-                const flaskApiUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8?t=${timestamp}`;
+                const flaskApiUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8`;
                 console.log('Trying Flask API URL as fallback:', flaskApiUrl);
                 
                 // Destroy current instance
@@ -794,7 +797,7 @@ export default {
         // Try the Flask API URL
         if (actualStreamUrl.value.includes('/hls/')) {
           const timestamp = Date.now();
-          const flaskUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`;
+          const flaskUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8`;
           console.log('Trying Flask URL fallback:', flaskUrl);
           initializeHls(flaskUrl);
           return;
@@ -819,7 +822,7 @@ export default {
           const match = actualStreamUrl.value.match(/\/video\/([^\/]+)/);
           if (match) {
             const streamId = match[1];
-            const hlsUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8?t=${Date.now()}`;
+            const hlsUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8`;
             console.log('Trying Flask HLS API fallback:', hlsUrl);
           initializeHls(hlsUrl);
           } else {

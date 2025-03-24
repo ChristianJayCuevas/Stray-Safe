@@ -455,6 +455,37 @@ function openStreamInBrowser() {
         window.open(`https://straysafe.me/api/hls/main-camera/playlist.m3u8`, '_blank');
     });
 }
+
+onMounted(() => {
+  const video = document.getElementById('raw-hls-video');
+  const hlsUrl = 'https://straysafe.me/hls/main-camera.m3u8'; // ✅ Use HTTPS version
+
+  if (Hls.isSupported()) {
+    const hls = new Hls();
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+      console.log('HLS.js: Media attached, loading source:', hlsUrl);
+      hls.loadSource(hlsUrl);
+    });
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      console.log('HLS.js: Manifest parsed, starting playback');
+      video.play();
+    });
+
+    hls.on(Hls.Events.ERROR, (event, data) => {
+      console.error('HLS.js error:', data.type, data.details, data);
+    });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // For Safari
+    video.src = hlsUrl;
+    video.addEventListener('loadedmetadata', () => {
+      video.play();
+    });
+  } else {
+    console.error('This browser does not support HLS playback.');
+  }
+});
 </script>
 
 <template>
@@ -499,6 +530,7 @@ function openStreamInBrowser() {
                         <div class="stat-label">Online Cameras</div>
                     </div>
                 </div>
+                
                 <div class="stat-card">
                     <div class="stat-icon">
                         <i class="fas fa-paw"></i>
@@ -530,7 +562,7 @@ function openStreamInBrowser() {
                     <q-btn class="secondary-btn" icon="refresh" label="Refresh" @click="fetchCCTVStreams" />
                 </div>
             </div>
-
+            <video id="raw-hls-video" controls autoplay muted style="width: 100%; max-width: 720px;"></video>
             <!-- Loading indicator -->
             <div v-if="loading" class="loading-container">
                 <q-spinner color="primary" size="3em" />
