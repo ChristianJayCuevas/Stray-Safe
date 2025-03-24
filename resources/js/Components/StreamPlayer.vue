@@ -488,7 +488,7 @@ export default {
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               console.log('Media error - attempting recovery');
-              hls.value.recoverMediaError();
+              hls.value?.recoverMediaError();
               break;
             default:
               if (retryCount.value < props.maxRetries) {
@@ -530,7 +530,7 @@ export default {
     };
 
     // Function to initialize player
-    const initializePlayer = async () => {
+    const initializePlayer = async (): Promise<void> => {
       // Check if we should use an existing video element
       if (props.useExistingInstance && props.streamId && activeStreamInstances.value[props.streamId]) {
         // If we have a video element and it's different from the existing one
@@ -691,7 +691,6 @@ export default {
           emit('stream-error', error.value);
         });
       } else {
-        // If direct video failed, try Flask HLS API
         try {
           // Extract stream ID from video URL
           const match = actualStreamUrl.value.match(/\/video\/([^\/]+)/);
