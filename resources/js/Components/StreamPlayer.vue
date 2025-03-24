@@ -77,6 +77,7 @@ export default {
     const hls = ref(null);
     const retryCount = ref(0);
     const retryTimeout = ref(null);
+    const actualStreamUrl = ref(props.streamUrl); // Store the actual stream URL after API fetch
     
     // Get shared stream instances from parent component if available
     const activeStreamInstances = inject('activeStreamInstances', ref({}));
@@ -126,6 +127,49 @@ export default {
       } catch (err) {
         console.warn('Error getting HLS URL:', err);
         return videoUrl; // Fall back to original video URL
+      }
+    };
+
+    // Fetch the stream URL from the API
+    const fetchStreamUrl = async () => {
+      try {
+        // Get the stream URL from the API
+        const response = await axios.get('https://straysafe.me/api/streams', {
+          timeout: 5000
+        });
+        
+        if (response.data?.streams?.length > 0) {
+          // Find the stream that matches the streamId if provided
+          let stream = null;
+          if (props.streamId) {
+            stream = response.data.streams.find(s => s.id === props.streamId);
+          }
+          
+          // If no matching stream or no streamId provided, use the first stream
+          if (!stream) {
+            stream = response.data.streams[0];
+          }
+          
+          // Use the direct Nginx HLS URL if available, otherwise fall back to Flask HLS URL
+          const timestamp = Date.now();
+          if (stream.hls_url) {
+            const hlsUrl = stream.hls_url.replace('http://', 'https://');
+            actualStreamUrl.value = `${hlsUrl}${hlsUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+            console.log('Using Nginx HLS URL:', actualStreamUrl.value);
+            return actualStreamUrl.value;
+          } else if (stream.flask_hls_url) {
+            const flaskUrl = stream.flask_hls_url.replace('http://', 'https://');
+            actualStreamUrl.value = `${flaskUrl}${flaskUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+            console.log('Using Flask HLS URL:', actualStreamUrl.value);
+            return actualStreamUrl.value;
+          }
+        }
+        
+        // If no stream found or no valid URLs, return the original URL
+        return props.streamUrl;
+      } catch (err) {
+        console.error('Error fetching stream URL from API:', err);
+        return props.streamUrl;
       }
     };
 
@@ -488,18 +532,24 @@ export default {
       error.value = null;
 
       try {
-        if (!props.streamUrl) {
+        // Always try to fetch the latest stream URL from the API first
+        const streamUrl = await fetchStreamUrl();
+        
+        if (!streamUrl) {
           throw new Error('No stream URL provided');
         }
         
+        // Update the actual stream URL
+        actualStreamUrl.value = streamUrl;
+        
         if (isFlaskVideoStream.value) {
-          const hlsUrl = await getHlsUrl(props.streamUrl);
+          const hlsUrl = await getHlsUrl(actualStreamUrl.value);
           initializeHls(hlsUrl);
         } else if (isHlsStream.value) {
-          initializeHls(props.streamUrl);
+          initializeHls(actualStreamUrl.value);
         } else {
           // For direct video streams (not HLS)
-          videoElement.value.src = props.streamUrl;
+          videoElement.value.src = actualStreamUrl.value;
           videoElement.value.addEventListener('loadedmetadata', () => {
             videoElement.value.play().catch(() => {
               // Autoplay failed
@@ -532,22 +582,34 @@ export default {
     };
 
     // Function to retry with alternative method
-    const retryWithAlternativeMethod = () => {
+    const retryWithAlternativeMethod = async () => {
+      // First, try to get the latest stream URL from the API again
+      await fetchStreamUrl();
+      
       if (isHlsStream.value || isFlaskVideoStream.value) {
         // If the URL is using the player.m3u8 format, try the direct .m3u8 format
-        if (props.streamUrl.includes('/playlist.m3u8')) {
-          const match = props.streamUrl.match(/\/hls\/([^\/]+)\/playlist.m3u8/);
+        if (actualStreamUrl.value.includes('/playlist.m3u8')) {
+          const match = actualStreamUrl.value.match(/\/hls\/([^\/]+)\/playlist.m3u8/);
           if (match) {
             const key = match[1];
-            const directUrl = props.streamUrl.replace(`/hls/${key}/playlist.m3u8`, `/hls/${key}.m3u8`);
+            const directUrl = actualStreamUrl.value.replace(`/hls/${key}/playlist.m3u8`, `/hls/${key}.m3u8`);
             console.log('Trying alternative URL format:', directUrl);
             initializeHls(directUrl);
             return;
           }
         }
         
+        // Try the Flask API URL
+        if (actualStreamUrl.value.includes('/hls/')) {
+          const timestamp = Date.now();
+          const flaskUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`;
+          console.log('Trying Flask URL fallback:', flaskUrl);
+          initializeHls(flaskUrl);
+          return;
+        }
+        
         // If HLS failed, try Flask video URL
-        const videoUrl = props.streamUrl
+        const videoUrl = actualStreamUrl.value
           .replace('/hls/', '/api/video/')
           .replace('/playlist.m3u8', '')
           .replace('.m3u8', '');
@@ -562,7 +624,7 @@ export default {
         // If direct video failed, try Flask HLS API
         try {
           // Extract stream ID from video URL
-          const match = props.streamUrl.match(/\/video\/([^\/]+)/);
+          const match = actualStreamUrl.value.match(/\/video\/([^\/]+)/);
           if (match) {
             const streamId = match[1];
             const hlsUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8?t=${Date.now()}`;

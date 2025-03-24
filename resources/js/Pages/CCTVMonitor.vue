@@ -108,11 +108,7 @@ async function fetchCCTVStreams() {
     try {
         activeServerUrl.value = await getBestServerUrl();
         
-        // Use direct URL for straysafe.me with timestamp to ensure fresh playlist
-        const timestamp = Date.now();
-        const directHlsUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`;
-        
-        // Try to get streams from API first
+        // Try to get streams from API
         let useDirectHls = false;
         
         try {
@@ -126,24 +122,16 @@ async function fetchCCTVStreams() {
             
             if (response.data?.streams?.length) {
                 cctvs.value = response.data.streams.map((stream, index) => {
-                    // Get the best HLS URL from the stream data
-                    // Select the appropriate HLS URL in this order:
-                    // 1. hls_url (Nginx direct HLS with rtmp_key.m3u8 format)
-                    // 2. flask_hls_url (Flask API HLS)
-                    // 3. Local fallback
-                    const hlsUrl = stream.hls_url || stream.flask_hls_url || `http://localhost:5000/hls/${stream.rtmp_key || stream.id}.m3u8`;
-                    
-                    // Always add timestamp to HLS URL to prevent caching
-                    const finalUrl = `${hlsUrl}${hlsUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
-                    
-                    console.log(`Stream ${stream.id}: Using HLS URL ${finalUrl}`);
+                    // Store the fallback URL with timestamp for direct browser access
+                    const timestamp = Date.now();
+                    const fallbackUrl = stream.hls_url || stream.flask_hls_url;
                     
                     return {
                         id: stream.id || (index + 1).toString(),
                         name: stream.name || `Camera ${index + 1}`,
                         location: stream.location || `Location ${index + 1}`,
                         status: stream.status === 'active' ? 'Online' : 'Offline',
-                        videoSrc: [finalUrl],
+                        videoSrc: [fallbackUrl], // We'll prefer the API fetch in StreamPlayer
                         originalSrc: stream.url,
                         streamInfo: stream,
                         isHls: true,
@@ -165,16 +153,16 @@ async function fetchCCTVStreams() {
             useDirectHls = true;
         }
         
-        // If API failed or returned no streams, use direct HLS URL
+        // If API failed or returned no streams, use a fallback
         if (useDirectHls) {
-            console.log("Using direct HLS URL:", directHlsUrl);
+            console.log("Using fallback stream setup");
             cctvs.value = [
                 {
                     id: 'main-camera',
                     name: 'Main Camera',
                     location: 'Main Gate',
                     status: 'Online',
-                    videoSrc: [directHlsUrl],
+                    videoSrc: [''], // Empty string - will be fetched by StreamPlayer
                     originalSrc: 'rtsp://localhost:8554/cam1',
                     isHls: true
                 }
@@ -198,17 +186,13 @@ async function fetchCCTVStreams() {
 
 // Function to use sample data when API is unavailable
 function useSampleData() {
-    // Use the direct straysafe.me URL with timestamp to ensure fresh playlist
-    const timestamp = Date.now();
-    const sampleHlsUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`;
-    
     cctvs.value = [
         {
             id: 'main-camera',
             name: 'Main Camera',
             location: 'Main Gate',
             status: 'Online',
-            videoSrc: [sampleHlsUrl],
+            videoSrc: [''], // Empty string - will be fetched by StreamPlayer
             originalSrc: 'rtsp://localhost:8554/cam1',
             isHls: true
         }
@@ -571,7 +555,7 @@ function openStreamInBrowser() {
                     <div class="cctv-feed">
                         <StreamPlayer 
                             v-if="cctv.status === 'Online'" 
-                            :stream-url="cctv.videoSrc[0]"
+                            :stream-url="cctv.videoSrc[0] || ''"
                             :stream-id="cctv.id"
                             :autoplay="true"
                             :muted="true"
