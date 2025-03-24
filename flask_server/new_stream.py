@@ -263,21 +263,15 @@ class RTSPStream:
             # FFmpeg command with improved settings
             ffmpeg_cmd = [
                 'ffmpeg',
-                '-i', self.rtsp_url,
+                '-f', 'rawvideo',
+                '-pix_fmt', 'bgr24',
+                '-s', f'{FRAME_WIDTH}x{FRAME_HEIGHT}',
+                '-i', '-',  # Read raw frames from stdin
                 '-c:v', 'libx264',
                 '-preset', 'ultrafast',
                 '-tune', 'zerolatency',
                 '-profile:v', 'baseline',
-                '-b:v', '1500k',
-                '-maxrate', '1500k',
-                '-bufsize', '3000k',
-                '-r', '30',
-                '-g', '60',
-                '-keyint_min', '60',
-                '-sc_threshold', '0',
                 '-f', 'flv',
-                '-flvflags', 'no_duration_filesize',  # Add this to prevent file size issues
-                '-stimeout', '5000000',  # Add socket timeout
                 rtmp_url
             ]
 
@@ -548,38 +542,42 @@ def classify_leash(cropped_image):
         predicted_label = class_names[predicted_class.item()]
 
     return predicted_label
+def is_port_open(ip, port, timeout=0.5):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        try:
+            sock.connect((ip, port))
+            return True
+        except:
+            return False
 
+def discover_rtsp_streams(base_ip='10.0.0.', start=2, end=20, port=8554, path='/cam1'):
+    discovered = []
+    for i in range(start, end + 1):
+        ip = f"{base_ip}{i}"
+        if is_port_open(ip, port):
+            rtsp_url = f"rtsp://{ip}:{port}{path}"
+            logger.info(f"RTSP port open at {ip}, checking stream: {rtsp_url}")
+            cap = cv2.VideoCapture(rtsp_url)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                if ret:
+                    discovered.append({
+                        "stream_id": f"cam{i}",
+                        "rtsp_url": rtsp_url,
+                        "ip": ip
+                    })
+                cap.release()
+    return discovered
 def scan_rtsp_streams():
-    """Initialize with fixed RTSP URL instead of scanning"""
-    available_streams = []
-    
-    # Using the fixed RTSP URL directly
-    rtsp_url = BASE_RTSP_URL
-    stream_id = "main-camera"
-    
-    logger.info(f"Testing RTSP stream: {rtsp_url}")
-    try:
-        cap = cv2.VideoCapture(rtsp_url)
-        
-        if cap.isOpened():
-            ret, _ = cap.read()
-            if ret:
-                available_streams.append({
-                    "stream_id": stream_id,
-                    "rtsp_url": rtsp_url,
-                    "ip": "192.168.1.5",
-                    "camera": "channel-2"
-                })
-                logger.info(f"Found working RTSP stream: {rtsp_url}")
-            else:
-                logger.error(f"Could not read frame from RTSP stream: {rtsp_url}")
-            cap.release()
-        else:
-            logger.error(f"Could not connect to RTSP stream: {rtsp_url}")
-    except Exception as e:
-        logger.error(f"Error testing RTSP stream: {str(e)}")
-                
-    return available_streams
+    """Discover RTSP streams across a given IP range"""
+    return discover_rtsp_streams(
+        base_ip='10.0.0.',
+        start=4,  # scan from .4
+        end=6,    # to .6
+        port=8554,
+        path='/cam1'
+    )
 
 def initialize_streams():
     """Initialize and start processing for all available RTSP streams"""

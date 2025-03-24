@@ -6,7 +6,18 @@ import StreamPlayer from '@/Components/StreamPlayer.vue';
 import '../../css/cctvmonitor.css';
 import axios from 'axios';
 import Hls from 'hls.js'; // Import HLS.js library
-
+onMounted(async () => {
+  try {
+    const response = await axios.get('https://straysafe.me/api/streams')
+    if (response.data?.streams?.length) {
+      cctvStreams.value = response.data.streams
+    }
+  } catch (err) {
+    console.error('Failed to fetch CCTV streams:', err)
+  } finally {
+    loading.value = false
+  }
+})
 // Get the global dark mode state from the AuthenticatedLayout
 const globalIsDarkMode = inject('isDarkMode', ref(false));
 
@@ -584,7 +595,9 @@ function openStreamInBrowser() {
             <div v-else class="cctv-grid">
                 <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
                     <div class="cctv-feed">
-                        <StreamPlayer stream-url="https://straysafe.me/hls/main-camera.m3u8" />
+                        <div v-for="stream in cctvStreams" :key="stream.id">
+                        <StreamPlayer :stream-url="stream.hls_url" :stream-id="stream.id" />
+                    </div>
                     </div>
                     <div class="cctv-info">
                         <div class="cctv-title">{{ cctv.name }}</div>
@@ -639,20 +652,8 @@ function openStreamInBrowser() {
             
             <q-card-section class="dialog-content">
                 <div class="dialog-video-container">
-                    <StreamPlayer 
-                        v-if="selectedCCTV && selectedCCTV.status === 'Online'"
-                        :key="modalStreamKey"
-                        :stream-url="selectedCCTV ? selectedCCTV.videoSrc[0] : ''"
-                        :stream-id="selectedCCTV ? selectedCCTV.id : ''"
-                        :autoplay="true"
-                        :muted="true"
-                        :use-existing-instance="true"
-                        @stream-ready="onModalStreamReady"
-                        @stream-error="onModalStreamError"
-                    />
-                    <div v-else-if="selectedCCTV && selectedCCTV.status === 'Offline'" class="offline-feed">
-                        <i class="fas fa-video-slash"></i>
-                        <p>Camera Offline</p>
+                    <div v-for="stream in cctvStreams" :key="stream.id">
+                        <StreamPlayer :stream-url="stream.hls_url" :stream-id="stream.id" />
                     </div>
                 </div>
                 <div class="cctv-info-large">
