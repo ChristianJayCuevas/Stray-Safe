@@ -155,12 +155,12 @@ export default {
           if (stream.hls_url) {
             // Ensure we're using https for external access
             const hlsUrl = stream.hls_url.replace('http://', 'https://');
-            actualStreamUrl.value = `${hlsUrl}${hlsUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+            actualStreamUrl.value = `${hlsUrl}${hlsUrl.includes('?') ? '&' : '?'}`;
             console.log('Using Nginx HLS URL:', actualStreamUrl.value);
             return actualStreamUrl.value;
           } else if (stream.flask_hls_url) {
             const flaskUrl = stream.flask_hls_url.replace('http://', 'https://');
-            actualStreamUrl.value = `${flaskUrl}${flaskUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+            actualStreamUrl.value = `${flaskUrl}${flaskUrl.includes('?') ? '&' : '?'}`;
             console.log('Using Flask HLS URL:', actualStreamUrl.value);
             return actualStreamUrl.value;
           }
@@ -200,13 +200,13 @@ export default {
       }
       
       // 3. Add timestamp for cache-busting if needed
-      if (!streamUrl.includes('?t=') && !streamUrl.includes('&t=')) {
-        const timestamp = Date.now();
-        streamUrl = streamUrl.includes('?') 
-          ? `${streamUrl}&t=${timestamp}` 
-          : `${streamUrl}?t=${timestamp}`;
-        console.log('Added timestamp to URL:', streamUrl);
-      }
+      // if (!streamUrl.includes('?t=') && !streamUrl.includes('&t=')) {
+      //   const timestamp = Date.now();
+      //   streamUrl = streamUrl.includes('?') 
+      //     ? `${streamUrl}&t=${timestamp}` 
+      //     : `${streamUrl}?t=${timestamp}`;
+      //   console.log('Added timestamp to URL:', streamUrl);
+      // }
       
       // Log the final URL being used
       console.log('Final HLS URL:', streamUrl);
