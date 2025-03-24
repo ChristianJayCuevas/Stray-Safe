@@ -7,17 +7,29 @@ import '../../css/cctvmonitor.css';
 import axios from 'axios';
 import Hls from 'hls.js'; // Import HLS.js library
 
-onMounted(async () => {
+const fetchStreams = async () => {
   try {
     const response = await axios.get('https://straysafe.me/api/streams')
-    if (response.data?.streams?.length) {
-      cctvStreams.value = response.data.streams
-    }
-  } catch (err) {
-    console.error('Failed to fetch CCTV streams:', err)
+    const streams = response.data?.streams || []
+
+    cctvs.value = streams.map(stream => ({
+      id: stream.id,
+      name: stream.name,
+      location: stream.location,
+      status: stream.status === 'active' ? 'Online' : 'Offline',
+      videoSrc: [stream.hls_url],
+      isHls: true
+    }))
+  } catch (error) {
+    console.error('Failed to fetch streams:', error)
+    streamError.value = true
   } finally {
     loading.value = false
   }
+}
+
+onMounted(() => {
+  fetchStreams()
 })
 // Get the global dark mode state from the AuthenticatedLayout
 const globalIsDarkMode = inject('isDarkMode', ref(false));
@@ -596,9 +608,9 @@ function openStreamInBrowser() {
             <div v-else class="cctv-grid">
                 <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
                     <div class="cctv-feed">
-                        <div v-for="stream in cctvStreams" :key="stream.id">
-                        <StreamPlayer :stream-url="stream.hls_url" :stream-id="stream.id" />
-                    </div>
+                        <div v-for="cctv in cctvs" :key="cctv.id">
+                            <StreamPlayer :stream-url="cctv.videoSrc[0]" :stream-id="cctv.id" />
+                        </div>
                     </div>
                     <div class="cctv-info">
                         <div class="cctv-title">{{ cctv.name }}</div>
@@ -653,8 +665,8 @@ function openStreamInBrowser() {
             
             <q-card-section class="dialog-content">
                 <div class="dialog-video-container">
-                    <div v-for="stream in cctvStreams" :key="stream.id">
-                        <StreamPlayer :stream-url="stream.hls_url" :stream-id="stream.id" />
+                    <div v-for="cctv in cctvs" :key="cctv.id">
+                        <StreamPlayer :stream-url="cctv.videoSrc[0]" :stream-id="cctv.id" />
                     </div>
                 </div>
                 <div class="cctv-info-large">
