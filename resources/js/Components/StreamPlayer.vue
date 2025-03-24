@@ -204,6 +204,9 @@ export default {
         console.log('Added timestamp to URL:', streamUrl);
       }
       
+      // Log the final URL being used
+      console.log('Final HLS URL:', streamUrl);
+      
       // Check if we should use an existing HLS instance
       if (props.useExistingInstance && props.streamId && activeHlsInstances.value[props.streamId]) {
         // Clean up any existing instance for this component
@@ -271,19 +274,153 @@ export default {
       if (Hls.isSupported()) {
         console.log('Initializing HLS player with URL:', streamUrl);
         
-        // First, try to get latest segments info before initializing player
-        if (streamUrl.includes('straysafe.me') && streamUrl.includes('.m3u8')) {
-          // Fetch the available segments list by making a request to the directory
-          fetchSegmentInfo(streamUrl).then(segmentInfo => {
-            initHlsWithSegmentInfo(streamUrl, segmentInfo);
-          }).catch(err => {
-            console.error('Error fetching segment info:', err);
-            // Continue without segment info
-            initHlsWithSegmentInfo(streamUrl);
+        // Create new HLS instance with CORS settings
+        hls.value = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 30,
+          maxBufferLength: 10,
+          maxMaxBufferLength: 15,
+          maxBufferSize: 15 * 1000 * 1000,
+          maxBufferHole: 0.5,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 5,
+          liveDurationInfinity: true,
+          startLevel: -1,
+          debug: false,
+          // Add CORS settings
+          xhrSetup: function(xhr, url) {
+            xhr.withCredentials = false;
+            xhr.open('GET', url, true);
+            // Add CORS headers
+            xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
+            xhr.setRequestHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+            xhr.setRequestHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          },
+          // Add HLS specific settings for better error recovery
+          fragLoadingMaxRetry: 6,
+          manifestLoadingMaxRetry: 6,
+          levelLoadingMaxRetry: 6,
+          fragLoadingRetryDelay: 500,
+          manifestLoadingRetryDelay: 500,
+          levelLoadingRetryDelay: 500,
+          // Try to start playback from the end to avoid missing segment errors
+          startPosition: -1
+        });
+        
+        // Attach to video element
+        hls.value.attachMedia(videoElement.value);
+        
+        // Handle media attachment
+        hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
+          console.log('HLS media attached, loading source:', streamUrl);
+          hls.value.loadSource(streamUrl);
+          
+          // Handle manifest parsing
+          hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
+            console.log('Manifest parsed successfully');
+            videoElement.value.play().catch(() => {
+              // Autoplay failed, user interaction needed
+            });
+            loading.value = false;
+            retryCount.value = 0;
+            emit('stream-ready');
+            
+            if (props.registerInstance && props.streamId) {
+              emit('register-instance', props.streamId, videoElement.value, hls.value);
+            }
           });
-        } else {
-          initHlsWithSegmentInfo(streamUrl);
-        }
+        });
+        
+        // Enhanced error handling
+        hls.value.on(Hls.Events.ERROR, (event, data) => {
+          console.error('HLS Error:', data.type, data.details, data);
+          
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                if (data.response?.code === 403) {
+                  error.value = 'Access denied to stream';
+                  emit('stream-error', error.value);
+                } else if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
+                  console.log('Manifest load error - trying alternative approach');
+                  
+                  // Try the Flask API version of the URL which has CORS headers
+                  const originalUrl = streamUrl;
+                  const rtmpKeyMatch = originalUrl.match(/\/hls\/([^\/\?]+)/);
+                  if (rtmpKeyMatch) {
+                    const rtmpKey = rtmpKeyMatch[1].split('_')[0] || rtmpKeyMatch[1];
+                    const timestamp = Date.now();
+                    const flaskApiUrl = `https://straysafe.me/api/hls/${rtmpKey}/playlist.m3u8?t=${timestamp}`;
+                    
+                    console.log('Trying Flask API URL as fallback:', flaskApiUrl);
+                    
+                    // Destroy current instance
+                    hls.value.destroy();
+                    hls.value = null;
+                    
+                    // Create new instance with Flask API URL
+                    const newHls = new Hls({
+                      enableWorker: true,
+                      lowLatencyMode: true,
+                      maxBufferLength: 10,
+                      fragLoadingMaxRetry: 8,
+                      manifestLoadingMaxRetry: 8,
+                      debug: false
+                    });
+                    
+                    newHls.attachMedia(videoElement.value);
+                    newHls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                      console.log('Trying alternative URL:', flaskApiUrl);
+                      newHls.loadSource(flaskApiUrl);
+                      
+                      newHls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        videoElement.value.play().catch(() => {
+                          // Autoplay failed
+                        });
+                        loading.value = false;
+                        retryCount.value = 0;
+                      });
+                      
+                      newHls.on(Hls.Events.ERROR, (event, data) => {
+                        if (data.fatal) {
+                          error.value = 'Stream playback error - unable to play through API';
+                          emit('stream-error', error.value);
+                        }
+                      });
+                    });
+                    
+                    hls.value = newHls;
+                    
+                    if (props.registerInstance && props.streamId) {
+                      emit('register-instance', props.streamId, videoElement.value, hls.value);
+                    }
+                  }
+                } else {
+                  console.log('Network error - restarting stream');
+                  hls.value.startLoad();
+                }
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('Media error - attempting recovery');
+                hls.value.recoverMediaError();
+                break;
+              default:
+                if (retryCount.value < props.maxRetries) {
+                  retryCount.value++;
+                  const delay = Math.min(1000 * Math.pow(2, retryCount.value - 1), 10000);
+                  console.log(`Retrying in ${delay}ms (attempt ${retryCount.value})`);
+                  setTimeout(() => {
+                    initializePlayer();
+                  }, delay);
+                } else {
+                  error.value = `Stream playback error`;
+                  emit('stream-error', error.value);
+                }
+                break;
+            }
+          }
+        });
       } else if (videoElement.value.canPlayType('application/vnd.apple.mpegurl')) {
         // For Safari and iOS devices which have built-in HLS support
         videoElement.value.src = streamUrl;
@@ -343,6 +480,8 @@ export default {
 
     // Initialize HLS with segment information
     const initHlsWithSegmentInfo = (streamUrl, segmentInfo = null) => {
+      console.log('Initializing HLS with URL:', streamUrl);
+      
       hls.value = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
@@ -356,6 +495,13 @@ export default {
         liveDurationInfinity: true,
         startLevel: -1, // Auto quality selection
         debug: false,
+        // Add CORS settings
+        xhrSetup: function(xhr, url) {
+          xhr.withCredentials = false; // Set this to true only if your server requires credentials
+          xhr.open('GET', url, true);
+          // Add additional headers if needed
+          xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
+        },
         // Add HLS specific settings for better error recovery
         fragLoadingMaxRetry: 6,
         manifestLoadingMaxRetry: 6,
@@ -439,6 +585,69 @@ export default {
               if (data.response?.code === 403) {
                 error.value = 'Access denied to stream';
                 emit('stream-error', error.value);
+              } else if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
+                console.log('Manifest load error - trying alternative approach');
+                
+                // Fix for "Error loading video stream" when m3u8 is downloadable but has CORS issues
+                const timestamp = Date.now();
+                
+                // Try the Flask API version of the URL which has CORS headers
+                const originalUrl = streamUrl;
+                
+                // Extract the stream ID from the URL
+                let streamId = 'main-camera';
+                const rtmpKeyMatch = originalUrl.match(/\/hls\/([^\/\?]+)/);
+                if (rtmpKeyMatch) {
+                  // Remove timestamp from the rtmp key if present
+                  const rtmpKey = rtmpKeyMatch[1].split('_')[0] || rtmpKeyMatch[1];
+                  streamId = rtmpKey;
+                }
+                
+                // Build a Flask API URL as fallback
+                const flaskApiUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8?t=${timestamp}`;
+                console.log('Trying Flask API URL as fallback:', flaskApiUrl);
+                
+                // Destroy current instance
+                hls.value.destroy();
+                hls.value = null;
+                
+                // Create a new instance with the Flask API URL
+                const newHls = new Hls({
+                  enableWorker: true,
+                  lowLatencyMode: true,
+                  maxBufferLength: 10,
+                  fragLoadingMaxRetry: 8,
+                  manifestLoadingMaxRetry: 8,
+                  debug: false
+                });
+                
+                newHls.attachMedia(videoElement.value);
+                newHls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                  console.log('Trying alternative URL:', flaskApiUrl);
+                  newHls.loadSource(flaskApiUrl);
+                  
+                  newHls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    videoElement.value.play().catch(() => {
+                      // Autoplay failed
+                    });
+                    loading.value = false;
+                    retryCount.value = 0;
+                  });
+                  
+                  newHls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                      error.value = 'Stream playback error - unable to play through API';
+                      emit('stream-error', error.value);
+                    }
+                  });
+                });
+                
+                hls.value = newHls;
+                
+                if (props.registerInstance && props.streamId) {
+                  emit('register-instance', props.streamId, videoElement.value, hls.value);
+                }
+                
               } else {
                 console.log('Network error - restarting stream');
                 hls.value.startLoad();
@@ -583,6 +792,8 @@ export default {
 
     // Function to retry with alternative method
     const retryWithAlternativeMethod = async () => {
+      console.log('Retrying with alternative method');
+      
       // First, try to get the latest stream URL from the API again
       await fetchStreamUrl();
       
@@ -597,6 +808,32 @@ export default {
             initializeHls(directUrl);
             return;
           }
+        }
+        
+        // Try direct fetch of the URL first to see if we can access it
+        try {
+          const timestamp = Date.now();
+          const normalizedUrl = actualStreamUrl.value.includes('?') 
+            ? actualStreamUrl.value.split('?')[0] + `?t=${timestamp}` 
+            : actualStreamUrl.value + `?t=${timestamp}`;
+          
+          console.log('Testing direct access to m3u8:', normalizedUrl);
+          const response = await axios.get(normalizedUrl, { 
+            timeout: 5000,
+            responseType: 'text'
+          });
+          
+          if (response.status === 200) {
+            console.log('Direct access successful, content:', response.data.substring(0, 100) + '...');
+            
+            // Try a modified URL without anything after the .m3u8
+            const cleanUrl = normalizedUrl.split('.m3u8')[0] + '.m3u8' + `?t=${timestamp}`;
+            console.log('Trying clean HLS URL:', cleanUrl);
+            initializeHls(cleanUrl);
+            return;
+          }
+        } catch (err) {
+          console.error('Error testing direct access:', err);
         }
         
         // Try the Flask API URL
