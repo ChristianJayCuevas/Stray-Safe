@@ -423,20 +423,14 @@ class RTSPStream:
                 # Write frame to ffmpeg process with improved error handling
                 if self.ffmpeg_process and self.ffmpeg_process.poll() is None:
                     try:
-                        # Encode the frame to raw bytes before sending to ffmpeg
-                        if isinstance(self.frame_buffer, np.ndarray):
-                            # Convert to BGR format if it's not already
-                            if self.frame_buffer.shape[2] == 4:  # RGBA format
-                                self.frame_buffer = cv2.cvtColor(self.frame_buffer, cv2.COLOR_RGBA2BGR)
-                            
-                            # Encode to raw bytes
-                            _, encoded_frame = cv2.imencode('.bmp', self.frame_buffer)
-                            self.ffmpeg_process.stdin.write(encoded_frame.tobytes())
-                        else:
-                            logger.warning(f"Invalid frame buffer type: {type(self.frame_buffer)}")
+                        frame_resized = cv2.resize(self.frame_buffer, (FRAME_WIDTH, FRAME_HEIGHT))
+                        self.ffmpeg_process.stdin.write(
+                            frame_resized.astype(np.uint8).tobytes()
+                        )
                     except (BrokenPipeError, IOError) as e:
-                        logger.error(f"Error writing to ffmpeg: {str(e)}")
+                        logger.error(f"FFmpeg pipe error: {str(e)}")
                         self._restart_ffmpeg()
+
                 else:
                     # Restart ffmpeg if it has stopped
                     self._restart_ffmpeg()
@@ -542,42 +536,38 @@ def classify_leash(cropped_image):
         predicted_label = class_names[predicted_class.item()]
 
     return predicted_label
-def is_port_open(ip, port, timeout=0.5):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(timeout)
-        try:
-            sock.connect((ip, port))
-            return True
-        except:
-            return False
 
-def discover_rtsp_streams(base_ip='10.0.0.', start=2, end=20, port=8554, path='/cam1'):
-    discovered = []
-    for i in range(start, end + 1):
-        ip = f"{base_ip}{i}"
-        if is_port_open(ip, port):
-            rtsp_url = f"rtsp://{ip}:{port}{path}"
-            logger.info(f"RTSP port open at {ip}, checking stream: {rtsp_url}")
-            cap = cv2.VideoCapture(rtsp_url)
-            if cap.isOpened():
-                ret, _ = cap.read()
-                if ret:
-                    discovered.append({
-                        "stream_id": f"cam{i}",
-                        "rtsp_url": rtsp_url,
-                        "ip": ip
-                    })
-                cap.release()
-    return discovered
 def scan_rtsp_streams():
-    """Discover RTSP streams across a given IP range"""
-    return discover_rtsp_streams(
-        base_ip='10.0.0.',
-        start=4,  # scan from .4
-        end=6,    # to .6
-        port=8554,
-        path='/cam1'
-    )
+    """Initialize with fixed RTSP URL instead of scanning"""
+    available_streams = []
+    
+    # Using the fixed RTSP URL directly
+    rtsp_url = BASE_RTSP_URL
+    stream_id = "main-camera"
+    
+    logger.info(f"Testing RTSP stream: {rtsp_url}")
+    try:
+        cap = cv2.VideoCapture(rtsp_url)
+        
+        if cap.isOpened():
+            ret, _ = cap.read()
+            if ret:
+                available_streams.append({
+                    "stream_id": stream_id,
+                    "rtsp_url": rtsp_url,
+                    "ip": "192.168.1.5",
+                    "camera": "channel-2"
+                })
+                logger.info(f"Found working RTSP stream: {rtsp_url}")
+            else:
+                logger.error(f"Could not read frame from RTSP stream: {rtsp_url}")
+            cap.release()
+        else:
+            logger.error(f"Could not connect to RTSP stream: {rtsp_url}")
+    except Exception as e:
+        logger.error(f"Error testing RTSP stream: {str(e)}")
+                
+    return available_streams
 
 def initialize_streams():
     """Initialize and start processing for all available RTSP streams"""

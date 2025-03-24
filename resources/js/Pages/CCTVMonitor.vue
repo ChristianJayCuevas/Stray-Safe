@@ -6,6 +6,7 @@ import StreamPlayer from '@/Components/StreamPlayer.vue';
 import '../../css/cctvmonitor.css';
 import axios from 'axios';
 import Hls from 'hls.js'; // Import HLS.js library
+
 onMounted(async () => {
   try {
     const response = await axios.get('https://straysafe.me/api/streams')
@@ -46,17 +47,17 @@ const activeStreamInstances = ref({}); // Store active stream instances by ID
 const activeHlsInstances = ref({}); // Store active HLS instances by ID
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000';
+const FLASK_SERVER_URL = import.meta.env.VITE_FLASK_SERVER_URL || 'http://127.0.0.1:5000';
 
 // Server URLs - use localhost
 const SERVER_URLS = [
-    'http://localhost:5000'
+    'http://127.0.0.1:5000'
 ];
 
 // Function to get the best server URL
 const getBestServerUrl = async () => {
-    const serverUrl = 'http://localhost:5000';
+    const serverUrl = 'http://127.0.0.1:5000';
     try {
         const response = await axios.get(`${serverUrl}/health`, {
             timeout: 5000
@@ -174,7 +175,7 @@ async function fetchCCTVStreams() {
                     location: 'Main Gate',
                     status: 'Online',
                     videoSrc: [''], // Empty string - will be fetched by StreamPlayer
-                    originalSrc: 'rtsp://localhost:8554/cam1',
+                    originalSrc: 'rtsp://127.0.0.1:8554/cam1',
                     isHls: true
                 }
             ];
@@ -204,7 +205,7 @@ function useSampleData() {
             location: 'Main Gate',
             status: 'Online',
             videoSrc: [''], // Empty string - will be fetched by StreamPlayer
-            originalSrc: 'rtsp://localhost:8554/cam1',
+            originalSrc: 'rtsp://127.0.0.1:8554/cam1',
             isHls: true
         }
     ];
@@ -440,7 +441,7 @@ function openStreamInBrowser() {
     const timestamp = Date.now();
     
     // Try to get the stream URL from the API
-    axios.get(`${activeServerUrl.value}/streams`, {
+    axios.get(`${activeServerUrl.value}/api/streams`, {
         headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
