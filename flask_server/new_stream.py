@@ -736,9 +736,18 @@ def get_absolute_url(relative_url, request=None):
     else:
         return f"{base_url}/{relative_url}"
 
-@app.route('/hls/<stream_id>/<path:filename>', methods=['GET'])
+@app.route('/hls/<stream_id>/<path:filename>', methods=['GET', 'OPTIONS'])
 def hls_stream(stream_id, filename):
     """Serve HLS stream files"""
+    # Handle OPTIONS request for CORS preflight
+    if request.method == 'OPTIONS':
+        response = Response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response
+        
     stream_dir = os.path.join(HLS_DIR, stream_id)
     file_path = os.path.join(stream_dir, filename)
     
@@ -798,9 +807,32 @@ def hls_stream(stream_id, filename):
     # Add CORS headers
     response = send_from_directory(stream_dir, filename)
     response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     response.headers.add('Cache-Control', 'no-cache, no-store, must-revalidate')
     
+    # Set content type explicitly for m3u8 and ts files
+    if filename.endswith('.m3u8'):
+        response.headers.set('Content-Type', 'application/vnd.apple.mpegurl')
+    elif filename.endswith('.ts'):
+        response.headers.set('Content-Type', 'video/mp2t')
+    
     return response
+
+@app.route('/hls/<stream_id>.m3u8', methods=['GET', 'OPTIONS'])
+def hls_stream_direct(stream_id):
+    """Serve HLS stream playlist directly with .m3u8 extension"""
+    # Handle OPTIONS request for CORS preflight
+    if request.method == 'OPTIONS':
+        response = Response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Max-Age', '3600')
+        return response
+    
+    # Redirect to the playlist.m3u8 file in the stream directory
+    return hls_stream(stream_id, 'playlist.m3u8')
 
 @app.route('/video/<stream_id>', methods=['GET', 'OPTIONS'])
 def video(stream_id):
@@ -867,7 +899,7 @@ def video(stream_id):
         return response
     
     # Otherwise, redirect to HLS stream
-    hls_url = f"/hls/{stream_id}/playlist.m3u8"
+    hls_url = f"/hls/{stream_id}.m3u8"
     return jsonify({"hls_url": hls_url}), 200
 
 @app.route('/streams', methods=['GET'])
@@ -933,7 +965,7 @@ def get_streams():
                     'status': 'active',
                     'url': rtsp_url,
                     'video_url': get_absolute_url(f'/api/video/main-camera', request),
-                    'hls_url': get_absolute_url(f'/hls/{rtmp_stream_key}/playlist.m3u8', request),
+                    'hls_url': get_absolute_url(f'/hls/{rtmp_stream_key}.m3u8', request),
                     'flask_hls_url': get_absolute_url(f'/api/hls/main-camera/playlist.m3u8', request),
                     'rtmp_key': rtmp_stream_key,
                     'type': 'rtsp'
@@ -948,7 +980,7 @@ def get_streams():
                     'status': 'inactive',
                     'url': '',
                     'video_url': get_absolute_url(f'/api/video/main-camera', request),
-                    'hls_url': get_absolute_url(f'/hls/main-camera/playlist.m3u8', request),
+                    'hls_url': get_absolute_url(f'/hls/main-camera.m3u8', request),
                     'flask_hls_url': get_absolute_url(f'/api/hls/main-camera/playlist.m3u8', request),
                     'type': 'rtsp'
                 })
