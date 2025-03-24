@@ -18,8 +18,9 @@
     ></video>
   </div>
 </template>
+
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import Hls from 'hls.js'
 
 const props = defineProps({
@@ -39,11 +40,11 @@ const isLoading = ref(true)
 const hasError = ref(false)
 const errorMessage = ref('')
 const retryCount = ref(0)
-const segmentCount = ref(0)
+let refreshInterval = null
 
 function getFreshUrl(url) {
   const timestamp = Date.now()
-  return url.includes('?') ? `${url}` : `${url}`
+  return url.includes('?') ? `${url}&t=${timestamp}` : `${url}?t=${timestamp}`
 }
 
 function initializeHls(url) {
@@ -55,7 +56,6 @@ function initializeHls(url) {
   isLoading.value = true
   hasError.value = false
   errorMessage.value = ''
-  segmentCount.value = 0
 
   if (Hls.isSupported()) {
     hls.value = new Hls()
@@ -70,41 +70,24 @@ function initializeHls(url) {
       console.log('HLS manifest parsed')
       isLoading.value = false
       retryCount.value = 0
-      videoElement.value.play().catch((err) => {
+      videoElement.value.play().catch(err => {
         console.warn('Autoplay failed:', err)
       })
     })
 
-    hls.value.on(Hls.Events.FRAG_LOADED, () => {
-      segmentCount.value++
-      if (segmentCount.value >= 4) {
-        console.log('Refreshing stream after 4 segments...')
-        segmentCount.value = 0
-        const refreshedUrl = getFreshUrl(props.streamUrl)
-        initializeHls(refreshedUrl)
-      }
-    })
-
     hls.value.on(Hls.Events.ERROR, (event, data) => {
       console.error('HLS.js error:', data.type, data.details)
-
       if (data.fatal) {
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR || data.details.includes('FRAG_LOAD')) {
-          if (retryCount.value < props.maxRetries) {
-            retryCount.value++
-            const retryDelay = 1000 * retryCount.value
-            console.log(`Retrying stream... attempt ${retryCount.value}, delay: ${retryDelay}ms`)
-            setTimeout(() => {
-              const refreshedUrl = getFreshUrl(props.streamUrl)
-              initializeHls(refreshedUrl)
-            }, retryDelay)
-          } else {
-            hasError.value = true
-            errorMessage.value = 'Stream failed after multiple attempts.'
-          }
+        if (retryCount.value < props.maxRetries) {
+          retryCount.value++
+          const retryDelay = 1000 * retryCount.value
+          console.log(`Retrying stream... attempt ${retryCount.value}, delay: ${retryDelay}ms`)
+          setTimeout(() => {
+            initializeHls(getFreshUrl(props.streamUrl))
+          }, retryDelay)
         } else {
           hasError.value = true
-          errorMessage.value = 'Fatal stream error occurred.'
+          errorMessage.value = 'Stream failed after multiple attempts.'
         }
       }
     })
@@ -121,13 +104,22 @@ function initializeHls(url) {
 }
 
 onMounted(() => {
-  const initialUrl = getFreshUrl(props.streamUrl)
-  initializeHls(initialUrl)
+  // Initialize stream
+  initializeHls(getFreshUrl(props.streamUrl))
+
+  // Set up 5-second refresh
+  refreshInterval = setInterval(() => {
+    console.log('Auto-refreshing stream...')
+    initializeHls(getFreshUrl(props.streamUrl))
+  }, 5000)
 })
 
 onUnmounted(() => {
   if (hls.value) {
     hls.value.destroy()
+  }
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
   }
 })
 </script>
