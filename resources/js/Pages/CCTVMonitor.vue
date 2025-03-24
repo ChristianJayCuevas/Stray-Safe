@@ -46,7 +46,7 @@ const fetchStreams = async () => {
       name: stream.name,
       location: stream.location,
       status: stream.status === 'active' ? 'Online' : 'Offline',
-      videoSrc: [stream.hls_url], // Using hls_url as requested
+      videoSrc: [stream.hls_url.replace('http://', 'https://')], // Using hls_url as requested
       isHls: true
     }))
     
