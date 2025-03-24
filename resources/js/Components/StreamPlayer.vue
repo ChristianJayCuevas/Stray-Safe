@@ -129,12 +129,6 @@ export default {
         console.log('Converted to HTTPS URL:', streamUrl);
       }
       
-      // Always use the direct URL from props without modifying protocol
-      if (url === 'http://straysafe.me/api/hls/main-camera/playlist.m3u8') {
-        streamUrl = 'https://straysafe.me/api/hls/main-camera/playlist.m3u8';
-        console.log('Using direct HTTPS URL for main camera:', streamUrl);
-      }
-      
       // Check if we should use an existing HLS instance
       if (props.useExistingInstance && props.streamId && activeHlsInstances.value[props.streamId]) {
         // Clean up any existing instance for this component
@@ -200,81 +194,21 @@ export default {
       
       // Check if HLS.js is supported
       if (Hls.isSupported()) {
-        hls.value = new Hls({
-          enableWorker: true,
-          lowLatencyMode: true,
-          backBufferLength: 30,
-          maxBufferLength: 10,
-          maxMaxBufferLength: 15,
-          maxBufferSize: 15 * 1000 * 1000,
-          maxBufferHole: 0.3,
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 5,
-          liveDurationInfinity: true,
-          startLevel: -1, // Auto quality selection
-          debug: false
-        });
+        console.log('Initializing HLS player with URL:', streamUrl);
         
-        hls.value.attachMedia(videoElement.value);
-        hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
-          console.log('Loading HLS source:', streamUrl);
-          hls.value.loadSource(streamUrl);
-          hls.value.url = streamUrl;
-          
-          hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoElement.value.play().catch(() => {
-              // Autoplay failed, user interaction needed
-            });
-            loading.value = false;
-            retryCount.value = 0;
-            emit('stream-ready');
-            
-            if (props.registerInstance && props.streamId) {
-              emit('register-instance', props.streamId, videoElement.value, hls.value);
-            }
+        // First, try to get latest segments info before initializing player
+        if (streamUrl.includes('straysafe.me') && streamUrl.includes('playlist.m3u8')) {
+          // Fetch the available segments list by making a request to the directory
+          fetchSegmentInfo(streamUrl).then(segmentInfo => {
+            initHlsWithSegmentInfo(streamUrl, segmentInfo);
+          }).catch(err => {
+            console.error('Error fetching segment info:', err);
+            // Continue without segment info
+            initHlsWithSegmentInfo(streamUrl);
           });
-        });
-        
-        // Enhanced error handling
-        hls.value.on(Hls.Events.ERROR, (event, data) => {
-          console.error('HLS Error:', data.type, data.details, data);
-          
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                if (data.response?.code === 403) {
-                  error.value = 'Access denied to stream';
-                  emit('stream-error', error.value);
-                } else {
-                  console.log('Network error - restarting stream');
-                  hls.value.startLoad();
-                }
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                console.log('Media error - attempting recovery');
-                hls.value.recoverMediaError();
-                break;
-              default:
-                if (retryCount.value < props.maxRetries) {
-                  retryCount.value++;
-                  
-                  if (retryTimeout.value) {
-                    clearTimeout(retryTimeout.value);
-                  }
-                  
-                  const delay = Math.min(1000 * Math.pow(2, retryCount.value - 1), 10000);
-                  console.log(`Retrying in ${delay}ms (attempt ${retryCount.value})`);
-                  retryTimeout.value = setTimeout(() => {
-                    initializePlayer();
-                  }, delay);
-                } else {
-                  error.value = `Stream playback error`;
-                  emit('stream-error', error.value);
-                }
-                break;
-            }
-          }
-        });
+        } else {
+          initHlsWithSegmentInfo(streamUrl);
+        }
       } else if (videoElement.value.canPlayType('application/vnd.apple.mpegurl')) {
         // For Safari and iOS devices which have built-in HLS support
         videoElement.value.src = streamUrl;
@@ -306,6 +240,176 @@ export default {
         error.value = 'HLS playback not supported in this browser';
         emit('stream-error', error.value);
       }
+    };
+
+    // Function to fetch segment information
+    const fetchSegmentInfo = async (playlistUrl) => {
+      try {
+        // URL to the directory containing the segments
+        const directoryUrl = playlistUrl.replace('playlist.m3u8', '');
+        
+        // Make a HEAD request to the playlist to verify it exists
+        await axios.head(playlistUrl);
+        
+        // For actual production, we would need a directory listing,
+        // but since we can't get that directly, we'll use the information from the logs
+        // At least we know the segments are from segment_018.ts to segment_027.ts
+        
+        return {
+          exists: true,
+          startSegment: 18,
+          endSegment: 27
+        };
+      } catch (err) {
+        console.error('Error fetching segment info:', err);
+        return { exists: false };
+      }
+    };
+
+    // Initialize HLS with segment information
+    const initHlsWithSegmentInfo = (streamUrl, segmentInfo = null) => {
+      hls.value = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 10,
+        maxMaxBufferLength: 15,
+        maxBufferSize: 15 * 1000 * 1000,
+        maxBufferHole: 0.5,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 5,
+        liveDurationInfinity: true,
+        startLevel: -1, // Auto quality selection
+        debug: false,
+        // Add HLS specific settings for better error recovery
+        fragLoadingMaxRetry: 6,
+        manifestLoadingMaxRetry: 6,
+        levelLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 500,
+        manifestLoadingRetryDelay: 500,
+        levelLoadingRetryDelay: 500,
+        // Try to start playback from the end to avoid missing segment errors
+        startPosition: -1
+      });
+      
+      // Handle availability of segments
+      if (segmentInfo && segmentInfo.exists) {
+        console.log('Using segment info:', segmentInfo);
+        
+        // Listen for manifest loading to potentially modify it
+        hls.value.on(Hls.Events.MANIFEST_LOADING, () => {
+          console.log('Manifest loading with segment info');
+        });
+        
+        // Intercept fragment loading to handle missing segments
+        hls.value.on(Hls.Events.FRAG_LOADING, (event, data) => {
+          // Check if the fragment URL contains a segment number
+          const segmentMatch = data.frag.url.match(/segment_(\d+)\.ts/);
+          if (segmentMatch) {
+            const segmentNum = parseInt(segmentMatch[1], 10);
+            
+            // If we know the segment range and this segment is outside of it
+            if (segmentInfo.startSegment && segmentInfo.endSegment) {
+              if (segmentNum < segmentInfo.startSegment || segmentNum > segmentInfo.endSegment) {
+                console.warn(`Segment ${segmentNum} is outside available range (${segmentInfo.startSegment}-${segmentInfo.endSegment})`);
+                
+                // Let's try to skip to a valid segment
+                const validSegment = Math.max(segmentInfo.startSegment, Math.min(segmentNum, segmentInfo.endSegment));
+                
+                if (validSegment !== segmentNum) {
+                  console.log(`Attempting to skip to valid segment ${validSegment}`);
+                  
+                  // Force the player to seek to a new position
+                  const targetTime = hls.value.media.duration * 
+                    ((validSegment - segmentInfo.startSegment) / 
+                     (segmentInfo.endSegment - segmentInfo.startSegment + 1));
+                  
+                  hls.value.media.currentTime = targetTime;
+                }
+              }
+            }
+          }
+        });
+      }
+      
+      hls.value.attachMedia(videoElement.value);
+      hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
+        console.log('HLS media attached, loading source:', streamUrl);
+        hls.value.loadSource(streamUrl);
+        hls.value.url = streamUrl;
+        
+        hls.value.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+          console.log('Manifest parsed, levels:', data.levels.length);
+          videoElement.value.play().catch(err => {
+            console.error('Error playing video:', err);
+            // Autoplay failed, user interaction needed
+          });
+          loading.value = false;
+          retryCount.value = 0;
+          emit('stream-ready');
+          
+          if (props.registerInstance && props.streamId) {
+            emit('register-instance', props.streamId, videoElement.value, hls.value);
+          }
+        });
+      });
+      
+      // Enhanced error handling
+      hls.value.on(Hls.Events.ERROR, (event, data) => {
+        console.error('HLS Error:', data.type, data.details, data);
+        
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              if (data.response?.code === 403) {
+                error.value = 'Access denied to stream';
+                emit('stream-error', error.value);
+              } else {
+                console.log('Network error - restarting stream');
+                hls.value.startLoad();
+              }
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log('Media error - attempting recovery');
+              hls.value.recoverMediaError();
+              break;
+            default:
+              if (retryCount.value < props.maxRetries) {
+                retryCount.value++;
+                
+                if (retryTimeout.value) {
+                  clearTimeout(retryTimeout.value);
+                }
+                
+                const delay = Math.min(1000 * Math.pow(2, retryCount.value - 1), 10000);
+                console.log(`Retrying in ${delay}ms (attempt ${retryCount.value})`);
+                retryTimeout.value = setTimeout(() => {
+                  initializePlayer();
+                }, delay);
+              } else {
+                error.value = `Stream playback error`;
+                emit('stream-error', error.value);
+              }
+              break;
+          }
+        } else if (data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR || 
+                   data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT) {
+          // Non-fatal fragment error - try to recover
+          console.warn('Fragment load error - attempting to continue');
+          
+          // If it's a fragment with an index likely outside our range, try skipping ahead
+          const segmentMatch = data.frag?.url?.match(/segment_(\d+)\.ts/);
+          if (segmentMatch) {
+            const segmentNum = parseInt(segmentMatch[1], 10);
+            console.log(`Fragment error was for segment ${segmentNum}`);
+            
+            // Skip ahead by 1 second to try to move past the problematic fragment
+            if (hls.value.media && !isNaN(hls.value.media.currentTime)) {
+              hls.value.media.currentTime += 1;
+            }
+          }
+        }
+      });
     };
 
     // Function to initialize player

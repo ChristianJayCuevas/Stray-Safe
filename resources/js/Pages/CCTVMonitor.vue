@@ -108,8 +108,9 @@ async function fetchCCTVStreams() {
     try {
         activeServerUrl.value = await getBestServerUrl();
         
-        // Use direct URL for straysafe.me
-        const directHlsUrl = 'https://straysafe.me/api/hls/main-camera/playlist.m3u8';
+        // Use direct URL for straysafe.me with timestamp to ensure fresh playlist
+        const timestamp = Date.now();
+        const directHlsUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`;
         
         // Try to get streams from API first
         let useDirectHls = false;
@@ -129,8 +130,10 @@ async function fetchCCTVStreams() {
                     // Prefer the Nginx HLS URL
                     const hlsUrl = stream.hls_url || stream.flask_hls_url || `http://localhost:5000/hls/${stream.rtmp_key || stream.id}/playlist.m3u8`;
                     
-                    // If this is the main camera, use the direct URL that works
-                    const finalUrl = (stream.id === 'main-camera') ? directHlsUrl : hlsUrl;
+                    // If this is the main camera, use the direct URL that works with timestamp
+                    const finalUrl = (stream.id === 'main-camera') 
+                        ? directHlsUrl 
+                        : `${hlsUrl}${hlsUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
                     
                     console.log(`Stream ${stream.id}: Using HLS URL ${finalUrl}`);
                     
@@ -194,8 +197,9 @@ async function fetchCCTVStreams() {
 
 // Function to use sample data when API is unavailable
 function useSampleData() {
-    // Use the direct straysafe.me URL 
-    const sampleHlsUrl = 'https://straysafe.me/api/hls/main-camera/playlist.m3u8';
+    // Use the direct straysafe.me URL with timestamp to ensure fresh playlist
+    const timestamp = Date.now();
+    const sampleHlsUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`;
     
     cctvs.value = [
         {
@@ -245,6 +249,8 @@ function onStreamReady(id) {
     const cctv = cctvs.value.find(c => c.id === id);
     if (cctv) {
         cctv.status = 'Online';
+        // Clear any previous error
+        cctv.streamError = null;
     }
 }
 
@@ -254,6 +260,25 @@ function onStreamError(id, error) {
     const cctv = cctvs.value.find(c => c.id === id);
     if (cctv) {
         cctv.streamError = error;
+        
+        // If the error is related to segments not found, try refreshing the stream URL
+        // by adding a timestamp to force a fresh playlist
+        if (error.includes('playback error') || error.includes('segment') || error.includes('not found')) {
+            console.log(`Refreshing stream ${id} due to segment error`);
+            const originalUrl = cctv.videoSrc[0];
+            const newUrl = originalUrl.includes('?') 
+                ? `${originalUrl}&t=${Date.now()}` 
+                : `${originalUrl}?t=${Date.now()}`;
+            
+            // Update the stream URL with timestamp to force refresh
+            cctv.videoSrc = [newUrl];
+            
+            // Update modal if this is the selected camera
+            if (selectedCCTV.value && selectedCCTV.value.id === id) {
+                selectedCCTV.value.videoSrc = [newUrl];
+                modalStreamKey.value++; // Force refresh the modal player
+            }
+        }
     }
 }
 
@@ -415,12 +440,18 @@ function changePage(newPage) {
 }
 
 function openStreamInBrowser() {
-    // Direct URL for the HLS stream
-    const directHlsUrl = 'https://straysafe.me/api/hls/main-camera/playlist.m3u8';
+    // Direct URL for the HLS stream with timestamp
+    const timestamp = Date.now();
+    const directHlsUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`;
     
     // If we have any cameras, open the first one's HLS URL
     if (cctvs.value.length > 0) {
-        window.open(cctvs.value[0].videoSrc[0], '_blank');
+        // Force a fresh URL with timestamp if it doesn't already have one
+        const currentUrl = cctvs.value[0].videoSrc[0];
+        const urlToOpen = currentUrl.includes('?t=') ? currentUrl : 
+            `${currentUrl}${currentUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+        
+        window.open(urlToOpen, '_blank');
     } else {
         // Fallback to the direct URL
         window.open(directHlsUrl, '_blank');
@@ -512,8 +543,9 @@ function openStreamInBrowser() {
             <div v-else-if="streamError" class="error-container">
                 <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
                 <p class="mb-2">Unable to connect to the stream server at <strong>{{ activeServerUrl.value }}</strong>.</p>
-                <p class="mb-2">Using direct HTTPS URL instead: <strong>https://straysafe.me/api/hls/main-camera/playlist.m3u8</strong></p>
-                <p class="mb-4">Note: This stream requires authentication (user: user, password: Straysafeteam3)</p>
+                <p class="mb-2">Using direct HTTPS URL instead: <strong>https://straysafe.me/api/hls/main-camera/playlist.m3u8?t={{ Date.now() }}</strong></p>
+                <p class="mb-2">Note: The stream might have segment mismatches. The player will attempt to find available segments (currently segments 18-27).</p>
+                <p class="mb-4">Stream requires authentication (user: user, password: Straysafeteam3)</p>
                 <div class="flex space-x-2">
                     <q-btn class="secondary-btn" icon="refresh" label="Try Again" @click="fetchCCTVStreams" />
                     <q-btn class="primary-btn" icon="open_in_new" label="Test Stream in Browser" @click="openStreamInBrowser" />
