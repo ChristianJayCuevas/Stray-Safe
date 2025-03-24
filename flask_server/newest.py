@@ -50,6 +50,8 @@ def start_ffmpeg():
         '-i', '-',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
+        '-hls_time', '10',              # each .ts segment = 2 seconds
+        '-hls_list_size', '20', 
         '-f', 'flv',
         rtmp_url
     ]
