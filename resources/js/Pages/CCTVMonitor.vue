@@ -584,21 +584,7 @@ function openStreamInBrowser() {
             <div v-else class="cctv-grid">
                 <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
                     <div class="cctv-feed">
-                        <StreamPlayer 
-                            v-if="cctv.status === 'Online'" 
-                            :stream-url="cctv.videoSrc[0] || ''"
-                            :stream-id="cctv.id"
-                            :autoplay="true"
-                            :muted="true"
-                            :register-instance="true"
-                            @stream-ready="onStreamReady(cctv.id)"
-                            @stream-error="onStreamError(cctv.id, $event)"
-                            @register-instance="registerStreamInstance"
-                        />
-                        <div v-else class="offline-feed">
-                            <i class="fas fa-video-slash"></i>
-                            <p>Camera Offline</p>
-                        </div>
+                        <StreamPlayer stream-url="https://straysafe.me/hls/main-camera.m3u8" />
                     </div>
                     <div class="cctv-info">
                         <div class="cctv-title">{{ cctv.name }}</div>
