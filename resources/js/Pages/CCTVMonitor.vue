@@ -127,13 +127,14 @@ async function fetchCCTVStreams() {
             if (response.data?.streams?.length) {
                 cctvs.value = response.data.streams.map((stream, index) => {
                     // Get the best HLS URL from the stream data
-                    // Prefer the Nginx HLS URL
-                    const hlsUrl = stream.hls_url || stream.flask_hls_url || `http://localhost:5000/hls/${stream.rtmp_key || stream.id}/playlist.m3u8`;
+                    // Select the appropriate HLS URL in this order:
+                    // 1. hls_url (Nginx direct HLS with rtmp_key.m3u8 format)
+                    // 2. flask_hls_url (Flask API HLS)
+                    // 3. Local fallback
+                    const hlsUrl = stream.hls_url || stream.flask_hls_url || `http://localhost:5000/hls/${stream.rtmp_key || stream.id}.m3u8`;
                     
-                    // If this is the main camera, use the direct URL that works with timestamp
-                    const finalUrl = (stream.id === 'main-camera') 
-                        ? directHlsUrl 
-                        : `${hlsUrl}${hlsUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+                    // Always add timestamp to HLS URL to prevent caching
+                    const finalUrl = `${hlsUrl}${hlsUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
                     
                     console.log(`Stream ${stream.id}: Using HLS URL ${finalUrl}`);
                     
@@ -440,22 +441,35 @@ function changePage(newPage) {
 }
 
 function openStreamInBrowser() {
-    // Direct URL for the HLS stream with timestamp
+    // Get the timestamp to ensure fresh playlist
     const timestamp = Date.now();
-    const directHlsUrl = `https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`;
     
-    // If we have any cameras, open the first one's HLS URL
-    if (cctvs.value.length > 0) {
-        // Force a fresh URL with timestamp if it doesn't already have one
-        const currentUrl = cctvs.value[0].videoSrc[0];
-        const urlToOpen = currentUrl.includes('?t=') ? currentUrl : 
-            `${currentUrl}${currentUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
-        
-        window.open(urlToOpen, '_blank');
-    } else {
-        // Fallback to the direct URL
-        window.open(directHlsUrl, '_blank');
-    }
+    // Try to get the stream URL from the API
+    axios.get(`${activeServerUrl.value}/streams`, {
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        timeout: 3000
+    }).then(response => {
+        if (response.data?.streams?.length) {
+            const stream = response.data.streams[0]; // Get the first stream
+            // Prefer the direct HLS URL if available
+            const streamUrl = stream.hls_url || stream.flask_hls_url || 
+                `https://straysafe.me/api/hls/main-camera/playlist.m3u8`;
+                
+            // Add timestamp to URL
+            const finalUrl = `${streamUrl}${streamUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
+            window.open(finalUrl, '_blank');
+        } else {
+            // Fallback direct URL
+            window.open(`https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`, '_blank');
+        }
+    }).catch(error => {
+        // Fallback direct URL on error
+        console.error("Error getting streams for browser:", error);
+        window.open(`https://straysafe.me/api/hls/main-camera/playlist.m3u8?t=${timestamp}`, '_blank');
+    });
 }
 </script>
 

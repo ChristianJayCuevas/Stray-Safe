@@ -101,19 +101,28 @@ export default {
         }
         
         const streamId = match[1];
-        // Always use local HLS URL
-        const hlsUrl = `http://localhost:5000/hls/${streamId}/playlist.m3u8`;
         
-        // Verify HLS stream is accessible
+        // Try to get the rtmp key for the stream
         try {
-          const response = await axios.head(hlsUrl);
-          if (response.status === 200) {
-            return hlsUrl;
+          const response = await axios.get('https://straysafe.me/api/streams', {
+            timeout: 3000
+          });
+          
+          if (response.data?.streams) {
+            const streamInfo = response.data.streams.find(s => s.id === streamId);
+            if (streamInfo && streamInfo.rtmp_key) {
+              // Use the direct Nginx HLS URL with the rtmp key
+              const hlsUrl = `https://straysafe.me/hls/${streamInfo.rtmp_key}.m3u8`;
+              return hlsUrl;
+            }
           }
-        } catch (error) {
-          console.warn(`HLS stream not accessible at ${hlsUrl}, falling back to video stream`);
-          return `http://localhost:5000/video/${streamId}`;
+        } catch (err) {
+          console.warn('Error getting stream info:', err);
         }
+        
+        // Fallback to Flask HLS URL if we can't get the stream key
+        const flaskHlsUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8`;
+        return flaskHlsUrl;
       } catch (err) {
         console.warn('Error getting HLS URL:', err);
         return videoUrl; // Fall back to original video URL
@@ -122,11 +131,33 @@ export default {
 
     // Function to initialize HLS player
     const initializeHls = (url) => {
-      // If using straysafe.me URL, ensure we use the HTTPS version
+      // Always use HTTPS for external access
       let streamUrl = url;
+      
+      // Fix URLs:
+      // 1. Convert http to https for straysafe.me
       if (url.includes('straysafe.me') && url.startsWith('http://')) {
         streamUrl = url.replace('http://', 'https://');
         console.log('Converted to HTTPS URL:', streamUrl);
+      }
+      
+      // 2. Fix URL format if needed - convert /hls/key/playlist.m3u8 to /hls/key.m3u8
+      if (url.includes('/hls/') && url.includes('/playlist.m3u8')) {
+        const match = url.match(/\/hls\/([^\/]+)\/playlist.m3u8/);
+        if (match) {
+          const key = match[1];
+          streamUrl = url.replace(`/hls/${key}/playlist.m3u8`, `/hls/${key}.m3u8`);
+          console.log('Fixed HLS URL format:', streamUrl);
+        }
+      }
+      
+      // 3. Add timestamp for cache-busting if needed
+      if (!streamUrl.includes('?t=') && !streamUrl.includes('&t=')) {
+        const timestamp = Date.now();
+        streamUrl = streamUrl.includes('?') 
+          ? `${streamUrl}&t=${timestamp}` 
+          : `${streamUrl}?t=${timestamp}`;
+        console.log('Added timestamp to URL:', streamUrl);
       }
       
       // Check if we should use an existing HLS instance
@@ -197,7 +228,7 @@ export default {
         console.log('Initializing HLS player with URL:', streamUrl);
         
         // First, try to get latest segments info before initializing player
-        if (streamUrl.includes('straysafe.me') && streamUrl.includes('playlist.m3u8')) {
+        if (streamUrl.includes('straysafe.me') && streamUrl.includes('.m3u8')) {
           // Fetch the available segments list by making a request to the directory
           fetchSegmentInfo(streamUrl).then(segmentInfo => {
             initHlsWithSegmentInfo(streamUrl, segmentInfo);
@@ -503,18 +534,44 @@ export default {
     // Function to retry with alternative method
     const retryWithAlternativeMethod = () => {
       if (isHlsStream.value || isFlaskVideoStream.value) {
-        // If HLS failed, try direct video URL
-        const videoUrl = props.streamUrl.replace('/hls/', '/video/').replace('/playlist.m3u8', '');
+        // If the URL is using the player.m3u8 format, try the direct .m3u8 format
+        if (props.streamUrl.includes('/playlist.m3u8')) {
+          const match = props.streamUrl.match(/\/hls\/([^\/]+)\/playlist.m3u8/);
+          if (match) {
+            const key = match[1];
+            const directUrl = props.streamUrl.replace(`/hls/${key}/playlist.m3u8`, `/hls/${key}.m3u8`);
+            console.log('Trying alternative URL format:', directUrl);
+            initializeHls(directUrl);
+            return;
+          }
+        }
+        
+        // If HLS failed, try Flask video URL
+        const videoUrl = props.streamUrl
+          .replace('/hls/', '/api/video/')
+          .replace('/playlist.m3u8', '')
+          .replace('.m3u8', '');
+        
+        console.log('Trying video API fallback:', videoUrl);
         videoElement.value.src = videoUrl;
         videoElement.value.play().catch(() => {
           error.value = 'Failed to play stream with alternative method';
           emit('stream-error', error.value);
         });
       } else {
-        // If direct video failed, try HLS
+        // If direct video failed, try Flask HLS API
         try {
-          const hlsUrl = props.streamUrl.replace('/video/', '/hls/') + '/playlist.m3u8';
-          initializeHls(hlsUrl);
+          // Extract stream ID from video URL
+          const match = props.streamUrl.match(/\/video\/([^\/]+)/);
+          if (match) {
+            const streamId = match[1];
+            const hlsUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8?t=${Date.now()}`;
+            console.log('Trying Flask HLS API fallback:', hlsUrl);
+            initializeHls(hlsUrl);
+          } else {
+            error.value = 'Failed to parse stream URL for alternative method';
+            emit('stream-error', error.value);
+          }
         } catch (err) {
           error.value = 'Failed to play stream with alternative method';
           emit('stream-error', error.value);

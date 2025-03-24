@@ -733,7 +733,7 @@ def get_streams():
             
             # Build URLs
             # For Nginx-served HLS (preferred for browser)
-            nginx_hls_url = f"/hls/{rtmp_stream_key}/playlist.m3u8"
+            nginx_hls_url = f"/hls/{rtmp_stream_key}.m3u8"
             # Fallback Flask-served HLS
             flask_hls_url = f"/api/hls/{stream_id}/playlist.m3u8"
             # Video direct URL
