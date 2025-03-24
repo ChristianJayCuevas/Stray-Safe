@@ -253,9 +253,8 @@ class RTSPStream:
             os.makedirs(self.hls_path, exist_ok=True)
             logger.info(f"HLS path for stream {self.stream_id}: {self.hls_path}")
 
-            # Define RTMP Output URL with unique stream key
-            timestamp = int(time.time())
-            rtmp_stream_key = f"{self.stream_id}_{timestamp}"
+            # Define RTMP Output URL with fixed stream key instead of timestamp
+            rtmp_stream_key = f"{self.stream_id}"
             rtmp_url = f"rtmp://127.0.0.1/live/{rtmp_stream_key}"
             
             # Store stream key for reference
@@ -370,22 +369,46 @@ class RTSPStream:
                 
                 # Process with object detection model
                 with torch.no_grad():
-                    results = model.predict(frame, imgsz=(FRAME_WIDTH, FRAME_HEIGHT))
+                    results = model(frame, verbose=False)
                 
                 detected_dog = False
                 
+                # Create a copy of the frame for drawing bounding boxes
+                annotated_frame = frame.copy()
+                
+                # Process all detection results
                 for result in results:
-                    for det in result.boxes.data:
-                        class_id = int(det[-1])
-                        confidence = float(det[-2])
-                        x1, y1, x2, y2 = map(int, det[:4])
+                    for box in result.boxes:
+                        class_id = int(box.cls.item())
+                        confidence = box.conf.item()
                         
-                        if class_id == DOG_CLASS_ID and confidence >= 0.6:
-                            detected_dog = True
-                            if confidence > self.highest_confidence_score:
-                                self.highest_confidence_score = confidence
-                                cropped_image = frame[y1:y2, x1:x2]
-                                self.highest_confidence_frame = cropped_image
+                        # Only process if confidence is above threshold
+                        if confidence >= 0.6:
+                            # Get bounding box coordinates
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            
+                            # Check if it's a dog
+                            if class_id == DOG_CLASS_ID:
+                                detected_dog = True
+                                if confidence > self.highest_confidence_score:
+                                    self.highest_confidence_score = confidence
+                                    cropped_image = frame[y1:y2, x1:x2]
+                                    self.highest_confidence_frame = cropped_image
+                            
+                            # Draw bounding box for all detected objects
+                            color = (0, 255, 0) if class_id == DOG_CLASS_ID else (255, 0, 0)
+                            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+                            
+                            # Create label with class and confidence
+                            class_name = "Dog" if class_id == DOG_CLASS_ID else f"Class {class_id}"
+                            label = f"{class_name}: {confidence:.2f}"
+                            
+                            # Draw label background
+                            text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                            cv2.rectangle(annotated_frame, (x1, y1 - 20), (x1 + text_size[0], y1), color, -1)
+                            
+                            # Draw label text
+                            cv2.putText(annotated_frame, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                 
                 if detected_dog:
                     self.consecutive_detections += 1
@@ -400,13 +423,23 @@ class RTSPStream:
                 
                 # Store the annotated frame in buffer for streaming
                 with self.lock:
-                    self.frame_buffer = results[0].plot()
+                    # Always use our manually annotated frame to ensure bounding boxes are visible
+                    self.frame_buffer = annotated_frame
                 
                 # Write frame to ffmpeg process with improved error handling
                 if self.ffmpeg_process and self.ffmpeg_process.poll() is None:
                     try:
-                        # Use the annotated frame for HLS streaming
-                        self.ffmpeg_process.stdin.write(self.frame_buffer.tobytes())
+                        # Encode the frame to raw bytes before sending to ffmpeg
+                        if isinstance(self.frame_buffer, np.ndarray):
+                            # Convert to BGR format if it's not already
+                            if self.frame_buffer.shape[2] == 4:  # RGBA format
+                                self.frame_buffer = cv2.cvtColor(self.frame_buffer, cv2.COLOR_RGBA2BGR)
+                            
+                            # Encode to raw bytes
+                            _, encoded_frame = cv2.imencode('.bmp', self.frame_buffer)
+                            self.ffmpeg_process.stdin.write(encoded_frame.tobytes())
+                        else:
+                            logger.warning(f"Invalid frame buffer type: {type(self.frame_buffer)}")
                     except (BrokenPipeError, IOError) as e:
                         logger.error(f"Error writing to ffmpeg: {str(e)}")
                         self._restart_ffmpeg()

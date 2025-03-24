@@ -150,9 +150,10 @@ export default {
             stream = response.data.streams[0];
           }
           
-          // Use the direct Nginx HLS URL if available, otherwise fall back to Flask HLS URL
+          // Always prioritize the hls_url field which contains the fixed stream key format
           const timestamp = Date.now();
           if (stream.hls_url) {
+            // Ensure we're using https for external access
             const hlsUrl = stream.hls_url.replace('http://', 'https://');
             actualStreamUrl.value = `${hlsUrl}${hlsUrl.includes('?') ? '&' : '?'}t=${timestamp}`;
             console.log('Using Nginx HLS URL:', actualStreamUrl.value);
@@ -185,13 +186,16 @@ export default {
         console.log('Converted to HTTPS URL:', streamUrl);
       }
       
-      // 2. Fix URL format if needed - convert /hls/key/playlist.m3u8 to /hls/key.m3u8
-      if (url.includes('/hls/') && url.includes('/playlist.m3u8')) {
-        const match = url.match(/\/hls\/([^\/]+)\/playlist.m3u8/);
+      // 2. DO NOT modify the URL format for the fixed stream key format
+      // Only fix the format if it's the Flask HLS URL format
+      if (url.includes('/api/hls/') && url.includes('/playlist.m3u8')) {
+        const match = url.match(/\/api\/hls\/([^\/]+)\/playlist.m3u8/);
         if (match) {
           const key = match[1];
-          streamUrl = url.replace(`/hls/${key}/playlist.m3u8`, `/hls/${key}.m3u8`);
-          console.log('Fixed HLS URL format:', streamUrl);
+          // Check if we have a direct HLS URL available in the stream data
+          const directHlsUrl = `https://straysafe.me/hls/${key}.m3u8`;
+          console.log('Trying direct HLS URL:', directHlsUrl);
+          streamUrl = directHlsUrl;
         }
       }
       
@@ -345,7 +349,7 @@ export default {
                   }
                 } else {
                   console.log('Network error - restarting stream');
-                  hls.value.startLoad();
+                hls.value.startLoad();
                 }
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
@@ -813,7 +817,7 @@ export default {
             const streamId = match[1];
             const hlsUrl = `https://straysafe.me/api/hls/${streamId}/playlist.m3u8?t=${Date.now()}`;
             console.log('Trying Flask HLS API fallback:', hlsUrl);
-            initializeHls(hlsUrl);
+          initializeHls(hlsUrl);
           } else {
             error.value = 'Failed to parse stream URL for alternative method';
             emit('stream-error', error.value);
