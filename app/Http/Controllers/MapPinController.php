@@ -64,14 +64,12 @@ class MapPinController extends Controller
         try {
             $pins = MapPin::all();
 
-            // Format the response data with randomized coordinates
+            // Return the original coordinates without randomization
             $response = $pins->map(function ($pin) {
-                [$randomLatitude, $randomLongitude] = $this->randomizeCoordinates($pin->latitude, $pin->longitude);
-
                 return [
                     'animal_type' => $pin->animal_type,
                     'stray_status' => $pin->stray_status,
-                    'coordinates' => [$randomLongitude, $randomLatitude], // Randomized coordinates
+                    'coordinates' => [$pin->longitude, $pin->latitude], // Original coordinates
                 ];
             });
 
