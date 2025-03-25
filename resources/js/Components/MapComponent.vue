@@ -146,11 +146,9 @@ function handleMapClick(e) {
 // Fetch pins from the backend
 async function fetchPins() {
   try {
-    // Use a relative route to fetch data
     const response = await axios.get('/pins');
     const pins = response.data;
 
-    // Add each pin to the map
     pins.forEach((pin) => {
       addMarker(pin.coordinates, pin.animal_type);
       pinsList.value.push({
@@ -215,7 +213,6 @@ async function addCameraPin(coordinates, cameraInfo) {
   let markerInstance = null;
   
   try {
-    // Validate coordinates
     if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2 ||
         isNaN(coordinates[0]) || isNaN(coordinates[1])) {
       throw new Error('Invalid coordinates format. Expected [longitude, latitude] array');
@@ -223,15 +220,12 @@ async function addCameraPin(coordinates, cameraInfo) {
     
     console.log('Adding camera pin at coordinates:', coordinates, 'with camera info:', cameraInfo);
     
-    // First add it to the map visually
     markerInstance = addMarker(coordinates, 'Camera', cameraInfo);
     console.log('Marker instance created:', markerInstance);
     
-    // Then save it to the backend with camera association
     try {
       console.log('Sending API request to save camera pin...');
       
-      // Format payload exactly as expected by the API
       const payload = {
         coordinates: coordinates,
         camera_id: cameraInfo.id || '',
@@ -241,7 +235,6 @@ async function addCameraPin(coordinates, cameraInfo) {
       
       console.log('Sending formatted payload to API:', payload);
       
-      // Use application/json content type with the correct web route URL
       const response = await axios.post('/camera-pin', payload, {
         headers: {
           'Content-Type': 'application/json',
@@ -255,7 +248,6 @@ async function addCameraPin(coordinates, cameraInfo) {
       
       console.log("Camera pin API response:", response.data);
       
-      // Add to local pins list even if API fails to ensure visual persistence
       pinsList.value.push({
         coordinates: coordinates,
         cameraId: cameraInfo.id,
@@ -269,18 +261,15 @@ async function addCameraPin(coordinates, cameraInfo) {
     } catch (apiError) {
       console.error('API Error when adding camera pin:', apiError);
       
-      // Still add the pin to the local list to maintain visual state
-      // This ensures the pin doesn't disappear if the backend fails
       pinsList.value.push({
         coordinates: coordinates,
         cameraId: cameraInfo.id,
         cameraName: cameraInfo.name,
         hlsUrl: cameraInfo.videoSrc[0],
         isCamera: true,
-        isSyncPending: true // Mark as pending sync with backend
+        isSyncPending: true
       });
       
-      // Return a partial success object so UI can show the pin
       console.log("Camera pin added visually but failed to save to backend");
       return { 
         success: false, 
@@ -291,8 +280,6 @@ async function addCameraPin(coordinates, cameraInfo) {
   } catch (error) {
     console.error('Error in addCameraPin function:', error);
     
-    // Don't remove the marker if it was created - keep it visible
-    // This prevents the pin from disappearing on error
     if (markerInstance) {
       console.log('Keeping marker instance despite error to maintain visual state');
     }
