@@ -384,20 +384,13 @@ defineExpose({
 </template>
 
 <style>
-/* Map container styles */
-.map-container-wrapper {
-  display: flex;
-  justify-content: center;
-  margin-top: 20px;
-  margin-bottom: 0px;
-  height: 80vh;
-  position: relative;
-}
+
 
 .map-container {
   width: 100%;
   height: 100%;
   border-radius: 12px;
+  margin-bottom: 100px;
   overflow: hidden;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }

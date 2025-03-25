@@ -32,11 +32,15 @@
 
 /* Map Container */
 .map-container {
+    max-width: 100%; /* Ensure it doesn't exceed the parent container */
+    width: 95%; /* Set a specific width */
+    height: 70vh; /* Maintain the height */
     border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    height: 60vh;
+    margin: 0 auto; /* Center horizontally */
 }
+
 
 /* Button Styles */
 .primary-btn {

@@ -424,9 +424,9 @@ async function addCameraPin(coordinates, cameraInfo) {
         </div>
         
         <!-- Map Container -->
-        <div class="mx-6 mb-6 map-container">
+   
             <Map ref="mapRef" />
-        </div>
+      
         
         <!-- Add Camera Dialog -->
         <q-dialog v-model="showCameraDialog" persistent>
