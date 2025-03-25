@@ -15,6 +15,12 @@ const pinsList = ref([]); // Stores the list of pins
 // Mapbox token
 const mapboxToken = 'pk.eyJ1IjoiMS1heWFub24iLCJhIjoiY20ycnAzZW5pMWZpZTJpcThpeTJjdDU1NCJ9.7AVb_LJf6sOtb-QAxwR-hg';
 
+// Get the CSRF token from the meta tag
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+// Set the CSRF token as a common header for all Axios requests
+axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken;
+
 // Initialize the map
 async function initializeMap() {
   if (!mapContainer.value) return;
