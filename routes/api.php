@@ -16,7 +16,13 @@ Route::middleware('auth:sanctum')->group(function() {
         return $request->user();
     });
 });
-
+Route::post('/user/image', [UserController::class, 'updateProfileImage']);
+Route::post('/user/signup', [UserController::class, 'register']);
+Route::post('/mobilelogin', [UserController::class, 'login']);
+Route::get('/mobileusers', [UserController::class, 'fetchUsers']);
+Route::get('mobileuser/me', [UserController::class, 'fetchLoggedInUser']);
+Route::get('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'fetchRegisteredAnimals']);
+Route::post('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'storeRegisteredAnimal']);
 // Public routes - no middleware
 // Route::post('/pin', [MapPinController::class, 'store']);
 // Route::post('/camera-pin', [CameraPinController::class, 'store']);
