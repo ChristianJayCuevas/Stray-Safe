@@ -67,6 +67,7 @@ class MapPinController extends Controller
             // Return the original coordinates without randomization
             $response = $pins->map(function ($pin) {
                 return [
+                    'id' => $pin->id,
                     'animal_type' => $pin->animal_type,
                     'stray_status' => $pin->stray_status,
                     'coordinates' => [$pin->longitude, $pin->latitude], // Original coordinates
@@ -181,5 +182,27 @@ class MapPinController extends Controller
             $latitude + $latOffset,
             $longitude + $lngOffset,
         ];
+    }
+
+    /**
+     * Delete a pin from the database.
+     */
+    public function destroy($id)
+    {
+        try {
+            $pin = MapPin::findOrFail($id);
+            $pin->delete();
+            
+            return response()->json([
+                'success' => true, 
+                'message' => 'Pin deleted successfully'
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error("Failed to delete pin: " . $e->getMessage());
+            return response()->json([
+                'success' => false, 
+                'message' => 'Failed to delete pin: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

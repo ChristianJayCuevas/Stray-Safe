@@ -72,6 +72,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/pin', [MapPinController::class, 'store']); // For regular pins
     Route::post('/camera-pin', [CameraPinController::class, 'store']); // Camera pin with dedicated controller
     Route::get('/pins', [MapPinController::class, 'index']);
+    Route::delete('/pins/{id}', [MapPinController::class, 'destroy']); // Delete a pin
 
     //For the profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

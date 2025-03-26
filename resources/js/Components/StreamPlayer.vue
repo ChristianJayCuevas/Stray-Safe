@@ -70,9 +70,30 @@ function initializeHls(url) {
       console.log('HLS manifest parsed')
       isLoading.value = false
       retryCount.value = 0
+
+      // Start loading at the live edge
+      hls.value.startLoad(-1)
+
+      // Optional safety jump
+      const liveSyncPosition = hls.value.liveSyncPosition
+      if (liveSyncPosition) {
+        videoElement.value.currentTime = liveSyncPosition
+        console.log('Jumping to live sync position (MANIFEST_PARSED):', liveSyncPosition)
+      }
+
       videoElement.value.play().catch(err => {
         console.warn('Autoplay failed:', err)
       })
+    })
+
+    hls.value.on(Hls.Events.LEVEL_LOADED, (event, data) => {
+      if (data.details.live) {
+        const liveEdge = hls.value.liveSyncPosition
+        if (liveEdge) {
+          videoElement.value.currentTime = liveEdge
+          console.log('Jumping to live sync position (LEVEL_LOADED):', liveEdge)
+        }
+      }
     })
 
     hls.value.on(Hls.Events.ERROR, (event, data) => {
@@ -102,6 +123,7 @@ function initializeHls(url) {
     errorMessage.value = 'Your browser does not support HLS streaming.'
   }
 }
+
 
 onMounted(() => {
   // Initialize stream

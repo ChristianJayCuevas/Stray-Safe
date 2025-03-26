@@ -150,10 +150,12 @@ async function fetchPins() {
     const pins = response.data;
 
     pins.forEach((pin) => {
-      addMarker(pin.coordinates, pin.animal_type);
+      const marker = addMarker(pin.coordinates, pin.animal_type, { id: pin.id });
       pinsList.value.push({
+        id: pin.id,
         coordinates: pin.coordinates,
-        animalType: pin.animal_type
+        animalType: pin.animal_type,
+        marker: marker
       });
     });
   } catch (error) {
@@ -189,16 +191,48 @@ function addMarker(coordinates, animalType, details = {}) {
         <h3>${details.cameraName}</h3>
         <p>${details.location || 'Location not specified'}</p>
         <p><small>Click to view camera feed</small></p>
+        ${details.id ? `<button class="delete-pin-btn" data-pin-id="${details.id}">Delete Pin</button>` : ''}
       </div>
     `);
     
     markerInstance.setPopup(popup);
     
-    // Add click event to open camera feed
-    marker.addEventListener('click', () => {
-      if (details.hlsUrl) {
+    // Add click event to open camera feed or delete
+    marker.addEventListener('click', (e) => {
+      if (e.target.closest('.delete-pin-btn')) {
+        // Handle delete button click
+        const pinId = e.target.closest('.delete-pin-btn').dataset.pinId;
+        if (confirm('Are you sure you want to delete this pin?')) {
+          deletePin(pinId, markerInstance);
+        }
+      } else if (details.hlsUrl) {
+        // Open camera feed
         window.open(details.hlsUrl, '_blank');
       }
+    });
+  } else {
+    // For non-camera markers, add a simpler popup with delete option
+    const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+      <div class="pin-popup">
+        <h3>${animalType}</h3>
+        ${details.id ? `<button class="delete-pin-btn" data-pin-id="${details.id}">Delete Pin</button>` : ''}
+      </div>
+    `);
+    
+    markerInstance.setPopup(popup);
+    
+    // Add click event for delete button
+    popup.on('open', () => {
+      setTimeout(() => {
+        const deleteBtn = document.querySelector(`.delete-pin-btn[data-pin-id="${details.id}"]`);
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to delete this pin?')) {
+              deletePin(details.id, markerInstance);
+            }
+          });
+        }
+      }, 100);
     });
   }
   
@@ -206,6 +240,35 @@ function addMarker(coordinates, animalType, details = {}) {
   markerInstance.addTo(map.value);
   
   return markerInstance;
+}
+
+// Delete a pin from the map and database
+async function deletePin(pinId, markerInstance) {
+  try {
+    console.log('Deleting pin with ID:', pinId);
+    
+    // Remove from map
+    if (markerInstance) {
+      markerInstance.remove();
+    }
+    
+    // Remove from local list
+    const pinIndex = pinsList.value.findIndex(pin => pin.id === pinId);
+    if (pinIndex !== -1) {
+      pinsList.value.splice(pinIndex, 1);
+    }
+    
+    // Remove from database
+    const response = await axios.delete(`/pins/${pinId}`);
+    
+    if (response.data.success) {
+      console.log('Pin deleted successfully');
+    } else {
+      console.error('Failed to delete pin:', response.data.message);
+    }
+  } catch (error) {
+    console.error('Error deleting pin:', error);
+  }
 }
 
 // Allow adding a camera pin to the map - exposed for parent components
@@ -366,6 +429,7 @@ defineExpose({
   addMarker,
   addAnimalPin,
   addCameraPin,
+  deletePin,
   enablePinPlacementMode,
   disablePinPlacementMode,
   refreshMap: () => {
@@ -384,8 +448,6 @@ defineExpose({
 </template>
 
 <style>
-
-
 .map-container {
   width: 100%;
   height: 100%;
@@ -411,5 +473,34 @@ defineExpose({
 .custom-marker:hover {
   transform: scale(1.2);
   cursor: pointer;
+}
+
+/* Popup styles */
+.mapboxgl-popup-content {
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.camera-popup h3,
+.pin-popup h3 {
+  color:black;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.delete-pin-btn {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 10px;
+  margin-top: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.delete-pin-btn:hover {
+  background-color: #d32f2f;
 }
 </style>

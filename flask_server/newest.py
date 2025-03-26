@@ -6,78 +6,112 @@ import threading
 import subprocess
 import os
 import numpy as np
+import shutil
+from collections import deque
 from ultralytics import RTDETR
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
-
-# Flask app setup
 app = Flask(__name__)
 CORS(app)
+HLS_CLEANUP_DIR = '/var/hls'
+HLS_CLEANED = False
+if not HLS_CLEANED and os.path.exists(HLS_CLEANUP_DIR):
+    try:
+        shutil.rmtree(HLS_CLEANUP_DIR)
+        print("/var/hls cleaned.")
+    except PermissionError as e:
+        print(f"Permission denied while cleaning /var/hls: {e}")
+os.makedirs(HLS_CLEANUP_DIR, exist_ok=True)
+os.chmod(HLS_CLEANUP_DIR, 0o777)
+HLS_CLEANED = True
 
-# Constants
-STREAM_ID = 'main-camera'
-RTSP_URL = 'rtsp://10.0.0.3:8554/cam1'
-HLS_DIR = os.path.join(os.path.dirname(__file__), 'hls_streams', STREAM_ID)
-os.makedirs(HLS_DIR, exist_ok=True)
 FRAME_WIDTH, FRAME_HEIGHT = 960, 544
 REQUIRED_CONSECUTIVE_FRAMES = 20
 DOG_CLASS_ID = 1
+STREAM_IP_RANGE = range(3, 11)
+RTSP_BASE = 'rtsp://10.0.0.{ip}:8554/cam1'
 
-# Model loading
+stream_data = {}
+stream_threads = []
 model = RTDETR('best.pt')
 model.conf = 0.5
 model.to('cuda' if torch.cuda.is_available() else 'cpu')
 
-# Shared state
-consecutive_detections = 0
-highest_confidence_frame = None
-highest_confidence_score = 0
-frame_buffer = None
-lock = threading.Lock()
+BUFFER_SIZE = 150  # 5 seconds at 30fps
 
-# FFmpeg subprocess
-ffmpeg_process = None
 
-def start_ffmpeg():
-    global ffmpeg_process
-    rtmp_url = f'rtmp://127.0.0.1/live/{STREAM_ID}'
-    
+def start_ffmpeg(stream_id):
+    hls_dir = os.path.join(os.path.dirname(__file__), 'hls_streams', stream_id)
+    os.makedirs(hls_dir, exist_ok=True)
+    rtmp_url = f'rtmp://127.0.0.1/live/{stream_id}'
     cmd = [
-        'ffmpeg',
-        '-f', 'image2pipe',
-        '-vcodec', 'mjpeg',
-        '-r', '30',
-        '-i', '-',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-hls_time', '10',              # each .ts segment = 2 seconds
-        '-hls_list_size', '20', 
-        '-f', 'flv',
-        rtmp_url
+        'ffmpeg', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-r', '30', '-i', '-',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
+        '-hls_time', '2', '-hls_list_size', '3',
+        '-hls_flags', 'delete_segments+append_list',
+        '-f', 'flv', rtmp_url
     ]
+    return subprocess.Popen(cmd, stdin=subprocess.PIPE), hls_dir
 
-    ffmpeg_process = subprocess.Popen(cmd, stdin=subprocess.PIPE)
 
-
-def detect_and_stream():
-    global consecutive_detections, highest_confidence_frame, highest_confidence_score, frame_buffer
-
-    cap = cv2.VideoCapture(RTSP_URL)
+def capture_frames(rtsp_url, stream_id):
+    cap = cv2.VideoCapture(rtsp_url)
     if not cap.isOpened():
-        print("Failed to open RTSP stream")
+        print(f"Failed to open RTSP stream: {rtsp_url}")
         return
-
-    start_ffmpeg()
 
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Failed to read frame")
+            print(f"[{stream_id}] Failed to read frame")
             time.sleep(1)
             continue
 
         resized = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
-        results = model.predict(resized, imgsz=(FRAME_WIDTH, FRAME_HEIGHT))
+        stream_data[stream_id]['buffer'].append(resized)
+        time.sleep(1 / 30)
+
+def monitor_stream(rtsp_url, stream_id):
+    while True:
+        cap = cv2.VideoCapture(rtsp_url)
+        if cap.isOpened():
+            cap.release()
+            print(f"[{stream_id}] Stream connected. Launching threads.")
+            stream_data[stream_id] = {
+                'url': rtsp_url,
+                'buffer': deque(maxlen=BUFFER_SIZE)
+            }
+            t1 = threading.Thread(target=capture_frames, args=(rtsp_url, stream_id), daemon=True)
+            t2 = threading.Thread(target=process_stream, args=(stream_id,), daemon=True)
+            stream_threads.extend([t1, t2])
+            t1.start()
+            t2.start()
+            break
+        else:
+            print(f"[{stream_id}] Stream not available. Retrying in 30 seconds...")
+            time.sleep(30)
+
+
+def process_stream(stream_id):
+    ffmpeg_proc, hls_dir = start_ffmpeg(stream_id)
+
+    stream_data[stream_id].update({
+        "ffmpeg": ffmpeg_proc,
+        "frame_buffer": None,
+        "lock": threading.Lock(),
+        "hls_dir": hls_dir,
+        "consec": 0,
+        "high_conf_frame": None,
+        "high_score": 0
+    })
+
+    while True:
+        if len(stream_data[stream_id]['buffer']) < BUFFER_SIZE:
+            time.sleep(0.1)
+            continue
+
+        frame = stream_data[stream_id]['buffer'].popleft()
+        results = model.predict(frame, imgsz=(FRAME_WIDTH, FRAME_HEIGHT))
         detected = False
 
         for result in results:
@@ -88,15 +122,15 @@ def detect_and_stream():
 
                 if class_id == DOG_CLASS_ID and confidence > 0.6:
                     detected = True
-                    if confidence > highest_confidence_score:
-                        highest_confidence_score = confidence
-                        highest_confidence_frame = resized[y1:y2, x1:x2]
+                    if confidence > stream_data[stream_id]['high_score']:
+                        stream_data[stream_id]['high_score'] = confidence
+                        stream_data[stream_id]['high_conf_frame'] = frame[y1:y2, x1:x2]
 
         if detected:
-            consecutive_detections += 1
-            if consecutive_detections >= REQUIRED_CONSECUTIVE_FRAMES:
-                if highest_confidence_frame is not None:
-                    _, buffer = cv2.imencode('.jpg', highest_confidence_frame)
+            stream_data[stream_id]['consec'] += 1
+            if stream_data[stream_id]['consec'] >= REQUIRED_CONSECUTIVE_FRAMES:
+                if stream_data[stream_id]['high_conf_frame'] is not None:
+                    _, buffer = cv2.imencode('.jpg', stream_data[stream_id]['high_conf_frame'])
                     base64_img = base64.b64encode(buffer).decode('utf-8')
                     try:
                         requests.post('http://127.0.0.1:8000/api/pin', json={
@@ -104,27 +138,26 @@ def detect_and_stream():
                             'coordinates': [121.039295, 14.631141],
                             'snapshot': base64_img
                         })
-                        print("Pin sent.")
+                        print(f"[{stream_id}] Pin sent.")
                     except Exception as e:
-                        print("Failed to send pin:", e)
-                    consecutive_detections = 0
-                    highest_confidence_frame = None
-                    highest_confidence_score = 0
+                        print(f"[{stream_id}] Failed to send pin:", e)
+                    stream_data[stream_id]['consec'] = 0
+                    stream_data[stream_id]['high_conf_frame'] = None
+                    stream_data[stream_id]['high_score'] = 0
         else:
-            consecutive_detections = 0
-            highest_confidence_frame = None
-            highest_confidence_score = 0
+            stream_data[stream_id]['consec'] = 0
+            stream_data[stream_id]['high_conf_frame'] = None
+            stream_data[stream_id]['high_score'] = 0
 
         annotated = results[0].plot()
+        with stream_data[stream_id]['lock']:
+            stream_data[stream_id]['frame_buffer'] = annotated.copy()
 
-        with lock:
-            frame_buffer = annotated.copy()
-
-        if ffmpeg_process and ffmpeg_process.stdin:
+        if ffmpeg_proc and ffmpeg_proc.stdin:
             _, encoded = cv2.imencode('.jpg', annotated)
-            ffmpeg_process.stdin.write(encoded.tobytes())
+            ffmpeg_proc.stdin.write(encoded.tobytes())
 
-        time.sleep(1 / 30)  # 30 FPS
+        time.sleep(1 / 30)
 
 
 @app.route('/api/streams')
@@ -132,32 +165,49 @@ def get_streams():
     return jsonify({
         "streams": [
             {
-                "id": STREAM_ID,
-                "name": "Camera main-camera",
-                "location": "Main Location",
+                "id": stream_id,
+                "name": f"Camera {stream_id}",
+                "location": f"RTSP from {data['url']}",
                 "status": "active",
-                "url": RTSP_URL,
-                "hls_url": f"http://straysafe.me/hls/{STREAM_ID}.m3u8",
-                "flask_hls_url": f"http://straysafe.me/api/hls/{STREAM_ID}/playlist.m3u8",
-                "video_url": f"http://straysafe.me/api/video/{STREAM_ID}",
-                "rtmp_key": STREAM_ID,
+                "url": data['url'],
+                "hls_url": f"http://straysafe.me/hls/{stream_id}.m3u8",
+                "flask_hls_url": f"http://straysafe.me/api/hls/{stream_id}/playlist.m3u8",
+                "video_url": f"http://straysafe.me/api/video/{stream_id}",
+                "rtmp_key": stream_id,
                 "type": "rtsp"
             }
+            for stream_id, data in stream_data.items()
         ]
     })
 
+
 @app.route('/api/video/<stream_id>')
 def video_snapshot(stream_id):
-    global frame_buffer
-    with lock:
-        frame = frame_buffer.copy() if frame_buffer is not None else np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), np.uint8)
+    if stream_id not in stream_data:
+        return "Stream not found", 404
+    with stream_data[stream_id]['lock']:
+        frame = stream_data[stream_id]['frame_buffer']
+        if frame is None:
+            frame = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), np.uint8)
     _, img = cv2.imencode('.jpg', frame)
     return img.tobytes(), 200, {'Content-Type': 'image/jpeg'}
 
+
 @app.route('/api/hls/<stream_id>/<path:filename>')
 def serve_hls_file(stream_id, filename):
-    return send_from_directory(HLS_DIR, filename)
+    if stream_id not in stream_data:
+        return "Stream not found", 404
+    return send_from_directory(stream_data[stream_id]['hls_dir'], filename)
+
 
 if __name__ == '__main__':
-    threading.Thread(target=detect_and_stream, daemon=True).start()
+    for ip in STREAM_IP_RANGE:
+        stream_id = f'cam-{ip}'
+        rtsp_url = RTSP_BASE.format(ip=ip)
+        stream_data[stream_id] = {
+            'url': rtsp_url,
+            'buffer': deque(maxlen=BUFFER_SIZE)
+        }
+        threading.Thread(target=monitor_stream, args=(rtsp_url, stream_id), daemon=True).start()
+
     app.run(host='0.0.0.0', port=5000, debug=True)
