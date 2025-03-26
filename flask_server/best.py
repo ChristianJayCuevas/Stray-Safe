@@ -86,7 +86,25 @@ def is_new_animal(current_box, last_boxes, threshold=50):
             return False
     last_boxes.append((cx, cy))
     return True
-
+def monitor_stream(rtsp_url, stream_id):
+    while True:
+        cap = cv2.VideoCapture(rtsp_url)
+        if cap.isOpened():
+            cap.release()
+            print(f"[{stream_id}] Stream connected. Launching threads.")
+            stream_data[stream_id] = {
+                'url': rtsp_url,
+                'buffer': deque(maxlen=BUFFER_SIZE)
+            }
+            t1 = threading.Thread(target=capture_frames, args=(rtsp_url, stream_id), daemon=True)
+            t2 = threading.Thread(target=process_stream, args=(stream_id,), daemon=True)
+            stream_threads.extend([t1, t2])
+            t1.start()
+            t2.start()
+            break
+        else:
+            print(f"[{stream_id}] Stream not available. Retrying in 30 seconds...")
+            time.sleep(30)
 
 def process_stream(stream_id):
     ffmpeg_proc, hls_dir = start_ffmpeg(stream_id)
@@ -163,7 +181,7 @@ def process_stream(stream_id):
         time.sleep(1 / 30)
 
 
-@app.route('/api/streams')
+@app.route('/api2/streams')
 def get_streams():
     return jsonify({
         "streams": [
@@ -183,13 +201,14 @@ def get_streams():
         ]
     })
 
-
-@app.route('/api/counters')
+@app.route('/api2/counters')
 def get_animal_counters():
+    if not animal_counters:
+        return jsonify({"message": "No detections yet", "counters": {}})
     return jsonify({stream_id: counts for stream_id, counts in animal_counters.items()})
 
 
-@app.route('/api/video/<stream_id>')
+@app.route('/api2/video/<stream_id>')
 def video_snapshot(stream_id):
     if stream_id not in stream_data:
         return "Stream not found", 404
@@ -201,7 +220,7 @@ def video_snapshot(stream_id):
     return img.tobytes(), 200, {'Content-Type': 'image/jpeg'}
 
 
-@app.route('/api/hls/<stream_id>/<path:filename>')
+@app.route('/api2/hls/<stream_id>/<path:filename>')
 def serve_hls_file(stream_id, filename):
     if stream_id not in stream_data:
         return "Stream not found", 404

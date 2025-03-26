@@ -134,7 +134,7 @@ const fetchStreams = async () => {
   streamError.value = false;
   
   try {
-    const response = await axios.get('https://straysafe.me/api/streams')
+    const response = await axios.get('https://straysafe.me/api2/streams')
     
     // Log the raw response for debugging
     console.log('Stream API response:', response.data);
@@ -360,7 +360,7 @@ const recentSnapshots = ref([
 async function fetchRecentSnapshots() {
   try {
     // Try to fetch detection events from the API
-    const response = await axios.get('https://straysafe.me/api/detection-events');
+    const response = await axios.get('https://straysafe.me/api2/detection-events');
     
     if (response.data && Array.isArray(response.data)) {
       recentSnapshots.value = response.data.map(event => {

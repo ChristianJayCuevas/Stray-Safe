@@ -59,17 +59,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/cctv', [CCTVController::class, 'view'])->name('cctv.view');
     Route::get('/cctv/detect', [CCTVController::class, 'detect'])->name('cctv.detect');
     
-    // Stream proxy routes to handle CORS
-    Route::options('stream-proxy/{path?}', [StreamProxyController::class, 'options'])
-        ->where('path', '.*');
-    Route::get('stream-proxy/{path?}', [StreamProxyController::class, 'proxy'])
-        ->where('path', '.*');
+    // // Stream proxy routes to handle CORS
+    // Route::options('stream-proxy/{path?}', [StreamProxyController::class, 'options'])
+    //     ->where('path', '.*');
+    // Route::get('stream-proxy/{path?}', [StreamProxyController::class, 'proxy'])
+    //     ->where('path', '.*');
         
-    // New stream controller routes
-    Route::get('stream/{path}', [StreamController::class, 'proxyStream'])
-        ->where('path', '.*');
-    Route::get('api/streams', [StreamController::class, 'getStreams']);
-    Route::get('api/streams/test/{streamId}', [StreamController::class, 'testStream']);
+    // // New stream controller routes
+    // Route::get('stream/{path}', [StreamController::class, 'proxyStream'])
+    //     ->where('path', '.*');
+    // Route::get('api/streams', [StreamController::class, 'getStreams']);
+    // Route::get('api/streams/test/{streamId}', [StreamController::class, 'testStream']);
 
     Route::post('/pin', [MapPinController::class, 'store']); // For regular pins
     Route::post('/camera-pin', [CameraPinController::class, 'store']); // Camera pin with dedicated controller

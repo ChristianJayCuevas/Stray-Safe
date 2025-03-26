@@ -59,7 +59,7 @@ async function fetchCCTVs() {
     
     try {
         console.log('Fetching cameras from API...');
-        const response = await axios.get('https://straysafe.me/api/streams');
+        const response = await axios.get('https://straysafe.me/api2/streams');
         const streams = response.data?.streams || [];
         
         console.log('Received streams:', streams);
