@@ -74,6 +74,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/pins', [MapPinController::class, 'index']);
     Route::delete('/pins/{id}', [MapPinController::class, 'destroy']); // Delete a pin
 
+    Route::post('/cctvs', [CCTVController::class, 'store'])->name('cctvs.store');
+    Route::get('/cctvs', [CCTVController::class, 'getCustomCCTVs'])->name('cctvs.index');
+    Route::delete('/cctvs/{id}', [CCTVController::class, 'destroy'])->name('cctvs.destroy');
+
     //For the profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
