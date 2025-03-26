@@ -25,6 +25,13 @@ Route::get('/', function () {
         'phpVersion' => PHP_VERSION,
     ]);
 });
+Route::post('/user/image', [UserController::class, 'updateProfileImage']);
+Route::post('/user/signup', [UserController::class, 'register']);
+Route::post('/mobilelogin', [UserController::class, 'login']);
+Route::get('/mobileusers', [UserController::class, 'fetchUsers']);
+Route::get('mobileuser/me', [UserController::class, 'fetchLoggedInUser']);
+Route::get('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'fetchRegisteredAnimals']);
+Route::post('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'storeRegisteredAnimal']);
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', function () {
@@ -77,15 +84,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/cctvs', [CCTVController::class, 'store'])->name('cctvs.store');
     Route::get('/cctvs', [CCTVController::class, 'getCustomCCTVs'])->name('cctvs.index');
     Route::delete('/cctvs/{id}', [CCTVController::class, 'destroy'])->name('cctvs.destroy');
-
-
-    Route::post('/user/image', [UserController::class, 'updateProfileImage']);
-    Route::post('/user/signup', [UserController::class, 'register']);
-    Route::post('/mobilelogin', [UserController::class, 'login']);
-    Route::get('/mobileusers', [UserController::class, 'fetchUsers']);
-    Route::get('mobileuser/me', [UserController::class, 'fetchLoggedInUser']);
-    Route::get('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'fetchRegisteredAnimals']);
-    Route::post('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'storeRegisteredAnimal']);
 
    
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

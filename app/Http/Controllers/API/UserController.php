@@ -27,13 +27,13 @@ class UserController extends Controller
         // Get the authenticated user
         $user = Auth::user();
 
-        // Generate a Sanctum token
-        $token = $user->createToken('mobile')->plainTextToken;
+        // // Generate a Sanctum token
+        // $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
             'status' => 'success',
             'user' => $user,
-            'token' => $token,
+            // 'token' => $token,
         ]);
     }
 
@@ -64,14 +64,14 @@ class UserController extends Controller
             'profile_image_link' => $request->profile_image_link,
         ]);
 
-        // Generate a Sanctum token
-        $token = $user->createToken('mobile')->plainTextToken;
+        // // Generate a Sanctum token
+        // $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
             'status' => 'success',
             'message' => 'User created successfully',
             'user' => $user,
-            'token' => $token,
+            // 'token' => $token,
         ], 201);
     }
 
