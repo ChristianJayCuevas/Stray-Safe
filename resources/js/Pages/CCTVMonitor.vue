@@ -21,13 +21,18 @@ const streamError = ref(false);
 const dialogVisible = ref(false);
 const selectedCCTV = ref(null);
 
+// Define props for the component
+const props = defineProps({
+  initialCustomCCTVs: Array
+});
+
 // Create CCTV Card dialog
 const createCardDialogVisible = ref(false);
 const newCardName = ref('');
 const newCardLocation = ref('');
 const selectedStreamUrl = ref('');
 const availableStreams = ref([]);
-const customCards = ref([]);
+const customCards = ref(props.initialCustomCCTVs || []);
 
 // Function to open the create card dialog
 function openCreateCardDialog() {
@@ -43,7 +48,7 @@ function closeCreateCardDialog() {
 }
 
 // Function to add a new custom CCTV card
-function addCustomCard() {
+async function addCustomCard() {
   if (!newCardName.value || !selectedStreamUrl.value) {
     alert('Please provide a name and select a stream URL');
     return;
@@ -52,23 +57,43 @@ function addCustomCard() {
   // Find the selected stream details
   const selectedStream = availableStreams.value.find(stream => stream.hls_url === selectedStreamUrl.value);
   
-  // Create a new card
-  const newCard = {
-    id: `custom-${Date.now()}`,
-    name: newCardName.value,
-    location: newCardLocation.value || 'Custom Location',
-    status: 'Online',
-    videoSrc: [selectedStreamUrl.value],
-    isHls: true,
-    isCustom: true,
-    originalStreamId: selectedStream ? selectedStream.id : null
-  };
-  
-  // Add to custom cards
-  customCards.value.push(newCard);
-  
-  // Close the dialog
-  closeCreateCardDialog();
+  try {
+    // Save to the backend
+    const response = await axios.post('/cctvs', {
+      name: newCardName.value,
+      location: newCardLocation.value || 'Custom Location',
+      stream_url: selectedStreamUrl.value,
+      original_stream_id: selectedStream ? selectedStream.id : null
+    });
+    
+    if (response.data.success) {
+      // Add the card with the ID from the server
+      const newCard = {
+        id: response.data.cctv.id,
+        name: newCardName.value,
+        location: newCardLocation.value || 'Custom Location',
+        status: 'Online',
+        videoSrc: [selectedStreamUrl.value],
+        isHls: true,
+        isCustom: true,
+        originalStreamId: selectedStream ? selectedStream.id : null
+      };
+      
+      // Add to custom cards
+      customCards.value.push(newCard);
+      
+      // Close the dialog
+      closeCreateCardDialog();
+      
+      console.log('Custom CCTV saved successfully:', response.data.cctv);
+    } else {
+      console.error('Failed to save custom CCTV:', response.data.message);
+      alert('Failed to save custom CCTV: ' + response.data.message);
+    }
+  } catch (error) {
+    console.error('Error saving custom CCTV:', error);
+    alert('Error saving custom CCTV: ' + (error.response?.data?.message || error.message));
+  }
 }
 
 // Stream synchronization
@@ -145,6 +170,20 @@ onMounted(() => {
   console.log('Component mounted');
   if (!hlsAvailable.value) {
     console.warn('HLS.js is not available - video playback may be limited');
+  }
+  
+  // Initialize with custom CCTVs from props
+  if (props.initialCustomCCTVs && props.initialCustomCCTVs.length > 0) {
+    customCards.value = props.initialCustomCCTVs.map(cctv => ({
+      id: cctv.id,
+      name: cctv.name,
+      location: cctv.location,
+      status: cctv.status,
+      videoSrc: [cctv.stream_url],
+      isHls: true,
+      isCustom: true,
+      originalStreamId: cctv.original_stream_id
+    }));
   }
   
   fetchStreams();
@@ -310,14 +349,30 @@ function openStreamInBrowser() {
 }
 
 // Function to remove a custom card
-function removeCustomCard(cardId) {
-  const index = customCards.value.findIndex(card => card.id === cardId);
-  if (index !== -1) {
-    customCards.value.splice(index, 1);
+async function removeCustomCard(cardId) {
+  try {
+    // Delete from backend
+    const response = await axios.delete(`/cctvs/${cardId}`);
     
-    // Update system stats
-    systemStats.value.totalCameras = cctvs.value.length + customCards.value.length;
-    systemStats.value.onlineCameras = cctvs.value.filter(cam => cam.status === 'Online').length + customCards.value.length;
+    if (response.data.success) {
+      // Remove from local list
+      const index = customCards.value.findIndex(card => card.id === cardId);
+      if (index !== -1) {
+        customCards.value.splice(index, 1);
+        
+        // Update system stats
+        systemStats.value.totalCameras = cctvs.value.length + customCards.value.length;
+        systemStats.value.onlineCameras = cctvs.value.filter(cam => cam.status === 'Online').length + customCards.value.length;
+      }
+      
+      console.log('Custom CCTV deleted successfully');
+    } else {
+      console.error('Failed to delete custom CCTV:', response.data.message);
+      alert('Failed to delete custom CCTV: ' + response.data.message);
+    }
+  } catch (error) {
+    console.error('Error deleting custom CCTV:', error);
+    alert('Error deleting custom CCTV: ' + (error.response?.data?.message || error.message));
   }
 }
 </script>

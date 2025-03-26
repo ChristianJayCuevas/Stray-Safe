@@ -79,6 +79,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // New routes for custom CCTVs
+    Route::post('/cctvs', [CCTVController::class, 'store'])->name('cctvs.store');
+    Route::get('/cctvs', [CCTVController::class, 'getCustomCCTVs'])->name('cctvs.index');
+    Route::delete('/cctvs/{id}', [CCTVController::class, 'destroy'])->name('cctvs.destroy');
 
 });
 
