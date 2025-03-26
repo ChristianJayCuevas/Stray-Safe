@@ -76,7 +76,7 @@ async function addCustomCard() {
   const selectedStream = availableStreams.value.find(stream => stream.hls_url === selectedStreamUrl.value);
   
   // Ensure stream URL uses https
-  const secureStreamUrl = selectedStreamUrl.value.replace('http://', 'https://');
+  const secureStreamUrl = selectedStreamUrl.value ? selectedStreamUrl.value.replace('http://', 'https://') : '';
   
   try {
     // Save to the backend
@@ -135,13 +135,33 @@ const fetchStreams = async () => {
   
   try {
     const response = await axios.get('https://straysafe.me/api/streams')
-    const streams = response.data?.streams || []
     
-    // Store available streams for selection
-    availableStreams.value = streams.map(stream => ({
-      ...stream,
-      hls_url: stream.hls_url.replace('http://', 'https://')
-    }));
+    // Log the raw response for debugging
+    console.log('Stream API response:', response.data);
+    
+    // Safely extract the streams with validation
+    let streams = [];
+    if (response.data && Array.isArray(response.data.streams)) {
+      streams = response.data.streams;
+    } else if (Array.isArray(response.data)) {
+      streams = response.data;
+    } else {
+      console.warn('Unexpected streams data format:', response.data);
+      streams = [];
+    }
+    
+    // Store available streams for selection with careful validation
+    availableStreams.value = streams.map(stream => {
+      // Ensure we have all required properties
+      return {
+        id: stream.id || `stream-${Math.random().toString(36).substr(2, 9)}`,
+        name: stream.name || 'Unnamed Stream',
+        location: stream.location || 'Unknown Location',
+        hls_url: stream.hls_url ? stream.hls_url.replace('http://', 'https://') : ''
+      };
+    }).filter(stream => stream.hls_url); // Only keep streams with a valid URL
+
+    console.log('Processed streams:', availableStreams.value);
 
     // Update system stats - only count custom cards
     systemStats.value = {
@@ -200,7 +220,7 @@ onMounted(() => {
       location: cctv.location,
       status: cctv.status,
       // Ensure the URL uses https
-      videoSrc: [cctv.stream_url.replace('http://', 'https://')],
+      videoSrc: [cctv.stream_url ? cctv.stream_url.replace('http://', 'https://') : ''],
       isHls: true,
       isCustom: true,
       originalStreamId: cctv.original_stream_id
@@ -488,6 +508,17 @@ async function removeCustomCard(cardId) {
         <div class="flex space-x-2">
           <q-btn class="secondary-btn" icon="refresh" label="Try Again" @click="fetchStreams" />
           <q-btn class="primary-btn" icon="open_in_new" label="Test Stream in Browser" @click="openStreamInBrowser" />
+        </div>
+      </div>
+      
+      <!-- Empty streams message -->
+      <div v-else-if="availableStreams.length === 0 && customCards.length === 0" class="error-container">
+        <i class="fas fa-video-slash text-yellow-500 text-3xl mb-2"></i>
+        <p class="mb-2">No CCTV streams are currently available.</p>
+        <p class="mb-4">You can add a custom CCTV card with your own stream URL.</p>
+        <div class="flex space-x-2">
+          <q-btn class="primary-btn" icon="add" label="Add Custom Camera" @click="openCreateCardDialog" />
+          <q-btn class="secondary-btn" icon="refresh" label="Check Again" @click="fetchStreams" />
         </div>
       </div>
 
