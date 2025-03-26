@@ -58,7 +58,13 @@ function initializeHls(url) {
   errorMessage.value = ''
 
   if (Hls.isSupported()) {
-    hls.value = new Hls()
+    hls.value = new Hls({
+    liveSyncDurationCount: 1,   // Keeps player at the last 1 segment from live
+    liveMaxLatencyDurationCount: 3,
+    maxBufferLength: 10,
+    maxMaxBufferLength: 20,
+    lowLatencyMode: true
+  })
     hls.value.attachMedia(videoElement.value)
 
     hls.value.on(Hls.Events.MEDIA_ATTACHED, () => {
@@ -89,9 +95,9 @@ function initializeHls(url) {
     hls.value.on(Hls.Events.LEVEL_LOADED, (event, data) => {
       if (data.details.live) {
         const liveEdge = hls.value.liveSyncPosition
-        if (liveEdge) {
-          videoElement.value.currentTime = liveEdge
+        if (liveEdge && videoElement.value) {
           console.log('Jumping to live sync position (LEVEL_LOADED):', liveEdge)
+          videoElement.value.currentTime = liveEdge
         }
       }
     })
