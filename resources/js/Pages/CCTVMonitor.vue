@@ -21,6 +21,56 @@ const streamError = ref(false);
 const dialogVisible = ref(false);
 const selectedCCTV = ref(null);
 
+// Create CCTV Card dialog
+const createCardDialogVisible = ref(false);
+const newCardName = ref('');
+const newCardLocation = ref('');
+const selectedStreamUrl = ref('');
+const availableStreams = ref([]);
+const customCards = ref([]);
+
+// Function to open the create card dialog
+function openCreateCardDialog() {
+  newCardName.value = '';
+  newCardLocation.value = '';
+  selectedStreamUrl.value = '';
+  createCardDialogVisible.value = true;
+}
+
+// Function to close the create card dialog
+function closeCreateCardDialog() {
+  createCardDialogVisible.value = false;
+}
+
+// Function to add a new custom CCTV card
+function addCustomCard() {
+  if (!newCardName.value || !selectedStreamUrl.value) {
+    alert('Please provide a name and select a stream URL');
+    return;
+  }
+  
+  // Find the selected stream details
+  const selectedStream = availableStreams.value.find(stream => stream.hls_url === selectedStreamUrl.value);
+  
+  // Create a new card
+  const newCard = {
+    id: `custom-${Date.now()}`,
+    name: newCardName.value,
+    location: newCardLocation.value || 'Custom Location',
+    status: 'Online',
+    videoSrc: [selectedStreamUrl.value],
+    isHls: true,
+    isCustom: true,
+    originalStreamId: selectedStream ? selectedStream.id : null
+  };
+  
+  // Add to custom cards
+  customCards.value.push(newCard);
+  
+  // Close the dialog
+  closeCreateCardDialog();
+}
+
 // Stream synchronization
 const activeStreamInstances = ref({});
 const activeHlsInstances = ref({});
@@ -40,20 +90,23 @@ const fetchStreams = async () => {
   try {
     const response = await axios.get('https://straysafe.me/api/streams')
     const streams = response.data?.streams || []
+    
+    // Store available streams for selection
+    availableStreams.value = streams;
 
     cctvs.value = streams.map(stream => ({
       id: stream.id,
       name: stream.name,
       location: stream.location,
       status: stream.status === 'active' ? 'Online' : 'Offline',
-      videoSrc: [stream.hls_url.replace('http://', 'https://')], // Using hls_url as requested
+      videoSrc: [stream.hls_url.replace('http://', 'https://')],
       isHls: true
     }))
     
     // Update system stats
     systemStats.value = {
-      totalCameras: cctvs.value.length,
-      onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length,
+      totalCameras: cctvs.value.length + customCards.value.length,
+      onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length + customCards.value.length,
       detectionsToday: Math.floor(Math.random() * 30),
       storageUsed: '1.2 TB'
     };
@@ -83,7 +136,7 @@ function useSampleData() {
     totalCameras: 1,
     onlineCameras: 1,
     detectionsToday: 5,
-    storageUsed: '1.2 TB'
+    storageUsed: '1.2 GB'
   };
 }
 
@@ -178,16 +231,18 @@ const pagination = ref({
   totalPages: 1
 });
 
-// Compute total pages whenever cctvs changes
-watch(cctvs, () => {
-  pagination.value.totalPages = Math.ceil(cctvs.value.length / pagination.value.rowsPerPage);
+// Compute total pages whenever cctvs or customCards change
+watch([cctvs, customCards], () => {
+  const totalCameras = cctvs.value.length + customCards.value.length;
+  pagination.value.totalPages = Math.ceil(totalCameras / pagination.value.rowsPerPage);
 });
 
-// Filtered CCTVs based on pagination
+// Filtered CCTVs based on pagination, including custom cards
 const paginatedCCTVs = computed(() => {
+  const allCameras = [...cctvs.value, ...customCards.value];
   const start = (pagination.value.page - 1) * pagination.value.rowsPerPage;
   const end = start + pagination.value.rowsPerPage;
-  return cctvs.value.slice(start, end);
+  return allCameras.slice(start, end);
 });
 
 // System stats
@@ -252,6 +307,18 @@ function changePage(newPage) {
 // Open stream in browser (for testing)
 function openStreamInBrowser() {
   window.open('https://straysafe.me/hls/main-camera.m3u8', '_blank');
+}
+
+// Function to remove a custom card
+function removeCustomCard(cardId) {
+  const index = customCards.value.findIndex(card => card.id === cardId);
+  if (index !== -1) {
+    customCards.value.splice(index, 1);
+    
+    // Update system stats
+    systemStats.value.totalCameras = cctvs.value.length + customCards.value.length;
+    systemStats.value.onlineCameras = cctvs.value.filter(cam => cam.status === 'Online').length + customCards.value.length;
+  }
 }
 </script>
 
@@ -326,6 +393,7 @@ function openStreamInBrowser() {
             <i class="fas fa-clock mr-2"></i>
             {{ new Date().toLocaleTimeString() }}
           </div>
+          <q-btn class="primary-btn mr-2" icon="add" label="Add Camera Card" @click="openCreateCardDialog" />
           <q-btn class="secondary-btn" icon="refresh" label="Refresh" @click="fetchStreams" />
         </div>
       </div>
@@ -348,6 +416,7 @@ function openStreamInBrowser() {
 
       <div v-else class="cctv-grid">
         <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
+          <div v-if="cctv.isCustom" class="custom-card-badge">Custom</div>
           <div class="cctv-feed">
             <StreamPlayer :streamUrl="cctv.videoSrc[0]" />
           </div>
@@ -358,6 +427,9 @@ function openStreamInBrowser() {
               <i :class="cctv.status === 'Online' ? 'fas fa-circle' : 'fas fa-circle-xmark'" class="mr-1"></i>
               {{ cctv.status }}
             </div>
+            <q-btn v-if="cctv.isCustom" class="delete-card-btn" icon="delete" flat dense @click.stop="removeCustomCard(cctv.id)">
+              <q-tooltip>Remove Card</q-tooltip>
+            </q-btn>
           </div>
         </div>
       </div>
@@ -449,6 +521,58 @@ function openStreamInBrowser() {
           <q-btn class="secondary-btn" icon="notifications" label="Send Alert" />
           <q-btn class="primary-btn ml-2" icon="save" label="Save Snapshot" />
         </div>
+      </q-card-section>
+    </q-card>
+  </q-dialog>
+  
+  <!-- Create CCTV Card Dialog -->
+  <q-dialog v-model="createCardDialogVisible" backdrop-filter="blur(4px) saturate(150%)">
+    <q-card class="create-card-dialog">
+      <q-card-section class="dialog-header">
+        <div class="flex justify-between items-center">
+          <h2 class="dialog-title">Add Camera Card</h2>
+          <q-btn flat round icon="close" @click="closeCreateCardDialog" />
+        </div>
+      </q-card-section>
+      
+      <q-card-section>
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Camera Name</label>
+          <input
+            v-model="newCardName"
+            type="text"
+            class="form-input w-full rounded-md border border-gray-300 p-2"
+            placeholder="Enter camera name"
+          />
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Location (Optional)</label>
+          <input
+            v-model="newCardLocation"
+            type="text"
+            class="form-input w-full rounded-md border border-gray-300 p-2"
+            placeholder="Enter camera location"
+          />
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Stream URL</label>
+          <select
+            v-model="selectedStreamUrl"
+            class="form-select w-full rounded-md border border-gray-300 p-2"
+          >
+            <option value="" disabled>Select a stream</option>
+            <option v-for="stream in availableStreams" :key="stream.id" :value="stream.hls_url">
+              {{ stream.name || 'Unnamed Stream' }} ({{ stream.location || 'Unknown' }})
+            </option>
+          </select>
+        </div>
+      </q-card-section>
+      
+      <q-card-section class="dialog-actions" align="right">
+        <q-btn flat label="Cancel" @click="closeCreateCardDialog" />
+        <q-btn class="primary-btn" label="Add Card" @click="addCustomCard" />
       </q-card-section>
     </q-card>
   </q-dialog>
