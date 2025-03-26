@@ -1,7 +1,7 @@
 <script setup>
 import Map from '@/Components/MapComponent.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { ref, onMounted, inject, computed } from 'vue';
+import { ref, onMounted, inject, computed, onUnmounted } from 'vue';
 import { QCard, QCardSection, QBtn, QIcon, QBadge, QSeparator, QTooltip, QDialog, QSelect, QSpinner, QSpace } from 'quasar';
 import '../../css/stray-map.css';
 import axios from 'axios';
@@ -36,6 +36,11 @@ const addingPin = ref(false);
 const addPinError = ref(null);
 const placingPinMode = ref(false);
 const addPinSuccess = ref('');
+
+// Detection monitoring variables
+const previousDetections = ref({});
+const detectionMonitorInterval = ref(null);
+const isMonitoring = ref(false);
 
 function toggleFilters() {
     showFilters.value = !showFilters.value;
@@ -239,6 +244,185 @@ async function addCameraPin(coordinates, cameraInfo) {
         throw error;
     }
 }
+
+// Function to monitor detection changes from API
+async function monitorDetections() {
+  console.log('Starting detection monitor');
+  isMonitoring.value = true;
+  
+  // Clear any existing interval
+  if (detectionMonitorInterval.value) {
+    clearInterval(detectionMonitorInterval.value);
+  }
+  
+  // Initial fetch to establish baseline
+  try {
+    const initialCounters = await fetchDetectionCounters();
+    previousDetections.value = JSON.parse(JSON.stringify(initialCounters));
+    console.log('Established detection baseline:', previousDetections.value);
+  } catch (error) {
+    console.error('Failed to establish detection baseline:', error);
+  }
+  
+  // Set up the interval to check for new detections every 10 seconds
+  detectionMonitorInterval.value = setInterval(async () => {
+    try {
+      const currentCounters = await fetchDetectionCounters();
+      console.log('Current detection counters:', currentCounters);
+      
+      // Check for new detections by comparing with previous values
+      await checkForNewDetections(currentCounters);
+      
+      // Update previous detections for next comparison
+      previousDetections.value = JSON.parse(JSON.stringify(currentCounters));
+    } catch (error) {
+      console.error('Error monitoring detections:', error);
+    }
+  }, 10000); // Check every 10 seconds
+}
+
+// Fetch the current detection counters from the API
+async function fetchDetectionCounters() {
+  try {
+    const response = await axios.get('https://straysafe.me/api2/counters');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch detection counters:', error);
+    throw error;
+  }
+}
+
+// Check for new detections by comparing current with previous counts
+async function checkForNewDetections(currentCounters) {
+  // Fetch camera streams data to get locations
+  let streams = [];
+  try {
+    const streamsResponse = await axios.get('https://straysafe.me/api2/streams');
+    streams = streamsResponse.data?.streams || [];
+    console.log('Received streams for location lookup:', streams);
+  } catch (error) {
+    console.error('Failed to fetch streams for location lookup:', error);
+    return;
+  }
+  
+  // Create a map of camera IDs to their locations
+  const streamLocations = {};
+  streams.forEach(stream => {
+    streamLocations[stream.id] = {
+      name: stream.name || 'Unnamed Camera',
+      location: stream.location || 'Unknown Location',
+      coordinates: null // Will be filled in based on existing pins
+    };
+  });
+  
+  // Get existing camera pin locations from the map
+  if (mapRef.value) {
+    const cameraPins = await mapRef.value.getCameraPinLocations();
+    console.log('Current camera pin locations:', cameraPins);
+    
+    // Match stream IDs with camera pin locations
+    cameraPins.forEach(pin => {
+      if (pin.id && streamLocations[pin.id]) {
+        streamLocations[pin.id].coordinates = pin.coordinates;
+      }
+    });
+  }
+  
+  // Iterate through cameras in current counters
+  for (const cameraId in currentCounters) {
+    if (!previousDetections.value[cameraId]) {
+      // This is a new camera, treat all detections as new
+      previousDetections.value[cameraId] = { cat: 0, dog: 0 };
+    }
+    
+    const current = currentCounters[cameraId];
+    const previous = previousDetections.value[cameraId];
+    
+    // Check for new cat detections
+    if (current.cat > previous.cat) {
+      const newCats = current.cat - previous.cat;
+      console.log(`Detected ${newCats} new cat(s) on camera ${cameraId}`);
+      await createAnimalDetectionPin(cameraId, 'cat', newCats, streamLocations[cameraId]);
+    }
+    
+    // Check for new dog detections
+    if (current.dog > previous.dog) {
+      const newDogs = current.dog - previous.dog;
+      console.log(`Detected ${newDogs} new dog(s) on camera ${cameraId}`);
+      await createAnimalDetectionPin(cameraId, 'dog', newDogs, streamLocations[cameraId]);
+    }
+  }
+}
+
+// Create an animal detection pin near a camera
+async function createAnimalDetectionPin(cameraId, animalType, count, locationInfo) {
+  if (!locationInfo || !locationInfo.coordinates) {
+    console.warn(`No location info available for camera ${cameraId}, cannot place animal pin`);
+    return;
+  }
+  
+  try {
+    // Create a slightly randomized position near the camera
+    // This ensures multiple detections don't stack exactly on top of each other
+    const jitter = 0.0003; // ~30 meters of jitter
+    const animalPosition = {
+      lat: locationInfo.coordinates.lat + (Math.random() * jitter * 2 - jitter),
+      lng: locationInfo.coordinates.lng + (Math.random() * jitter * 2 - jitter)
+    };
+    
+    // Create timestamp for detection (now)
+    const timestamp = new Date().toISOString();
+    
+    // Create animal pin payload
+    const pinData = {
+      lat: animalPosition.lat,
+      lng: animalPosition.lng,
+      animal_type: animalType,
+      description: `${count} ${animalType}(s) detected by ${locationInfo.name}`,
+      image_url: null, // Could be filled in with a snapshot if available
+      detection_timestamp: timestamp,
+      is_automated: true,
+      is_camera: false,
+      status: 'active',
+      camera_id: cameraId
+    };
+    
+    // Add the pin to the map
+    if (mapRef.value) {
+      console.log('Adding animal detection pin:', pinData);
+      const result = await mapRef.value.addAnimalPin(pinData);
+      console.log('Animal detection pin added result:', result);
+    }
+  } catch (error) {
+    console.error('Failed to create animal detection pin:', error);
+  }
+}
+
+// Function to pause detection monitoring
+function pauseMonitoring() {
+  console.log('Pausing detection monitor');
+  
+  if (detectionMonitorInterval.value) {
+    clearInterval(detectionMonitorInterval.value);
+    detectionMonitorInterval.value = null;
+  }
+  
+  isMonitoring.value = false;
+}
+
+// Start and stop monitoring on component mount/unmount
+onMounted(() => {
+  // Start the detection monitor
+  monitorDetections();
+});
+
+onUnmounted(() => {
+  // Clean up monitor interval when component is destroyed
+  if (detectionMonitorInterval.value) {
+    clearInterval(detectionMonitorInterval.value);
+    detectionMonitorInterval.value = null;
+  }
+});
 </script>
 
 <template>
@@ -380,6 +564,46 @@ async function addCameraPin(coordinates, cameraInfo) {
             </q-card>
         </div>
         
+        <!-- Detection Monitor Status -->
+        <div class="detection-monitor-status mx-6 mb-4">
+            <q-card flat class="theme-card">
+                <q-card-section>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <q-icon 
+                                :name="isMonitoring ? 'sensors' : 'sensors_off'" 
+                                :color="isMonitoring ? 'positive' : 'negative'" 
+                                size="md" 
+                                class="mr-3" 
+                            />
+                            <div>
+                                <div class="text-lg font-medium">Animal Detection Monitor</div>
+                                <div class="text-sm text-gray-600 dark:text-gray-400">
+                                    {{ isMonitoring ? 'Actively monitoring for new detections' : 'Detection monitoring is paused' }}
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <q-btn 
+                                v-if="!isMonitoring"
+                                class="primary-btn" 
+                                icon="play_arrow" 
+                                label="Start Monitoring" 
+                                @click="monitorDetections" 
+                            />
+                            <q-btn 
+                                v-else
+                                class="secondary-btn" 
+                                icon="pause" 
+                                label="Pause Monitoring" 
+                                @click="pauseMonitoring" 
+                            />
+                        </div>
+                    </div>
+                </q-card-section>
+            </q-card>
+        </div>
+        
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mx-6 mb-4">
             <div class="stat-card">
@@ -424,9 +648,7 @@ async function addCameraPin(coordinates, cameraInfo) {
         </div>
         
         <!-- Map Container -->
-   
-            <Map ref="mapRef" />
-      
+        <Map ref="mapRef" />
         
         <!-- Add Camera Dialog -->
         <q-dialog v-model="showCameraDialog" persistent>
