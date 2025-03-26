@@ -35,12 +35,12 @@ Route::delete('/registered-animals/{id}', [RegisteredAnimalController::class, 'd
 Route::post('/save-push-token', [PushTokenController::class, 'saveToken']);
 Route::post('/send-notification', [PushTokenController::class, 'sendNotification']);
 
-Route::middleware([ValidateStaticToken::class])->group(function () {
-    Route::post('/user/image', [UserController::class, 'updateProfileImage']);
-    Route::post('/user/signup', [UserController::class, 'register']);
-    Route::post('/mobilelogin', [UserController::class, 'login']);
-    Route::get('/mobileusers', [UserController::class, 'fetchUsers']);
-    Route::get('mobileuser/me', [UserController::class, 'fetchLoggedInUser']);
-    Route::get('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'fetchRegisteredAnimals']);
-    Route::post('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'storeRegisteredAnimal']);
-});
+// Route::middleware([ValidateStaticToken::class])->group(function () {
+//     Route::post('/user/image', [UserController::class, 'updateProfileImage']);
+//     Route::post('/user/signup', [UserController::class, 'register']);
+//     Route::post('/mobilelogin', [UserController::class, 'login']);
+//     Route::get('/mobileusers', [UserController::class, 'fetchUsers']);
+//     Route::get('mobileuser/me', [UserController::class, 'fetchLoggedInUser']);
+//     Route::get('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'fetchRegisteredAnimals']);
+//     Route::post('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'storeRegisteredAnimal']);
+// });
