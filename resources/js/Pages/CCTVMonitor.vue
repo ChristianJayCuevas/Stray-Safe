@@ -125,19 +125,10 @@ const fetchStreams = async () => {
       hls_url: stream.hls_url.replace('http://', 'https://')
     }));
 
-    cctvs.value = streams.map(stream => ({
-      id: stream.id,
-      name: stream.name,
-      location: stream.location,
-      status: stream.status === 'active' ? 'Online' : 'Offline',
-      videoSrc: [stream.hls_url.replace('http://', 'https://')],
-      isHls: true
-    }))
-    
-    // Update system stats
+    // Update system stats - only count custom cards
     systemStats.value = {
-      totalCameras: cctvs.value.length + customCards.value.length,
-      onlineCameras: cctvs.value.filter(cam => cam.status === 'Online').length + customCards.value.length,
+      totalCameras: customCards.value.length,
+      onlineCameras: customCards.value.length, // All custom cards are considered online
       detectionsToday: Math.floor(Math.random() * 30),
       storageUsed: '1.2 TB'
     };
@@ -152,20 +143,22 @@ const fetchStreams = async () => {
 
 // Function to use sample data when API is unavailable
 function useSampleData() {
-  cctvs.value = [
-    {
-      id: 'main-camera',
-      name: 'Main Camera',
+  // Add a sample custom CCTV card if none exist
+  if (customCards.value.length === 0) {
+    customCards.value = [{
+      id: 'sample-camera',
+      name: 'Sample Camera',
       location: 'Main Gate',
       status: 'Online',
       videoSrc: ['https://straysafe.me/hls/main-camera.m3u8'],
-      isHls: true
-    }
-  ];
+      isHls: true,
+      isCustom: true
+    }];
+  }
   
   systemStats.value = {
-    totalCameras: 1,
-    onlineCameras: 1,
+    totalCameras: customCards.value.length,
+    onlineCameras: customCards.value.length,
     detectionsToday: 5,
     storageUsed: '1.2 GB'
   };
@@ -277,15 +270,16 @@ const pagination = ref({
   totalPages: 1
 });
 
-// Compute total pages whenever cctvs or customCards change
-watch([cctvs, customCards], () => {
-  const totalCameras = cctvs.value.length + customCards.value.length;
+// Compute total pages whenever customCards change
+watch(customCards, () => {
+  const totalCameras = customCards.value.length;
   pagination.value.totalPages = Math.ceil(totalCameras / pagination.value.rowsPerPage);
 });
 
 // Filtered CCTVs based on pagination, including custom cards
 const paginatedCCTVs = computed(() => {
-  const allCameras = [...cctvs.value, ...customCards.value];
+  // Only use custom cards
+  const allCameras = [...customCards.value];
   const start = (pagination.value.page - 1) * pagination.value.rowsPerPage;
   const end = start + pagination.value.rowsPerPage;
   return allCameras.slice(start, end);
@@ -449,7 +443,7 @@ async function removeCustomCard(cardId) {
 
       <!-- CCTV Grid -->
       <div class="page-header mb-6">
-        <h2 class="text-2xl font-bold">CCTV Cameras</h2>
+        <h2 class="text-2xl font-bold">My Custom CCTV Instances</h2>
         <div class="header-actions">
           <div class="current-time">
             <i class="fas fa-clock mr-2"></i>
@@ -478,18 +472,21 @@ async function removeCustomCard(cardId) {
 
       <div v-else class="cctv-grid">
         <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
-          <div v-if="cctv.isCustom" class="custom-card-badge">Custom</div>
+          <div class="live-indicator">
+            <span class="pulse"></span>
+            <span class="live-text">LIVE</span>
+          </div>
           <div class="cctv-feed">
             <StreamPlayer :streamUrl="cctv.videoSrc[0]" />
           </div>
           <div class="cctv-info">
             <div class="cctv-title">{{ cctv.name }}</div>
             <div class="cctv-location">{{ cctv.location }}</div>
-            <div class="cctv-status" :class="cctv.status === 'Online' ? 'status-online' : 'status-offline'">
-              <i :class="cctv.status === 'Online' ? 'fas fa-circle' : 'fas fa-circle-xmark'" class="mr-1"></i>
-              {{ cctv.status }}
+            <div class="cctv-status status-online">
+              <i class="fas fa-circle mr-1"></i>
+              Online
             </div>
-            <q-btn v-if="cctv.isCustom" class="delete-card-btn" icon="delete" flat dense @click.stop="removeCustomCard(cctv.id)">
+            <q-btn class="delete-card-btn" icon="delete" flat dense @click.stop="removeCustomCard(cctv.id)">
               <q-tooltip>Remove Card</q-tooltip>
             </q-btn>
           </div>

@@ -382,17 +382,46 @@ video::-webkit-media-controls-enclosure {
   position: absolute;
   top: 10px;
   right: 10px;
-  background-color: red;
-  color: var(--text-primary);
-  padding: 5px;
-  border-radius: 5px;
-  font-weight: bold;
-  animation: blink 1s infinite;
+  display: flex;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 4px 8px;
+  border-radius: 4px;
+  z-index: 2;
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+.pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ff0000;
+  margin-right: 5px;
+  animation: pulse 1.5s infinite;
+}
+
+.live-text {
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+  }
+  
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(255, 0, 0, 0);
+  }
+  
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 0, 0, 0);
+  }
 }
 
 .video-feed {
