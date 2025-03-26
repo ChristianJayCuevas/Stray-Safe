@@ -27,13 +27,13 @@ class UserController extends Controller
         // Get the authenticated user
         $user = Auth::user();
 
-        // // Generate a Sanctum token
-        // $token = $user->createToken('mobile')->plainTextToken;
+        // Generate a Sanctum token for mobile access
+        $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
             'status' => 'success',
             'user' => $user,
-            // 'token' => $token,
+            'token' => $token,
         ]);
     }
 

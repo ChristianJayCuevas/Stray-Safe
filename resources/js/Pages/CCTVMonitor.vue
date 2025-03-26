@@ -34,6 +34,24 @@ const selectedStreamUrl = ref('');
 const availableStreams = ref([]);
 const customCards = ref(props.initialCustomCCTVs || []);
 
+// Authentication state
+const user = ref(null);
+const isAuthenticated = ref(false);
+
+// Function to check authentication status
+const checkAuthStatus = async () => {
+  try {
+    const response = await axios.get('/auth/check');
+    isAuthenticated.value = response.data.authenticated;
+    if (response.data.authenticated) {
+      user.value = response.data.user;
+    }
+  } catch (error) {
+    console.error('Auth check failed:', error);
+    isAuthenticated.value = false;
+  }
+};
+
 // Function to open the create card dialog
 function openCreateCardDialog() {
   newCardName.value = '';
@@ -170,6 +188,9 @@ onMounted(() => {
   if (!hlsAvailable.value) {
     console.warn('HLS.js is not available - video playback may be limited');
   }
+  
+  // Check authentication status
+  checkAuthStatus();
   
   // Initialize with custom CCTVs from props
   if (props.initialCustomCCTVs && props.initialCustomCCTVs.length > 0) {

@@ -18,7 +18,6 @@ class ValidateStaticToken
     {
         $token = $request->header('Authorization');
 
-        // Validate static token
         if ($token !== 'Bearer ' . API_ACCESS_TOKEN) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }

@@ -16,6 +16,7 @@ use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\MapPinController;
 use App\Http\Controllers\StreamProxyController;
 use App\Http\Controllers\StreamController;
+use Illuminate\Support\Facades\Auth;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -85,6 +86,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
 
+});
+
+// Auth check route for web app
+Route::get('/auth/check', function () {
+    if (Auth::check()) {
+        return response()->json([
+            'authenticated' => true,
+            'user' => Auth::user()
+        ]);
+    }
+    
+    return response()->json(['authenticated' => false]);
 });
 
 require __DIR__.'/auth.php';
