@@ -13,12 +13,6 @@ return new class extends Migration
     {
         Schema::create('cctvs', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('location')->nullable();
-            $table->string('stream_url');
-            $table->string('original_stream_id')->nullable();
-            $table->string('status')->default('Online');
-            $table->boolean('is_custom')->default(true);
             $table->timestamps();
         });
     }

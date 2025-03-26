@@ -38,4 +38,15 @@ class CCTV extends Model
     protected $casts = [
         'is_custom' => 'boolean',
     ];
+    
+    /**
+     * Set the stream URL, converting http to https.
+     *
+     * @param  string  $value
+     * @return void
+     */
+    public function setStreamUrlAttribute($value)
+    {
+        $this->attributes['stream_url'] = str_replace('http://', 'https://', $value);
+    }
 }

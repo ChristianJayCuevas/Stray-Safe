@@ -57,12 +57,15 @@ async function addCustomCard() {
   // Find the selected stream details
   const selectedStream = availableStreams.value.find(stream => stream.hls_url === selectedStreamUrl.value);
   
+  // Ensure stream URL uses https
+  const secureStreamUrl = selectedStreamUrl.value.replace('http://', 'https://');
+  
   try {
     // Save to the backend
     const response = await axios.post('/cctvs', {
       name: newCardName.value,
       location: newCardLocation.value || 'Custom Location',
-      stream_url: selectedStreamUrl.value,
+      stream_url: secureStreamUrl,
       original_stream_id: selectedStream ? selectedStream.id : null
     });
     
@@ -73,7 +76,7 @@ async function addCustomCard() {
         name: newCardName.value,
         location: newCardLocation.value || 'Custom Location',
         status: 'Online',
-        videoSrc: [selectedStreamUrl.value],
+        videoSrc: [secureStreamUrl],
         isHls: true,
         isCustom: true,
         originalStreamId: selectedStream ? selectedStream.id : null
@@ -117,7 +120,10 @@ const fetchStreams = async () => {
     const streams = response.data?.streams || []
     
     // Store available streams for selection
-    availableStreams.value = streams;
+    availableStreams.value = streams.map(stream => ({
+      ...stream,
+      hls_url: stream.hls_url.replace('http://', 'https://')
+    }));
 
     cctvs.value = streams.map(stream => ({
       id: stream.id,
@@ -179,7 +185,8 @@ onMounted(() => {
       name: cctv.name,
       location: cctv.location,
       status: cctv.status,
-      videoSrc: [cctv.stream_url],
+      // Ensure the URL uses https
+      videoSrc: [cctv.stream_url.replace('http://', 'https://')],
       isHls: true,
       isCustom: true,
       originalStreamId: cctv.original_stream_id
