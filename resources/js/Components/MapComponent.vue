@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, inject, defineExpose } from 'vue';
+import { onMounted, ref, inject, defineExpose, onUnmounted } from 'vue';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import axios from 'axios';
@@ -11,6 +11,8 @@ const isDarkMode = inject('isDarkMode', ref(false));
 const mapContainer = ref(null);
 const map = ref(null);
 const pinsList = ref([]); // Stores the list of pins
+const mapLoadError = ref(false);
+const mapLoadTimeout = ref(null);
 
 // Mapbox token
 const mapboxToken = 'pk.eyJ1IjoiMS1heWFub24iLCJhIjoiY20ycnAzZW5pMWZpZTJpcThpeTJjdDU1NCJ9.7AVb_LJf6sOtb-QAxwR-hg';
@@ -23,39 +25,144 @@ axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken;
 
 // Initialize the map
 async function initializeMap() {
-  if (!mapContainer.value) return;
+  try {
+    console.log('Starting map initialization...', { container: mapContainer.value, isDarkMode: isDarkMode.value });
+    
+    if (!mapContainer.value) {
+      console.error('Map container element not found!');
+      mapLoadError.value = true;
+      return;
+    }
 
-  mapboxgl.accessToken = mapboxToken;
+    // Set a timeout to detect if map fails to load
+    mapLoadTimeout.value = setTimeout(() => {
+      if (!map.value || !map.value.loaded()) {
+        console.error('Map failed to load after timeout');
+        mapLoadError.value = true;
+        if (mapContainer.value) {
+          mapContainer.value.classList.add('error');
+        }
+      }
+    }, 10000); // 10 seconds timeout
 
-  // Initialize Mapbox map
-  map.value = new mapboxgl.Map({
-    container: mapContainer.value,
-    style: isDarkMode.value ? 'mapbox://styles/mapbox/dark-v10' : 'mapbox://styles/1-ayanon/cm2rp9idm00as01qwcq9ihoyr',
-    center: [121.039295, 14.631141],
-    zoom: 15.5,
-    attributionControl: false,
-  });
+    mapboxgl.accessToken = mapboxToken;
+    console.log('Using Mapbox token:', mapboxToken);
 
-  // Add navigation control
-  map.value.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    // Initialize Mapbox map
+    console.log('Creating map instance with options:', {
+      container: 'mapContainer',
+      style: isDarkMode.value ? 'mapbox://styles/mapbox/dark-v10' : 'mapbox://styles/1-ayanon/cm2rp9idm00as01qwcq9ihoyr',
+      center: [121.039295, 14.631141],
+      zoom: 15.5
+    });
+    
+    map.value = new mapboxgl.Map({
+      container: mapContainer.value,
+      style: isDarkMode.value ? 'mapbox://styles/mapbox/dark-v10' : 'mapbox://styles/1-ayanon/cm2rp9idm00as01qwcq9ihoyr',
+      center: [121.039295, 14.631141],
+      zoom: 15.5,
+      attributionControl: false,
+    });
 
-  // Add scale control
-  map.value.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
+    console.log('Map instance created:', map.value);
 
-  // Set up map click handler for pin placement
-  map.value.on('click', handleMapClick);
+    // Add navigation control
+    map.value.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    console.log('Navigation control added');
 
-  // Wait for map to load
-  map.value.on('load', async () => {
-    // Fetch initial pins
-    await fetchPins();
-  });
+    // Add scale control
+    map.value.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
+    console.log('Scale control added');
+
+    // Set up map click handler for pin placement
+    map.value.on('click', handleMapClick);
+    console.log('Map click handler set up');
+
+    // Wait for map to load
+    map.value.on('load', async () => {
+      console.log('Map loaded successfully!');
+      // Clear timeout since map loaded successfully
+      if (mapLoadTimeout.value) {
+        clearTimeout(mapLoadTimeout.value);
+        mapLoadTimeout.value = null;
+      }
+      // Fetch initial pins
+      await fetchPins();
+    });
+    
+    // Add error handling for map load
+    map.value.on('error', (e) => {
+      console.error('Mapbox error:', e);
+      mapLoadError.value = true;
+      if (mapContainer.value) {
+        mapContainer.value.classList.add('error');
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error initializing map:', error);
+    mapLoadError.value = true;
+    if (mapContainer.value) {
+      mapContainer.value.classList.add('error');
+    }
+  }
 }
 
 // Call initializeMap when component is mounted
 onMounted(() => {
   console.log('MapComponent mounted, initializing map...');
-  initializeMap();
+  
+  // Check if mapboxgl is available
+  if (typeof mapboxgl === 'undefined') {
+    console.error('Mapbox GL library is not loaded!');
+    return;
+  } else {
+    console.log('Mapbox GL library is available:', mapboxgl);
+  }
+  
+  try {
+    // Check if container exists and is visible
+    setTimeout(() => {
+      if (!mapContainer.value) {
+        console.error('Map container ref is null after timeout!');
+        return;
+      }
+      
+      // Check container dimensions
+      const rect = mapContainer.value.getBoundingClientRect();
+      console.log('Map container dimensions:', {
+        width: rect.width,
+        height: rect.height,
+        visible: rect.width > 0 && rect.height > 0
+      });
+      
+      if (rect.width === 0 || rect.height === 0) {
+        console.error('Map container has zero width or height! The map cannot be displayed.');
+        // Force height if needed
+        mapContainer.value.style.height = '500px';
+        mapContainer.value.style.width = '100%';
+        console.log('Applied forced dimensions to map container');
+      }
+      
+      console.log('Attempting to initialize map after delay');
+      initializeMap();
+    }, 1000);
+  } catch (error) {
+    console.error('Error during map initialization:', error);
+  }
+});
+
+// Clean up on unmount
+onUnmounted(() => {
+  if (mapLoadTimeout.value) {
+    clearTimeout(mapLoadTimeout.value);
+    mapLoadTimeout.value = null;
+  }
+  
+  if (map.value) {
+    map.value.remove();
+    map.value = null;
+  }
 });
 
 // State for pin placement mode
@@ -171,17 +278,37 @@ function createMarker(pinData) {
       return null;
     }
     
+    // Log input data for debugging
+    console.log('Creating marker with data:', pinData);
+    
     // Get coordinates in the format mapbox expects [lng, lat]
     let mapboxCoords;
     
     if (Array.isArray(pinData.coordinates) && pinData.coordinates.length >= 2) {
       // Already in [lng, lat] format
       mapboxCoords = pinData.coordinates;
+      console.log('Using array coordinates:', mapboxCoords);
     } else if (pinData.lat !== undefined && pinData.lng !== undefined) {
       // Object with lat/lng properties
       mapboxCoords = [pinData.lng, pinData.lat];
+      console.log('Using lat/lng properties:', mapboxCoords);
+    } else if (pinData.coordinates && typeof pinData.coordinates === 'object') {
+      // Object with lat/lng in coordinates
+      if ('lat' in pinData.coordinates && 'lng' in pinData.coordinates) {
+        mapboxCoords = [pinData.coordinates.lng, pinData.coordinates.lat];
+        console.log('Using coordinates object:', mapboxCoords);
+      }
     } else {
-      console.error('Invalid coordinates format for marker:', pinData.coordinates);
+      console.error('Invalid coordinates format for marker:', pinData);
+      return null;
+    }
+    
+    // Final check to ensure coordinates are valid
+    if (!mapboxCoords || mapboxCoords.length < 2 || 
+        typeof mapboxCoords[0] !== 'number' || 
+        typeof mapboxCoords[1] !== 'number' ||
+        isNaN(mapboxCoords[0]) || isNaN(mapboxCoords[1])) {
+      console.error('Invalid or missing coordinates after parsing:', mapboxCoords);
       return null;
     }
     
@@ -190,7 +317,7 @@ function createMarker(pinData) {
     marker.className = 'custom-marker';
     
     // Apply specific styles based on type
-    const pinType = pinData.type || pinData.animalType || 'Default';
+    const pinType = pinData.type || pinData.animalType || pinData.animal_type || 'Default';
     
     if (pinType === 'Camera' || pinData.isCamera) {
       marker.className = 'custom-marker camera-marker';
@@ -212,21 +339,26 @@ function createMarker(pinData) {
           pinData.perceptionRange || 30, 
           pinData.viewingDirection, 
           pinData.viewingAngle, 
-          pinData.id
+          pinData.id || pinData.cameraId || Date.now().toString()
         );
       } else if (pinData.perceptionRange) {
         // Use circular perception range as fallback
-        addPerceptionRangeCircle(mapboxCoords, pinData.perceptionRange, pinData.id);
+        addPerceptionRangeCircle(
+          mapboxCoords, 
+          pinData.perceptionRange, 
+          pinData.id || pinData.cameraId || Date.now().toString()
+        );
       }
-    } else if (pinType === 'Dog') {
+    } else if (pinType === 'Dog' || pinType === 'dog') {
       marker.style.backgroundColor = '#38a3a5'; // Dog color
-    } else if (pinType === 'Cat') {
+    } else if (pinType === 'Cat' || pinType === 'cat') {
       marker.style.backgroundColor = '#57cc99'; // Cat color
     } else {
       marker.style.backgroundColor = '#4f6642'; // Default color
     }
     
     // Create marker instance
+    console.log('Creating marker at coordinates:', mapboxCoords);
     const markerInstance = new mapboxgl.Marker(marker).setLngLat(mapboxCoords);
     
     // Create popup content based on pin type
@@ -240,8 +372,8 @@ function createMarker(pinData) {
           <p>${pinData.location || 'Location not specified'}</p>
           <p><small>Status: ${pinData.status || 'Unknown'}</small></p>
           ${pinData.perceptionRange ? `<p><small>Perception Range: ${pinData.perceptionRange}m</small></p>` : ''}
-          ${pinData.viewingDirection ? `<p><small>Direction: ${pinData.viewingDirection}°</small></p>` : ''}
-          ${pinData.viewingAngle ? `<p><small>Field of View: ${pinData.viewingAngle}°</small></p>` : ''}
+          ${pinData.viewingDirection !== undefined ? `<p><small>Direction: ${pinData.viewingDirection}°</small></p>` : ''}
+          ${pinData.viewingAngle !== undefined ? `<p><small>Field of View: ${pinData.viewingAngle}°</small></p>` : ''}
           ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
         </div>
       `;
@@ -435,72 +567,67 @@ async function addCameraPin(coordinates, cameraInfo) {
 }
 
 // Add an animal pin to the map - exposed for parent components
-async function addAnimalPin(coordinates, animalType, details = {}) {
+async function addAnimalPin(pinData) {
   let markerInstance = null;
   
   try {
-    console.log('Adding animal pin at coordinates:', coordinates, 'with type:', animalType);
+    console.log('Adding animal pin with data:', pinData);
     
-    // Add the marker visually to the map
-    markerInstance = createMarker({
-      coordinates: coordinates,
-      animal_type: animalType,
-      description: details.description,
-      imageUrl: details.imageUrl,
-      isSyncPending: true // Mark as pending sync with backend
-    });
-    
-    // Create data to send to the backend
-    const formData = new FormData();
-    formData.append('coordinates[0]', coordinates[0]);
-    formData.append('coordinates[1]', coordinates[1]);
-    formData.append('animal_type', animalType);
-    
-    if (details.description) {
-      formData.append('description', details.description);
+    // Validate required fields
+    if (!pinData || !pinData.lat || !pinData.lng || !pinData.animal_type) {
+      throw new Error('Invalid pin data. Required fields: lat, lng, animal_type');
     }
     
-    if (details.image) {
-      formData.append('image', details.image);
-    }
+    // Create a new pin object with all necessary properties
+    const pin = {
+      coordinates: [pinData.lng, pinData.lat],
+      type: pinData.animal_type,
+      animal_type: pinData.animal_type,
+      description: pinData.description || `${pinData.animal_type} sighting`,
+      image_url: pinData.image_url,
+      isCamera: false,
+      status: pinData.status || 'active',
+      id: pinData.id || `animal-${Date.now()}`
+    };
     
-    // Send the data to the backend
-    try {
-      const response = await axios.post('/api/animal-pin', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': 'Bearer StraySafeTeam3' // Static token for API authentication
-        }
-      });
-      
-      // Add to local pins list
-      pinsList.value.push({
-        coordinates: coordinates,
-        animalType: animalType,
-        description: details.description,
-        imageUrl: details.imageUrl,
-        isSyncPending: true // Mark as pending sync with backend
-      });
-      
-      console.log("Animal pin added successfully:", response.data);
-      return response.data;
-    } catch (apiError) {
-      console.error('API Error when adding animal pin:', apiError);
-      
-      // Still add the pin to the local list to maintain visual state
-      pinsList.value.push({
-        coordinates: coordinates,
-        animalType: animalType,
-        description: details.description,
-        imageUrl: details.imageUrl,
-        isSyncPending: true // Mark as pending sync with backend
-      });
-      
-      return { 
-        success: false, 
-        message: 'Pin added visually but failed to save to server',
-        error: apiError.message
-      };
+    // Add to pins list
+    pinsList.value.push(pin);
+    
+    // Create marker on map
+    markerInstance = createMarker(pin);
+    
+    // If this is not from automated detection, try to save to backend
+    if (!pinData.is_automated) {
+      try {
+        console.log('Saving animal pin to backend:', pin);
+        
+        // Create payload for backend
+        const payload = {
+          lat: pinData.lat,
+          lng: pinData.lng,
+          animal_type: pinData.animal_type,
+          description: pinData.description,
+          image_url: pinData.image_url
+        };
+        
+        // Send to backend
+        const response = await axios.post('/pin', payload);
+        
+        console.log("Animal pin saved to backend:", response.data);
+        return { success: true, data: response.data };
+      } catch (apiError) {
+        console.error('API Error when saving animal pin:', apiError);
+        
+        // We keep the pin on the map even if backend save fails
+        return { 
+          success: false, 
+          message: 'Pin added to map but failed to save to server',
+          error: apiError.message
+        };
+      }
+    } else {
+      // Automated detection doesn't need to be saved to backend
+      return { success: true, automated: true };
     }
   } catch (error) {
     console.error('Error in addAnimalPin function:', error);
@@ -649,22 +776,225 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
     return null;
   }
 }
+
+// Get camera pin locations - used by parent components for detection monitoring
+async function getCameraPinLocations() {
+  try {
+    console.log('Getting camera pin locations from map');
+    
+    if (!map.value) {
+      console.error('Map is not initialized, cannot get camera pins');
+      return [];
+    }
+    
+    const cameraPins = [];
+    
+    // Loop through pinsList to find camera pins
+    pinsList.value.forEach(pin => {
+      if (pin.isCamera || pin.cameraId) {
+        let coordinates;
+        
+        // Handle different coordinate formats
+        if (Array.isArray(pin.coordinates)) {
+          coordinates = { lat: pin.coordinates[1], lng: pin.coordinates[0] };
+        } else if (pin.coordinates && typeof pin.coordinates === 'object') {
+          coordinates = pin.coordinates;
+        } else if (pin.lat !== undefined && pin.lng !== undefined) {
+          coordinates = { lat: pin.lat, lng: pin.lng };
+        }
+        
+        if (coordinates) {
+          cameraPins.push({
+            id: pin.cameraId || pin.id,
+            name: pin.cameraName || pin.name,
+            coordinates: coordinates,
+            perceptionRange: pin.perceptionRange,
+            viewingDirection: pin.viewingDirection,
+            viewingAngle: pin.viewingAngle,
+            conicalView: pin.conicalView
+          });
+        }
+      }
+    });
+    
+    console.log('Found camera pins:', cameraPins);
+    return cameraPins;
+  } catch (error) {
+    console.error('Error getting camera pin locations:', error);
+    return [];
+  }
+}
+
+// Add perception range circle to the map
+function addPerceptionRangeCircle(coordinates, rangeInMeters, cameraId) {
+  // Generate unique IDs for this circle
+  const circleId = `perception-circle-${cameraId || Date.now()}`;
+  const sourceId = `perception-source-${cameraId || Date.now()}`;
+  
+  try {
+    if (!map.value) {
+      console.error('Map not initialized, cannot add perception range');
+      return;
+    }
+    
+    console.log(`Adding perception range of ${rangeInMeters}m for camera at`, coordinates);
+    
+    // Check if map is already loaded
+    if (!map.value.isStyleLoaded()) {
+      console.log('Map style not yet loaded, waiting...');
+      map.value.once('style.load', () => {
+        addPerceptionRangeCircle(coordinates, rangeInMeters, cameraId);
+      });
+      return;
+    }
+    
+    // Remove any existing layers and sources for this camera
+    if (map.value.getLayer(circleId)) {
+      map.value.removeLayer(circleId);
+    }
+    
+    if (map.value.getSource(sourceId)) {
+      map.value.removeSource(sourceId);
+    }
+    
+    // Convert meters to approximate degrees (rough calculation)
+    // 1 degree is about 111km at equator, so 1m is roughly 0.000009 degrees
+    const radiusInDegrees = rangeInMeters * 0.000009;
+    
+    // Create a GeoJSON circle for the perception range
+    const circlePolygon = {
+      type: 'Feature',
+      properties: {
+        camera_id: cameraId,
+        range_meters: rangeInMeters
+      },
+      geometry: {
+        type: 'Point',
+        coordinates: Array.isArray(coordinates) ? coordinates : [coordinates.lng, coordinates.lat]
+      }
+    };
+    
+    // Add the source for the circle
+    map.value.addSource(sourceId, {
+      type: 'geojson',
+      data: circlePolygon
+    });
+    
+    // Add a circle layer
+    map.value.addLayer({
+      id: circleId,
+      type: 'circle',
+      source: sourceId,
+      paint: {
+        'circle-radius': {
+          stops: [
+            [10, radiusInDegrees * 1000000], // Approximate scaling at zoom level 10
+            [15, radiusInDegrees * 3000000], // Approximate scaling at zoom level 15
+            [20, radiusInDegrees * 10000000] // Approximate scaling at zoom level 20
+          ],
+          base: 2
+        },
+        'circle-color': 'rgba(66, 133, 244, 0.2)',
+        'circle-stroke-width': 1,
+        'circle-stroke-color': 'rgba(66, 133, 244, 0.8)'
+      }
+    });
+    
+    return {
+      circleId: circleId,
+      sourceId: sourceId,
+      cameraId: cameraId
+    };
+  } catch (error) {
+    console.error('Error adding perception range:', error);
+    return null;
+  }
+}
+
+// Function to retry loading the map
+function retryMapLoad() {
+  console.log('Retrying map load...');
+  
+  // Reset error state
+  mapLoadError.value = false;
+  
+  if (mapContainer.value) {
+    mapContainer.value.classList.remove('error');
+  }
+  
+  // Small delay before retry
+  setTimeout(() => {
+    if (map.value) {
+      // Try to remove existing map instance first
+      try {
+        map.value.remove();
+      } catch (e) {
+        console.error('Error removing map:', e);
+      }
+      map.value = null;
+    }
+    
+    // Reinitialize map
+    initializeMap();
+  }, 500);
+}
 </script>
 
 <template>
   <div class="map-container-wrapper">
-    <div class="map-container" ref="mapContainer"></div>
+    <div class="map-container" :class="{ 'error': mapLoadError }" ref="mapContainer">
+      <div v-if="mapLoadError" class="map-error-message">
+        <div class="error-content">
+          <i class="fas fa-exclamation-triangle error-icon"></i>
+          <h3>Map failed to load</h3>
+          <p>Please check your internet connection or try refreshing the page.</p>
+          <button @click="retryMapLoad" class="retry-button">
+            <i class="fas fa-sync-alt"></i> Retry
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style>
+.map-container-wrapper {
+  width: 100%;
+  height: 600px;
+  margin: 0 20px 100px 20px;
+  position: relative;
+}
+
 .map-container {
   width: 100%;
   height: 100%;
+  min-height: 500px;
   border-radius: 12px;
-  margin-bottom: 100px;
   overflow: hidden;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  position: relative;
+  display: block;
+}
+
+/* Error message if map fails to load */
+.map-container::after {
+  content: "";
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  font-size: 16px;
+  text-align: center;
+  padding-top: 200px;
+}
+
+.map-container.error::after {
+  content: "Map failed to load. Please check your internet connection or try refreshing the page.";
+  display: block;
 }
 
 /* Marker styles */
@@ -733,5 +1063,47 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
 
 .delete-pin-btn:hover {
   background-color: #d32f2f;
+}
+
+.map-error-message {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 12px;
+}
+
+.error-content {
+  text-align: center;
+  color: white;
+  padding: 20px;
+  max-width: 80%;
+}
+
+.error-icon {
+  font-size: 48px;
+  color: #f44336;
+  margin-bottom: 15px;
+}
+
+.retry-button {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  margin-top: 15px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.retry-button:hover {
+  background-color: #0d8bf2;
 }
 </style>
