@@ -133,7 +133,12 @@ function handleMapClick(e) {
   if (isPlacingCameraPin.value && placementCallback.value) {
     console.log('✅ Pin placement mode is active and callback is registered');
     
-    const coordinates = [e.lngLat.lng, e.lngLat.lat];
+    // Create coordinates object in the format expected by our functions
+    const coordinates = {
+      lat: e.lngLat.lat,
+      lng: e.lngLat.lng
+    };
+    
     console.log('Calling pin placement callback with coordinates:', coordinates);
     
     // Call the callback with the clicked coordinates
@@ -273,154 +278,326 @@ async function deletePin(pinId, markerInstance) {
 
 // Allow adding a camera pin to the map - exposed for parent components
 async function addCameraPin(coordinates, cameraInfo) {
-  let markerInstance = null;
-  
   try {
-    if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2 ||
-        isNaN(coordinates[0]) || isNaN(coordinates[1])) {
-      throw new Error('Invalid coordinates format. Expected [longitude, latitude] array');
-    }
+    console.log('Adding camera pin at coordinates:', coordinates, 'Camera info:', cameraInfo);
     
-    console.log('Adding camera pin at coordinates:', coordinates, 'with camera info:', cameraInfo);
+    // Create a pin object with camera data
+    const pin = {
+      lat: coordinates.lat,
+      lng: coordinates.lng,
+      isCamera: true,
+      cameraId: cameraInfo.id,
+      name: cameraInfo.name || 'Unnamed Camera',
+      location: cameraInfo.location || 'Unknown Location',
+      status: 'active',
+      cameraData: cameraInfo // Store the full camera data
+    };
     
-    markerInstance = addMarker(coordinates, 'Camera', cameraInfo);
-    console.log('Marker instance created:', markerInstance);
+    // Add to pins list
+    pinsList.value.push(pin);
     
+    // Create the marker on the map
+    createMarker(pin);
+    
+    // Try to save to the backend
     try {
-      console.log('Sending API request to save camera pin...');
-      
-      const payload = {
-        coordinates: coordinates,
-        camera_id: cameraInfo.id || '',
-        camera_name: cameraInfo.name || '',
-        hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : ''
-      };
-      
-      console.log('Sending formatted payload to API:', payload);
-      
-      const response = await axios.post('/camera-pin', payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
+      const response = await axios.post('/camera-pin', {
+        lat: coordinates.lat,
+        lng: coordinates.lng,
+        name: cameraInfo.name,
+        location: cameraInfo.location,
+        camera_id: cameraInfo.id,
+        is_camera: true
       });
       
-      if (!response.data || response.data.success === false) {
-        throw new Error(response.data?.message || 'Unknown API error');
-      }
-      
-      console.log("Camera pin API response:", response.data);
-      
-      pinsList.value.push({
-        coordinates: coordinates,
-        cameraId: cameraInfo.id,
-        cameraName: cameraInfo.name,
-        hlsUrl: cameraInfo.videoSrc[0],
-        isCamera: true
-      });
-      
-      console.log("Camera pin added successfully:", response.data);
+      console.log('Camera pin saved to backend:', response.data);
       return response.data;
-    } catch (apiError) {
-      console.error('API Error when adding camera pin:', apiError);
-      
-      pinsList.value.push({
-        coordinates: coordinates,
-        cameraId: cameraInfo.id,
-        cameraName: cameraInfo.name,
-        hlsUrl: cameraInfo.videoSrc[0],
-        isCamera: true,
-        isSyncPending: true
-      });
-      
-      console.log("Camera pin added visually but failed to save to backend");
-      return { 
-        success: false, 
-        message: 'Pin added visually but failed to save to server',
-        error: apiError.message
+    } catch (error) {
+      console.error('Failed to save camera pin to backend:', error);
+      // Return partial success - marker is visible but not saved
+      return {
+        success: false,
+        error: error.message || 'Failed to save camera pin to server',
+        visual_success: true
       };
     }
   } catch (error) {
-    console.error('Error in addCameraPin function:', error);
-    
-    if (markerInstance) {
-      console.log('Keeping marker instance despite error to maintain visual state');
-    }
-    
+    console.error('Error in addCameraPin:', error);
     throw error;
   }
 }
 
-// Add an animal pin to the map - exposed for parent components
-async function addAnimalPin(coordinates, animalType, details = {}) {
-  let markerInstance = null;
-  
+// Function to add an animal pin to the map
+async function addAnimalPin(pinData) {
   try {
-    console.log('Adding animal pin at coordinates:', coordinates, 'with type:', animalType);
+    console.log('Adding animal pin:', pinData);
     
-    // Add the marker visually to the map
-    markerInstance = addMarker(coordinates, animalType, details);
-    
-    // Create data to send to the backend
-    const formData = new FormData();
-    formData.append('coordinates[0]', coordinates[0]);
-    formData.append('coordinates[1]', coordinates[1]);
-    formData.append('animal_type', animalType);
-    
-    if (details.description) {
-      formData.append('description', details.description);
+    // Validate required fields
+    if (!pinData || !pinData.lat || !pinData.lng || !pinData.animal_type) {
+      throw new Error('Missing required pin data (lat, lng, animal_type)');
     }
     
-    if (details.image) {
-      formData.append('image', details.image);
-    }
+    // Create pin object
+    const pin = {
+      ...pinData,
+      isCamera: false,
+      status: 'active',
+    };
     
-    // Send the data to the backend
-    try {
-      const response = await axios.post('/api/animal-pin', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': 'Bearer StraySafeTeam3' // Static token for API authentication
-        }
-      });
-      
-      // Add to local pins list
-      pinsList.value.push({
-        coordinates: coordinates,
-        animalType: animalType,
-        description: details.description,
-        imageUrl: details.imageUrl
-      });
-      
-      console.log("Animal pin added successfully:", response.data);
-      return response.data;
-    } catch (apiError) {
-      console.error('API Error when adding animal pin:', apiError);
-      
-      // Still add the pin to the local list to maintain visual state
-      pinsList.value.push({
-        coordinates: coordinates,
-        animalType: animalType,
-        description: details.description,
-        imageUrl: details.imageUrl,
-        isSyncPending: true // Mark as pending sync with backend
-      });
-      
-      return { 
-        success: false, 
-        message: 'Pin added visually but failed to save to server',
-        error: apiError.message
+    // Add to pins list
+    pinsList.value.push(pin);
+    
+    // Create marker on map
+    createMarker(pin);
+    
+    // Save to backend if not an automated detection
+    if (!pinData.is_automated) {
+      try {
+        const response = await axios.post('/pin', {
+          lat: pinData.lat,
+          lng: pinData.lng,
+          animal_type: pinData.animal_type,
+          description: pinData.description || `${pinData.animal_type} sighting`,
+          image_url: pinData.image_url,
+          // Include other fields as needed
+        });
+        
+        console.log('Animal pin saved to backend:', response.data);
+        return response.data;
+      } catch (error) {
+        console.error('Failed to save animal pin to backend:', error);
+        return {
+          success: false,
+          error: error.message || 'Failed to save animal pin to server',
+          visual_success: true
+        };
+      }
+    } else {
+      // For automated detections, just return success
+      return {
+        success: true,
+        visual_success: true,
+        automated: true
       };
     }
   } catch (error) {
-    console.error('Error in addAnimalPin function:', error);
+    console.error('Error in addAnimalPin:', error);
+    throw error;
+  }
+}
+
+// Add this method to the component to retrieve camera pin locations
+async function getCameraPinLocations() {
+  console.log('Getting camera pin locations');
+  const cameraPins = [];
+  
+  // Check if map is initialized
+  if (!map.value) {
+    console.warn('Map is not initialized yet');
+    return cameraPins;
+  }
+  
+  try {
+    // Loop through all markers on the map to find camera markers
+    // Since Mapbox doesn't provide a direct way to get all markers,
+    // we'll use our pinsList to find all camera pins
+    pinsList.value.forEach(pin => {
+      if (pin.animalType === 'Camera' || pin.isCamera) {
+        let cameraId = null;
+        let name = 'Unknown Camera';
+        let location = 'Unknown Location';
+        
+        // Extract camera info from various possible structures
+        if (pin.cameraId) {
+          cameraId = pin.cameraId;
+        } else if (pin.details && pin.details.id) {
+          cameraId = pin.details.id;
+        }
+        
+        if (pin.name) {
+          name = pin.name;
+        } else if (pin.cameraName) {
+          name = pin.cameraName;
+        } else if (pin.details && pin.details.cameraName) {
+          name = pin.details.cameraName;
+        }
+        
+        if (pin.location) {
+          location = pin.location;
+        } else if (pin.details && pin.details.location) {
+          location = pin.details.location;
+        }
+        
+        // Get coordinates depending on how they're stored
+        let coordinates;
+        if (pin.coordinates) {
+          // Handle array format [lng, lat]
+          if (Array.isArray(pin.coordinates)) {
+            coordinates = {
+              lat: pin.coordinates[1],
+              lng: pin.coordinates[0]
+            };
+          } else {
+            // Handle object format { lat, lng }
+            coordinates = pin.coordinates;
+          }
+        } else if (pin.lat !== undefined && pin.lng !== undefined) {
+          coordinates = {
+            lat: pin.lat,
+            lng: pin.lng
+          };
+        } else if (pin.marker && typeof pin.marker.getLngLat === 'function') {
+          const lngLat = pin.marker.getLngLat();
+          coordinates = {
+            lat: lngLat.lat,
+            lng: lngLat.lng
+          };
+        }
+        
+        if (coordinates) {
+          cameraPins.push({
+            id: cameraId,
+            coordinates: coordinates,
+            name: name,
+            location: location
+          });
+        }
+      }
+    });
     
-    // Don't remove the marker if it was created
-    if (markerInstance) {
-      console.log('Keeping animal marker despite error');
+    console.log('Found camera pins:', cameraPins);
+    return cameraPins;
+  } catch (error) {
+    console.error('Error retrieving camera pin locations:', error);
+    return [];
+  }
+}
+
+// Helper function to create a marker on the map
+function createMarker(pin) {
+  if (!map.value) {
+    console.error('Map not initialized');
+    return null;
+  }
+  
+  try {
+    // Determine marker style based on pin type
+    let markerElement = document.createElement('div');
+    
+    if (pin.isCamera) {
+      // Camera marker
+      markerElement.className = 'camera-marker';
+      markerElement.innerHTML = '<i class="fas fa-video"></i>';
+      markerElement.style.color = 'white';
+      markerElement.style.fontSize = '12px';
+      markerElement.style.textAlign = 'center';
+      markerElement.style.width = '30px';
+      markerElement.style.height = '30px';
+      markerElement.style.borderRadius = '50%';
+      markerElement.style.backgroundColor = 'rgba(0, 120, 255, 0.9)';
+      markerElement.style.display = 'flex';
+      markerElement.style.justifyContent = 'center';
+      markerElement.style.alignItems = 'center';
+      markerElement.style.border = '2px solid white';
+      markerElement.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+    } else if (pin.animal_type === 'dog') {
+      // Dog marker
+      markerElement.className = 'dog-marker';
+      markerElement.innerHTML = '<i class="fas fa-dog"></i>';
+      markerElement.style.color = 'white';
+      markerElement.style.fontSize = '12px';
+      markerElement.style.textAlign = 'center';
+      markerElement.style.width = '30px';
+      markerElement.style.height = '30px';
+      markerElement.style.borderRadius = '50%';
+      markerElement.style.backgroundColor = 'rgba(220, 53, 69, 0.9)';
+      markerElement.style.display = 'flex';
+      markerElement.style.justifyContent = 'center';
+      markerElement.style.alignItems = 'center';
+      markerElement.style.border = '2px solid white';
+      markerElement.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+    } else if (pin.animal_type === 'cat') {
+      // Cat marker
+      markerElement.className = 'cat-marker';
+      markerElement.innerHTML = '<i class="fas fa-cat"></i>';
+      markerElement.style.color = 'white';
+      markerElement.style.fontSize = '12px';
+      markerElement.style.textAlign = 'center';
+      markerElement.style.width = '30px';
+      markerElement.style.height = '30px';
+      markerElement.style.borderRadius = '50%';
+      markerElement.style.backgroundColor = 'rgba(255, 193, 7, 0.9)';
+      markerElement.style.display = 'flex';
+      markerElement.style.justifyContent = 'center';
+      markerElement.style.alignItems = 'center';
+      markerElement.style.border = '2px solid white';
+      markerElement.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+    } else {
+      // Default marker
+      markerElement.className = 'default-marker';
+      markerElement.style.backgroundColor = 'rgba(0, 180, 120, 0.9)';
+      markerElement.style.width = '20px';
+      markerElement.style.height = '20px';
+      markerElement.style.borderRadius = '50%';
+      markerElement.style.border = '2px solid white';
     }
     
-    throw error;
+    // Create marker
+    const marker = new mapboxgl.Marker({
+      element: markerElement,
+      anchor: 'center',
+      cameraData: pin.isCamera ? { 
+        id: pin.cameraId,
+        name: pin.name,
+        location: pin.location
+      } : null
+    })
+      .setLngLat([pin.lng, pin.lat])
+      .addTo(map.value);
+    
+    // Create popup for marker
+    let popupContent = '';
+    
+    if (pin.isCamera) {
+      popupContent = `
+        <div class="marker-popup camera-popup">
+          <h3>${pin.name || 'Unnamed Camera'}</h3>
+          <p>${pin.location || 'Unknown Location'}</p>
+          <p class="status ${pin.status === 'active' ? 'status-active' : 'status-inactive'}">
+            Status: ${pin.status || 'Unknown'}
+          </p>
+        </div>
+      `;
+    } else if (pin.animal_type) {
+      popupContent = `
+        <div class="marker-popup animal-popup">
+          <h3>${pin.animal_type.charAt(0).toUpperCase() + pin.animal_type.slice(1)} Sighting</h3>
+          <p>${pin.description || 'No description'}</p>
+          <p class="timestamp">
+            ${new Date(pin.detection_timestamp || new Date()).toLocaleString()}
+          </p>
+        </div>
+      `;
+    }
+    
+    if (popupContent) {
+      const popup = new mapboxgl.Popup({
+        closeButton: true,
+        closeOnClick: true,
+        maxWidth: '300px',
+        offset: 25
+      }).setHTML(popupContent);
+      
+      marker.setPopup(popup);
+    }
+    
+    // Save marker reference
+    pin.marker = marker;
+    
+    return marker;
+  } catch (error) {
+    console.error('Error creating marker:', error);
+    return null;
   }
 }
 
@@ -438,6 +615,7 @@ defineExpose({
     }
   },
   getCurrentMapCenter: () => map.value ? map.value.getCenter() : null,
+  getCameraPinLocations
 });
 </script>
 

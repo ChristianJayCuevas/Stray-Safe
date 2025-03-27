@@ -342,8 +342,33 @@ async function checkForNewDetections(currentCounters) {
 
 // Create an animal detection pin near a camera
 async function createAnimalDetectionPin(cameraId, animalType, count, locationInfo, index = 0) {
-  if (!locationInfo || !locationInfo.coordinates) {
+  if (!locationInfo) {
     console.warn(`No location info available for camera ${cameraId}, cannot place animal pin`);
+    return;
+  }
+  
+  // Check if coordinates exist and extract them in a consistent format
+  let coordinates = null;
+  
+  if (locationInfo.coordinates) {
+    // Already has coordinates object
+    coordinates = locationInfo.coordinates;
+  } else if (locationInfo.lat !== undefined && locationInfo.lng !== undefined) {
+    // Has individual lat/lng properties
+    coordinates = {
+      lat: locationInfo.lat,
+      lng: locationInfo.lng
+    };
+  } else if (Array.isArray(locationInfo.coordinates)) {
+    // Has coordinates as [lng, lat] array
+    coordinates = {
+      lat: locationInfo.coordinates[1],
+      lng: locationInfo.coordinates[0]
+    };
+  }
+  
+  if (!coordinates || !coordinates.lat || !coordinates.lng) {
+    console.warn(`Invalid coordinates for camera ${cameraId}`, locationInfo);
     return;
   }
   
@@ -368,8 +393,8 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
     
     // Final position
     const animalPosition = {
-      lat: locationInfo.coordinates.lat + offsetLat + jitterLat,
-      lng: locationInfo.coordinates.lng + offsetLng + jitterLng
+      lat: coordinates.lat + offsetLat + jitterLat,
+      lng: coordinates.lng + offsetLng + jitterLng
     };
     
     // Create timestamp for detection (now)
@@ -380,7 +405,7 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       lat: animalPosition.lat,
       lng: animalPosition.lng,
       animal_type: animalType,
-      description: `${count} ${animalType}(s) detected by ${locationInfo.name}`,
+      description: `${count} ${animalType}(s) detected by ${locationInfo.name || 'Unknown Camera'}`,
       image_url: null, // Could be filled in with a snapshot if available
       detection_timestamp: timestamp,
       is_automated: true,
