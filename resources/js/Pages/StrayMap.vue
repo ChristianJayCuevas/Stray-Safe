@@ -144,6 +144,51 @@ function startPinPlacement() {
     }
     
     console.log('Found camera info:', cameraInfo);
+    
+    // Create a dialog to set directional information
+    if (confirm('Is this a directional camera? Click OK for directional, Cancel for standard 360° view.')) {
+        // Prompt for direction (0-359 degrees, where 0 is North)
+        let directionInput = prompt('Enter camera viewing direction in degrees (0-359, where 0 is North):', '0');
+        // Default to 0 if cancelled or invalid
+        let direction = 0; 
+        if (directionInput !== null) {
+            direction = parseInt(directionInput);
+            if (isNaN(direction) || direction < 0 || direction > 359) {
+                alert('Invalid direction. Using default of 0 degrees (North).');
+                direction = 0;
+            }
+        }
+        
+        // Prompt for viewing angle (10-180 degrees field of view)
+        let angleInput = prompt('Enter camera field of view in degrees (10-180):', '60');
+        // Default to 60 if cancelled or invalid
+        let angle = 60;
+        if (angleInput !== null) {
+            angle = parseInt(angleInput);
+            if (isNaN(angle) || angle < 10 || angle > 180) {
+                alert('Invalid angle. Using default of 60 degrees.');
+                angle = 60;
+            }
+        }
+        
+        // Set conical view to true with the provided direction and angle
+        cameraInfo.conicalView = true;
+        cameraInfo.viewingDirection = direction;
+        cameraInfo.viewingAngle = angle;
+        
+        console.log('Camera set with directional properties:', { 
+            direction: direction, 
+            angle: angle, 
+            conical: true 
+        });
+    } else {
+        // Standard 360° view
+        cameraInfo.conicalView = false;
+        cameraInfo.viewingDirection = 0;
+        cameraInfo.viewingAngle = 360;
+        console.log('Camera set with standard 360° view');
+    }
+    
     placingPinMode.value = true;
     showCameraDialog.value = false;
     
@@ -165,14 +210,21 @@ function startPinPlacement() {
                             console.log('Camera pin added successfully:', response);
                             alert('Camera pin placed successfully!');
                         }
+                        // Explicitly disable pin placement mode
+                        if (mapRef.value) {
+                            mapRef.value.disablePinPlacementMode();
+                        }
                         // Reset placement mode regardless of success/failure
                         placingPinMode.value = false;
                     })
                     .catch(error => {
                         console.error('Error adding camera pin:', error);
                         alert('Failed to place camera pin. Please try again.');
-                        // Don't reset placement mode on error to allow user to try again
-                        // placingPin.value = false;
+                        // Reset placement mode on error since we want to try again
+                        placingPinMode.value = false;
+                        if (mapRef.value) {
+                            mapRef.value.disablePinPlacementMode();
+                        }
                     });
             });
         } catch (error) {
@@ -314,17 +366,34 @@ async function checkForNewDetections(currentCounters) {
           streamLocations[pinId].viewingDirection = pin.viewingDirection;
           streamLocations[pinId].viewingAngle = pin.viewingAngle;
         } 
-        // Also match with all IDs that might contain the pin ID
+        // Also match with all IDs that might contain the pin ID - with type checking
         else {
           for (const streamId in streamLocations) {
-            // If streamId contains pinId or pinId contains streamId, it's likely a match
-            if (streamId.includes(pinId) || (pinId && pinId.includes(streamId))) {
-              console.log(`Found partial match between camera pin ${pinId} and stream ${streamId}`);
-              streamLocations[streamId].coordinates = pin.coordinates;
-              streamLocations[streamId].perceptionRange = pin.perceptionRange;
-              streamLocations[streamId].conicalView = pin.conicalView;
-              streamLocations[streamId].viewingDirection = pin.viewingDirection;
-              streamLocations[streamId].viewingAngle = pin.viewingAngle;
+            // Check both variables are strings before using includes
+            const isStreamIdString = typeof streamId === 'string';
+            const isPinIdString = typeof pinId === 'string';
+            
+            // If both are strings, we can safely use includes
+            if (isStreamIdString && isPinIdString) {
+              // If streamId contains pinId or pinId contains streamId, it's likely a match
+              if (streamId.includes(pinId) || pinId.includes(streamId)) {
+                console.log(`Found partial match between camera pin ${pinId} and stream ${streamId}`);
+                streamLocations[streamId].coordinates = pin.coordinates;
+                streamLocations[streamId].perceptionRange = pin.perceptionRange;
+                streamLocations[streamId].conicalView = pin.conicalView;
+                streamLocations[streamId].viewingDirection = pin.viewingDirection;
+                streamLocations[streamId].viewingAngle = pin.viewingAngle;
+              }
+            } else {
+              // For non-string identifiers, just do exact comparison
+              if (streamId === pinId) {
+                console.log(`Found exact match for non-string ID between camera pin ${pinId} and stream ${streamId}`);
+                streamLocations[streamId].coordinates = pin.coordinates;
+                streamLocations[streamId].perceptionRange = pin.perceptionRange;
+                streamLocations[streamId].conicalView = pin.conicalView;
+                streamLocations[streamId].viewingDirection = pin.viewingDirection;
+                streamLocations[streamId].viewingAngle = pin.viewingAngle;
+              }
             }
           }
         }
@@ -344,12 +413,24 @@ async function checkForNewDetections(currentCounters) {
       locationInfo = streamLocations[cameraId];
       console.log(`Found direct match for counter ID ${cameraId}`);
     } else {
-      // Try partial matching
+      // Try partial matching with type checking
       for (const streamId in streamLocations) {
-        if (streamId.includes(cameraId) || cameraId.includes(streamId)) {
-          locationInfo = streamLocations[streamId];
-          console.log(`Found partial match for counter ID ${cameraId} with stream ${streamId}`);
-          break;
+        const isStreamIdString = typeof streamId === 'string';
+        const isCameraIdString = typeof cameraId === 'string';
+        
+        if (isStreamIdString && isCameraIdString) {
+          if (streamId.includes(cameraId) || cameraId.includes(streamId)) {
+            locationInfo = streamLocations[streamId];
+            console.log(`Found partial match for counter ID ${cameraId} with stream ${streamId}`);
+            break;
+          }
+        } else {
+          // For non-string identifiers, just do exact comparison
+          if (streamId === cameraId) {
+            locationInfo = streamLocations[streamId];
+            console.log(`Found exact match for non-string counter ID ${cameraId}`);
+            break;
+          }
         }
       }
     }
