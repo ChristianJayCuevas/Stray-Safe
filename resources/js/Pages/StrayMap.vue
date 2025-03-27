@@ -144,11 +144,55 @@ function startPinPlacement() {
     }
     
     console.log('Found camera info:', cameraInfo);
+    
+    // Ask user if this is a directional camera
+    const isDirectional = confirm('Is this a directional camera (with a specific viewing angle)?\nClick OK for directional, Cancel for 360-degree view.');
+    
+    let viewingDirection = 0;
+    let viewingAngle = 60; // Default viewing angle for directional cameras
+    
+    if (isDirectional) {
+        // Ask for viewing direction (0-360 degrees)
+        const directionPrompt = prompt('Enter the viewing direction in degrees (0-360):\n0° = North, 90° = East, 180° = South, 270° = West', '0');
+        if (directionPrompt === null) {
+            // User cancelled
+            viewingDirection = 0;
+        } else {
+            viewingDirection = parseInt(directionPrompt) || 0;
+            // Ensure value is between 0-360
+            viewingDirection = Math.max(0, Math.min(360, viewingDirection));
+        }
+        
+        // Ask for viewing angle
+        const anglePrompt = prompt('Enter the camera\'s field of view angle in degrees (10-180):', '60');
+        if (anglePrompt === null) {
+            // User cancelled
+            viewingAngle = 60;
+        } else {
+            viewingAngle = parseInt(anglePrompt) || 60;
+            // Ensure value is between 10-180
+            viewingAngle = Math.max(10, Math.min(180, viewingAngle));
+        }
+    }
+    
+    // Add conical view properties to camera info
+    const enhancedCameraInfo = {
+        ...cameraInfo,
+        perceptionRange: perceptionRange.value,
+        viewingDirection: viewingDirection,
+        viewingAngle: viewingAngle,
+        conicalView: isDirectional,
+        rtmp_key: cameraInfo.id, // Make sure to include rtmp_key
+        original_id: cameraInfo.id, // Store original ID for reference
+    };
+    
+    console.log('Enhanced camera info with viewing parameters:', enhancedCameraInfo);
+    
     placingPinMode.value = true;
     showCameraDialog.value = false;
     
     // Display clear instructions to the user
-    alert('Click on the map to place the camera pin. You can click the Cancel button to exit placement mode.');
+    alert(`Click on the map to place the camera pin${isDirectional ? ` with a viewing direction of ${viewingDirection}° and field of view of ${viewingAngle}°` : ''}.\nYou can click the Cancel button to exit placement mode.`);
     
     // Enable pin placement mode in the map component
     if (mapRef.value) {
@@ -156,7 +200,7 @@ function startPinPlacement() {
             mapRef.value.enablePinPlacementMode((coordinates) => {
                 console.log('User clicked map at coordinates:', coordinates);
                 // When user clicks on map, add the camera pin with the selected camera
-                addCameraPin(coordinates, cameraInfo)
+                addCameraPin(coordinates, enhancedCameraInfo)
                     .then(response => {
                         if (response && response.success === false) {
                             console.error('Pin was added visually but failed to save to server:', response.error);
@@ -167,12 +211,14 @@ function startPinPlacement() {
                         }
                         // Reset placement mode regardless of success/failure
                         placingPinMode.value = false;
+                        mapRef.value.disablePinPlacementMode();
                     })
                     .catch(error => {
                         console.error('Error adding camera pin:', error);
                         alert('Failed to place camera pin. Please try again.');
-                        // Don't reset placement mode on error to allow user to try again
-                        // placingPin.value = false;
+                        // Reset placement mode on error
+                        placingPinMode.value = false;
+                        mapRef.value.disablePinPlacementMode();
                     });
             });
         } catch (error) {
