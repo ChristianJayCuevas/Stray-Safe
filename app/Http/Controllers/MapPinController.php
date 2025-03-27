@@ -66,12 +66,26 @@ class MapPinController extends Controller
 
             // Return the original coordinates without randomization
             $response = $pins->map(function ($pin) {
-                return [
+                $pinData = [
                     'id' => $pin->id,
                     'animal_type' => $pin->animal_type,
                     'stray_status' => $pin->stray_status,
                     'coordinates' => [$pin->longitude, $pin->latitude], // Original coordinates
                 ];
+
+                // Add camera-specific properties if this is a camera
+                if ($pin->is_camera || strtolower($pin->animal_type) === 'camera') {
+                    $pinData['isCamera'] = true;
+                    $pinData['camera_id'] = $pin->camera_id;
+                    $pinData['cameraName'] = $pin->camera_name;
+                    $pinData['hls_url'] = $pin->hls_url;
+                    $pinData['viewingDirection'] = $pin->viewing_direction;
+                    $pinData['viewingAngle'] = $pin->viewing_angle;
+                    $pinData['conicalView'] = (bool)$pin->conical_view;
+                    $pinData['perceptionRange'] = $pin->perception_range;
+                }
+
+                return $pinData;
             });
 
             return response()->json($response, 200);

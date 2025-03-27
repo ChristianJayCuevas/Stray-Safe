@@ -25,8 +25,15 @@ class CameraPinController extends Controller
                 'coordinates.0' => 'required|numeric', // longitude
                 'coordinates.1' => 'required|numeric', // latitude
                 'camera_id' => 'required|string',
+                'rtmp_key' => 'nullable|string',
                 'camera_name' => 'required|string',
+                'location' => 'nullable|string',
                 'hls_url' => 'required|string',
+                'viewing_direction' => 'nullable|numeric',
+                'viewing_angle' => 'nullable|numeric',
+                'conical_view' => 'nullable|boolean',
+                'perception_range' => 'nullable|numeric',
+                'original_id' => 'nullable|string',
             ]);
             
             Log::info('Camera pin validation successful', $validated);
@@ -42,6 +49,13 @@ class CameraPinController extends Controller
                 'camera_id' => $request->camera_id,
                 'camera_name' => $request->camera_name,
                 'hls_url' => $request->hls_url,
+                'viewing_direction' => $request->viewing_direction,
+                'viewing_angle' => $request->viewing_angle,
+                'conical_view' => $request->conical_view ? true : false,
+                'perception_range' => $request->perception_range,
+                'rtmp_key' => $request->rtmp_key,
+                'original_id' => $request->original_id,
+                'location' => $request->location,
             ]);
             
             Log::info('Camera pin stored successfully', ['pin' => $pin]);

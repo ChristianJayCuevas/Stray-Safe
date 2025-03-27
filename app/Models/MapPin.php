@@ -19,5 +19,12 @@ class MapPin extends Model
         'camera_id',
         'camera_name',
         'hls_url',
+        'viewing_direction',
+        'viewing_angle',
+        'conical_view',
+        'perception_range',
+        'rtmp_key',
+        'original_id',
+        'location',
     ];
 }
