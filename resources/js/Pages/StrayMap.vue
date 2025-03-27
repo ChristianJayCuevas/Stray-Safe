@@ -37,11 +37,6 @@ const addPinError = ref(null);
 const placingPinMode = ref(false);
 const addPinSuccess = ref('');
 const perceptionRange = ref(30); // Default perception range in meters
-const viewingDirection = ref(0); // Direction in degrees (0-359), 0 is North
-const viewingAngle = ref(45); // Field of view angle in degrees
-const showDirectionDialog = ref(false);
-const placedCoordinates = ref(null);
-const selectedCameraInfo = ref(null);
 
 // Detection monitoring variables
 const previousDetections = ref({});
@@ -151,7 +146,6 @@ function startPinPlacement() {
     console.log('Found camera info:', cameraInfo);
     placingPinMode.value = true;
     showCameraDialog.value = false;
-    selectedCameraInfo.value = cameraInfo;
     
     // Display clear instructions to the user
     alert('Click on the map to place the camera pin. You can click the Cancel button to exit placement mode.');
@@ -161,14 +155,25 @@ function startPinPlacement() {
         try {
             mapRef.value.enablePinPlacementMode((coordinates) => {
                 console.log('User clicked map at coordinates:', coordinates);
-                // Store coordinates for the direction dialog
-                placedCoordinates.value = coordinates;
-                
-                // Close placement mode
-                placingPinMode.value = false;
-                
-                // Show direction dialog
-                showDirectionDialog.value = true;
+                // When user clicks on map, add the camera pin with the selected camera
+                addCameraPin(coordinates, cameraInfo)
+                    .then(response => {
+                        if (response && response.success === false) {
+                            console.error('Pin was added visually but failed to save to server:', response.error);
+                            alert('Pin was placed on map but could not be saved to the server. The pin will be visible until you refresh the page.');
+                        } else {
+                            console.log('Camera pin added successfully:', response);
+                            alert('Camera pin placed successfully!');
+                        }
+                        // Reset placement mode regardless of success/failure
+                        placingPinMode.value = false;
+                    })
+                    .catch(error => {
+                        console.error('Error adding camera pin:', error);
+                        alert('Failed to place camera pin. Please try again.');
+                        // Don't reset placement mode on error to allow user to try again
+                        // placingPin.value = false;
+                    });
             });
         } catch (error) {
             console.error('Failed to enable pin placement mode:', error);
@@ -180,56 +185,6 @@ function startPinPlacement() {
         alert('Map is not ready. Please try again in a moment.');
         placingPinMode.value = false;
     }
-}
-
-// Complete camera placement with direction
-function completeWithDirection() {
-    if (!placedCoordinates.value || !selectedCameraInfo.value) {
-        console.error('Missing coordinates or camera info');
-        return;
-    }
-    
-    // Add direction and angle to camera info
-    const cameraInfoWithDetails = {
-        ...selectedCameraInfo.value,
-        perceptionRange: perceptionRange.value,
-        viewingDirection: viewingDirection.value,
-        viewingAngle: viewingAngle.value,
-        conicalView: true
-    };
-    
-    // Add the camera pin with the complete information
-    addCameraPin(placedCoordinates.value, cameraInfoWithDetails)
-        .then(response => {
-            if (response && response.success === false) {
-                console.error('Pin was added visually but failed to save to server:', response.error);
-                alert('Pin was placed on map but could not be saved to the server. The pin will be visible until you refresh the page.');
-            } else {
-                console.log('Camera pin added successfully:', response);
-                alert('Camera pin placed successfully!');
-            }
-            
-            // Reset direction dialog
-            showDirectionDialog.value = false;
-            placedCoordinates.value = null;
-            selectedCameraInfo.value = null;
-        })
-        .catch(error => {
-            console.error('Error adding camera pin:', error);
-            alert('Failed to place camera pin. Please try again.');
-            
-            // Reset direction dialog
-            showDirectionDialog.value = false;
-            placedCoordinates.value = null;
-            selectedCameraInfo.value = null;
-        });
-}
-
-// Cancel direction selection
-function cancelDirectionSelection() {
-    showDirectionDialog.value = false;
-    placedCoordinates.value = null;
-    selectedCameraInfo.value = null;
 }
 
 // Cancel the pin placement mode
@@ -423,22 +378,22 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
         // Object format with lat/lng properties
         if ('lat' in locationInfo.coordinates && 'lng' in locationInfo.coordinates) {
           coordinates = {
-            lat: locationInfo.coordinates.lat,
-            lng: locationInfo.coordinates.lng
+            lat: parseFloat(locationInfo.coordinates.lat),
+            lng: parseFloat(locationInfo.coordinates.lng)
           };
         } 
         // Array format [lng, lat]
         else if (Array.isArray(locationInfo.coordinates) && locationInfo.coordinates.length >= 2) {
           coordinates = {
-            lat: locationInfo.coordinates[1],
-            lng: locationInfo.coordinates[0]
+            lat: parseFloat(locationInfo.coordinates[1]),
+            lng: parseFloat(locationInfo.coordinates[0])
           };
         }
       }
     }
     
     // Check if we got valid coordinates
-    if (!coordinates) {
+    if (!coordinates || isNaN(coordinates.lat) || isNaN(coordinates.lng)) {
       console.warn(`No valid coordinates for camera ${cameraId}`, locationInfo);
       // Use a default location if we don't have coordinates (near Quezon City)
       coordinates = {
@@ -449,7 +404,7 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
     }
     
     // Get perception range from camera info, default to 30m if not specified
-    const perceptionRange = locationInfo.perceptionRange || 30;
+    const perceptionRange = parseFloat(locationInfo.perceptionRange || 30);
     
     // Convert perception range from meters to approximate degrees
     // This is a rough calculation (1 degree is approximately 111km at the equator)
@@ -457,34 +412,50 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
     const baseRadius = perceptionRange * 0.000009;
     console.log(`Using perception range of ${perceptionRange}m (${baseRadius} degrees) for camera ${cameraId}`);
     
-    // Check if this camera has a conical view
-    const isConical = locationInfo.conicalView === true;
-    const viewingDirection = locationInfo.viewingDirection !== undefined ? locationInfo.viewingDirection : 0;
-    const viewingAngle = locationInfo.viewingAngle !== undefined ? locationInfo.viewingAngle : 60;
+    let animalPosition;
     
-    // Variables for position calculation
-    let offsetLat, offsetLng;
-    
-    if (isConical) {
-      // For conical view, place pins within the cone
-      console.log(`Using conical view with direction ${viewingDirection}° and angle ${viewingAngle}°`);
+    // Check if the camera has conical view parameters
+    if (locationInfo.conicalView && 
+        locationInfo.viewingDirection !== undefined && 
+        locationInfo.viewingAngle !== undefined) {
       
-      // Calculate random position within the cone
-      // 1. Generate random distance from camera (between 20% and 90% of max range)
+      // Use conical distribution for camera with direction
+      console.log(`Using conical distribution with direction ${locationInfo.viewingDirection}° and angle ${locationInfo.viewingAngle}°`);
+      
+      // Convert viewing direction and angle to radians
+      const directionRad = (parseFloat(locationInfo.viewingDirection) * Math.PI) / 180;
+      const viewingAngleRad = (parseFloat(locationInfo.viewingAngle) * Math.PI) / 180;
+      
+      // Calculate random angle within the viewing cone
+      // We need a random angle that's within the viewing cone centered at the viewing direction
+      const halfAngle = viewingAngleRad / 2;
+      const randomAngleDelta = (Math.random() * viewingAngleRad) - halfAngle;
+      const finalAngle = directionRad + randomAngleDelta;
+      
+      // Randomize the distance from the center (between 20% and 90% of max range)
       const distanceFactor = 0.2 + (Math.random() * 0.7);
       
-      // 2. Generate random angle within the cone's field of view
-      const halfAngle = viewingAngle / 2;
-      const randomAngleOffset = (Math.random() * viewingAngle) - halfAngle;
-      const finalAngle = (viewingDirection + randomAngleOffset) * (Math.PI / 180); // Convert to radians
+      // Calculate the position using trigonometry
+      const offsetLat = baseRadius * distanceFactor * Math.cos(finalAngle);
+      const offsetLng = baseRadius * distanceFactor * Math.sin(finalAngle);
       
-      // 3. Calculate position using trigonometry
-      offsetLat = baseRadius * distanceFactor * Math.cos(finalAngle);
-      offsetLng = baseRadius * distanceFactor * Math.sin(finalAngle);
+      // Add some randomness to the exact position (10% variance)
+      const jitterFactor = 0.1;
+      const jitterLat = baseRadius * jitterFactor * (Math.random() * 2 - 1);
+      const jitterLng = baseRadius * jitterFactor * (Math.random() * 2 - 1);
       
-      console.log(`Placing animal at angle ${viewingDirection + randomAngleOffset}° (${Math.round(distanceFactor * 100)}% of max range)`);
+      // Final position
+      animalPosition = {
+        lat: coordinates.lat + offsetLat + jitterLat,
+        lng: coordinates.lng + offsetLng + jitterLng
+      };
+      
+      console.log(`Placed pin at angle ${(finalAngle * 180) / Math.PI}° (direction ${locationInfo.viewingDirection}° ± ${(randomAngleDelta * 180) / Math.PI}°)`);
+      
     } else {
-      // For circular view, use the original distribution logic
+      // Use circular distribution for camera without direction
+      console.log('Using circular distribution (camera has no direction)');
+      
       // Calculate position using a circle distribution around the camera within perception range
       const pinCount = index || 0; // Use index to distribute pins evenly
       
@@ -496,20 +467,20 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       const distanceFactor = 0.2 + (Math.random() * 0.7);
       
       // Use trigonometry to place the pin at the specified angle and distance
-      offsetLat = baseRadius * distanceFactor * Math.cos(radian);
-      offsetLng = baseRadius * distanceFactor * Math.sin(radian);
+      const offsetLat = baseRadius * distanceFactor * Math.sin(radian);
+      const offsetLng = baseRadius * distanceFactor * Math.cos(radian);
+      
+      // Add some randomness to the exact position (10% variance)
+      const jitterFactor = 0.1;
+      const jitterLat = baseRadius * jitterFactor * (Math.random() * 2 - 1);
+      const jitterLng = baseRadius * jitterFactor * (Math.random() * 2 - 1);
+      
+      // Final position
+      animalPosition = {
+        lat: coordinates.lat + offsetLat + jitterLat,
+        lng: coordinates.lng + offsetLng + jitterLng
+      };
     }
-    
-    // Add some randomness to the exact position (10% variance)
-    const jitterFactor = 0.1;
-    const jitterLat = baseRadius * jitterFactor * (Math.random() * 2 - 1);
-    const jitterLng = baseRadius * jitterFactor * (Math.random() * 2 - 1);
-    
-    // Final position
-    const animalPosition = {
-      lat: coordinates.lat + offsetLat + jitterLat,
-      lng: coordinates.lng + offsetLng + jitterLng
-    };
     
     // Create timestamp for detection (now)
     const timestamp = new Date().toISOString();
@@ -625,20 +596,6 @@ onUnmounted(() => {
     detectionMonitorInterval.value = null;
   }
 });
-
-// Get a text representation of the direction
-function getDirectionName(degrees) {
-    const directions = [
-        'North', 'North-Northeast', 'Northeast', 'East-Northeast', 
-        'East', 'East-Southeast', 'Southeast', 'South-Southeast',
-        'South', 'South-Southwest', 'Southwest', 'West-Southwest', 
-        'West', 'West-Northwest', 'Northwest', 'North-Northwest'
-    ];
-    
-    // Convert degrees to 0-15 index in the directions array
-    const index = Math.round(degrees / 22.5) % 16;
-    return directions[index];
-}
 </script>
 
 <template>
@@ -953,88 +910,6 @@ function getDirectionName(degrees) {
                 </q-card-actions>
             </q-card>
         </q-dialog>
-        
-        <!-- Direction Selection Dialog -->
-        <q-dialog v-model="showDirectionDialog" persistent>
-            <q-card class="direction-dialog">
-                <q-card-section class="row items-center q-pb-none">
-                    <div class="text-h6">Set Camera Direction</div>
-                    <q-space />
-                    <q-btn icon="close" flat round dense @click="cancelDirectionSelection" />
-                </q-card-section>
-
-                <q-card-section>
-                    <p>Configure the direction and angle of the camera's field of view.</p>
-                    
-                    <!-- Direction control with compass visualization -->
-                    <div class="direction-control q-my-md">
-                        <div class="text-subtitle2 q-mb-sm">Viewing Direction</div>
-                        <div class="compass-container">
-                            <div class="compass">
-                                <div class="compass-arrow" :style="`transform: rotate(${viewingDirection}deg)`"></div>
-                                <div class="compass-labels">
-                                    <div class="compass-n">N</div>
-                                    <div class="compass-e">E</div>
-                                    <div class="compass-s">S</div>
-                                    <div class="compass-w">W</div>
-                                </div>
-                                <!-- Conical view visualization -->
-                                <div class="conical-view" 
-                                     :style="`transform: rotate(${viewingDirection}deg); 
-                                             clip-path: polygon(50% 50%, ${50 - viewingAngle/2}% 0, ${50 + viewingAngle/2}% 0)`">
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Direction slider -->
-                        <div class="flex items-center q-mt-sm">
-                            <span class="q-mr-sm">0°</span>
-                            <q-slider
-                                v-model="viewingDirection"
-                                :min="0"
-                                :max="359"
-                                :step="1"
-                                label
-                                :label-value="`${viewingDirection}°`"
-                                class="col"
-                                color="primary"
-                            />
-                            <span class="q-ml-sm">359°</span>
-                        </div>
-                        <p class="text-caption text-grey q-mt-xs">
-                            Camera direction: {{ viewingDirection }}° ({{ getDirectionName(viewingDirection) }})
-                        </p>
-                    </div>
-                    
-                    <!-- View angle control -->
-                    <div class="angle-control q-my-md">
-                        <div class="text-subtitle2 q-mb-sm">Field of View Angle</div>
-                        <div class="flex items-center">
-                            <span class="q-mr-sm">10°</span>
-                            <q-slider
-                                v-model="viewingAngle"
-                                :min="10"
-                                :max="120"
-                                :step="5"
-                                label
-                                :label-value="`${viewingAngle}°`"
-                                class="col"
-                                color="primary"
-                            />
-                            <span class="q-ml-sm">120°</span>
-                        </div>
-                        <p class="text-caption text-grey q-mt-xs">
-                            Field of view: {{ viewingAngle }}° ({{ viewingAngle < 30 ? 'Narrow' : viewingAngle > 90 ? 'Wide' : 'Normal' }})
-                        </p>
-                    </div>
-                </q-card-section>
-
-                <q-card-actions align="right">
-                    <q-btn flat label="Cancel" color="negative" @click="cancelDirectionSelection" />
-                    <q-btn flat label="Complete" color="primary" @click="completeWithDirection" />
-                </q-card-actions>
-            </q-card>
-        </q-dialog>
 
         <!-- Placement mode indicator -->
         <div v-if="placingPinMode" class="placement-mode-indicator">
@@ -1065,102 +940,8 @@ function getDirectionName(degrees) {
     max-width: 90vw;
 }
 
-.direction-dialog {
-    width: 500px;
-    max-width: 90vw;
-}
-
 .placement-alert {
     animation: pulse 2s infinite;
-}
-
-.compass-container {
-    display: flex;
-    justify-content: center;
-    margin: 20px 0;
-}
-
-.compass {
-    position: relative;
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    border: 2px solid #ccc;
-    background-color: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.compass-arrow {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    width: 2px;
-    height: 50%;
-    background-color: #d32f2f;
-    transform-origin: bottom center;
-    z-index: 10;
-}
-
-.compass-arrow::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -5px;
-    width: 0;
-    height: 0;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-bottom: 12px solid #d32f2f;
-}
-
-.compass-labels {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-}
-
-.compass-n, .compass-e, .compass-s, .compass-w {
-    position: absolute;
-    font-weight: bold;
-    color: #333;
-}
-
-.compass-n {
-    top: 5px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.compass-e {
-    top: 50%;
-    right: 5px;
-    transform: translateY(-50%);
-}
-
-.compass-s {
-    bottom: 5px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.compass-w {
-    top: 50%;
-    left: 5px;
-    transform: translateY(-50%);
-}
-
-.conical-view {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(66, 133, 244, 0.3);
-    transform-origin: center;
-    border-radius: 50% 50% 0 0;
-    z-index: 5;
 }
 
 @keyframes pulse {

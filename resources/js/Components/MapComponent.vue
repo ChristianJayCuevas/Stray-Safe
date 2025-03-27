@@ -285,18 +285,18 @@ function createMarker(pinData) {
     let mapboxCoords;
     
     if (Array.isArray(pinData.coordinates) && pinData.coordinates.length >= 2) {
-      // Already in [lng, lat] format
-      mapboxCoords = pinData.coordinates;
-      console.log('Using array coordinates:', mapboxCoords);
+      // Already in [lng, lat] format, but ensure they're numbers
+      mapboxCoords = [parseFloat(pinData.coordinates[0]), parseFloat(pinData.coordinates[1])];
+      console.log('Using array coordinates (converted to numbers):', mapboxCoords);
     } else if (pinData.lat !== undefined && pinData.lng !== undefined) {
-      // Object with lat/lng properties
-      mapboxCoords = [pinData.lng, pinData.lat];
-      console.log('Using lat/lng properties:', mapboxCoords);
+      // Object with lat/lng properties, ensure they're numbers
+      mapboxCoords = [parseFloat(pinData.lng), parseFloat(pinData.lat)];
+      console.log('Using lat/lng properties (converted to numbers):', mapboxCoords);
     } else if (pinData.coordinates && typeof pinData.coordinates === 'object') {
-      // Object with lat/lng in coordinates
+      // Object with lat/lng in coordinates, ensure they're numbers
       if ('lat' in pinData.coordinates && 'lng' in pinData.coordinates) {
-        mapboxCoords = [pinData.coordinates.lng, pinData.coordinates.lat];
-        console.log('Using coordinates object:', mapboxCoords);
+        mapboxCoords = [parseFloat(pinData.coordinates.lng), parseFloat(pinData.coordinates.lat)];
+        console.log('Using coordinates object (converted to numbers):', mapboxCoords);
       }
     } else {
       console.error('Invalid coordinates format for marker:', pinData);
@@ -305,8 +305,6 @@ function createMarker(pinData) {
     
     // Final check to ensure coordinates are valid
     if (!mapboxCoords || mapboxCoords.length < 2 || 
-        typeof mapboxCoords[0] !== 'number' || 
-        typeof mapboxCoords[1] !== 'number' ||
         isNaN(mapboxCoords[0]) || isNaN(mapboxCoords[1])) {
       console.error('Invalid or missing coordinates after parsing:', mapboxCoords);
       return null;
@@ -316,10 +314,25 @@ function createMarker(pinData) {
     const marker = document.createElement('div');
     marker.className = 'custom-marker';
     
-    // Apply specific styles based on type
-    const pinType = pinData.type || pinData.animalType || pinData.animal_type || 'Default';
+    // Determine pin type - normalize to lowercase for consistent comparison
+    let pinType = '';
+    if (pinData.type) {
+      pinType = String(pinData.type).toLowerCase();
+    } else if (pinData.animalType) {
+      pinType = String(pinData.animalType).toLowerCase();
+    } else if (pinData.animal_type) {
+      pinType = String(pinData.animal_type).toLowerCase();
+    } else {
+      pinType = 'default';
+    }
     
-    if (pinType === 'Camera' || pinData.isCamera) {
+    console.log('Determined pin type:', pinType);
+    
+    // Check if it's a camera pin
+    const isCamera = pinData.isCamera === true || pinType === 'camera';
+    
+    // Apply specific styles based on type
+    if (isCamera) {
       marker.className = 'custom-marker camera-marker';
       marker.innerHTML = '<i class="fas fa-video"></i>';
       
@@ -349,12 +362,15 @@ function createMarker(pinData) {
           pinData.id || pinData.cameraId || Date.now().toString()
         );
       }
-    } else if (pinType === 'Dog' || pinType === 'dog') {
+    } else if (pinType === 'dog') {
       marker.style.backgroundColor = '#38a3a5'; // Dog color
-    } else if (pinType === 'Cat' || pinType === 'cat') {
+      marker.innerHTML = '<i class="fas fa-dog"></i>';
+    } else if (pinType === 'cat') {
       marker.style.backgroundColor = '#57cc99'; // Cat color
+      marker.innerHTML = '<i class="fas fa-cat"></i>';
     } else {
       marker.style.backgroundColor = '#4f6642'; // Default color
+      marker.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
     }
     
     // Create marker instance
@@ -364,7 +380,7 @@ function createMarker(pinData) {
     // Create popup content based on pin type
     let popupHTML = '';
     
-    if (pinType === 'Camera' || pinData.isCamera) {
+    if (isCamera) {
       // Camera pin popup
       popupHTML = `
         <div class="camera-popup">
@@ -374,15 +390,17 @@ function createMarker(pinData) {
           ${pinData.perceptionRange ? `<p><small>Perception Range: ${pinData.perceptionRange}m</small></p>` : ''}
           ${pinData.viewingDirection !== undefined ? `<p><small>Direction: ${pinData.viewingDirection}°</small></p>` : ''}
           ${pinData.viewingAngle !== undefined ? `<p><small>Field of View: ${pinData.viewingAngle}°</small></p>` : ''}
-          ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
+          ${pinData.id || pinData.cameraId ? `<button class="delete-pin-btn" data-pin-id="${pinData.id || pinData.cameraId}">Delete Pin</button>` : ''}
         </div>
       `;
     } else {
       // Animal pin popup
+      const displayType = pinType.charAt(0).toUpperCase() + pinType.slice(1); // Capitalize first letter
       popupHTML = `
         <div class="pin-popup">
-          <h3>${pinType}</h3>
+          <h3>${displayType}</h3>
           ${pinData.description ? `<p>${pinData.description}</p>` : ''}
+          ${pinData.detection_timestamp ? `<p><small>Detected: ${new Date(pinData.detection_timestamp).toLocaleString()}</small></p>` : ''}
           ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
         </div>
       `;
@@ -395,11 +413,12 @@ function createMarker(pinData) {
     // Add click handler for delete button
     popup.on('open', () => {
       setTimeout(() => {
-        const deleteBtn = document.querySelector(`.delete-pin-btn[data-pin-id="${pinData.id}"]`);
+        const pinId = pinData.id || pinData.cameraId;
+        const deleteBtn = document.querySelector(`.delete-pin-btn[data-pin-id="${pinId}"]`);
         if (deleteBtn) {
           deleteBtn.addEventListener('click', () => {
             if (confirm('Are you sure you want to delete this pin?')) {
-              deletePin(pinData.id, markerInstance);
+              deletePin(pinId, markerInstance);
             }
           });
         }
@@ -408,6 +427,7 @@ function createMarker(pinData) {
     
     // Add marker to map
     markerInstance.addTo(map.value);
+    console.log('Marker added to map successfully');
     
     return markerInstance;
   } catch (error) {
@@ -794,25 +814,40 @@ async function getCameraPinLocations() {
       if (pin.isCamera || pin.cameraId) {
         let coordinates;
         
-        // Handle different coordinate formats
+        // Handle different coordinate formats - ensuring we parse string values to numbers
         if (Array.isArray(pin.coordinates)) {
-          coordinates = { lat: pin.coordinates[1], lng: pin.coordinates[0] };
+          coordinates = { 
+            lat: parseFloat(pin.coordinates[1]), 
+            lng: parseFloat(pin.coordinates[0]) 
+          };
+          console.log('Camera pin with array coordinates:', coordinates);
         } else if (pin.coordinates && typeof pin.coordinates === 'object') {
-          coordinates = pin.coordinates;
+          coordinates = {
+            lat: parseFloat(pin.coordinates.lat || 0),
+            lng: parseFloat(pin.coordinates.lng || 0)
+          };
+          console.log('Camera pin with object coordinates:', coordinates);
         } else if (pin.lat !== undefined && pin.lng !== undefined) {
-          coordinates = { lat: pin.lat, lng: pin.lng };
+          coordinates = { 
+            lat: parseFloat(pin.lat), 
+            lng: parseFloat(pin.lng) 
+          };
+          console.log('Camera pin with lat/lng properties:', coordinates);
         }
         
-        if (coordinates) {
+        // Verify that the parsed coordinates are valid numbers
+        if (coordinates && !isNaN(coordinates.lat) && !isNaN(coordinates.lng)) {
           cameraPins.push({
             id: pin.cameraId || pin.id,
             name: pin.cameraName || pin.name,
             coordinates: coordinates,
-            perceptionRange: pin.perceptionRange,
-            viewingDirection: pin.viewingDirection,
-            viewingAngle: pin.viewingAngle,
-            conicalView: pin.conicalView
+            perceptionRange: parseFloat(pin.perceptionRange || 30),
+            viewingDirection: parseFloat(pin.viewingDirection || 0),
+            viewingAngle: parseFloat(pin.viewingAngle || 60),
+            conicalView: !!pin.conicalView
           });
+        } else {
+          console.warn('Invalid coordinates for camera pin:', pin);
         }
       }
     });
