@@ -403,84 +403,33 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       console.log(`Using default coordinates for camera ${cameraId}:`, coordinates);
     }
     
-    // Get perception range from camera info, default to 30m if not specified
-    const perceptionRange = parseFloat(locationInfo.perceptionRange || 30);
+    // Use a much smaller radius to place animals very close to the camera
+    // We'll use a radius between 5-15 meters instead of the full perception range
+    const smallRadius = (5 + Math.random() * 10) * 0.000009; // 5-15 meters converted to degrees
     
-    // Convert perception range from meters to approximate degrees
-    // This is a rough calculation (1 degree is approximately 111km at the equator)
-    // So 1 meter is about 0.000009 degrees
-    const baseRadius = perceptionRange * 0.000009;
-    console.log(`Using perception range of ${perceptionRange}m (${baseRadius} degrees) for camera ${cameraId}`);
+    // Calculate position using a circle distribution around the camera
+    const pinCount = index || 0;
     
-    let animalPosition;
+    // Calculate angle for positioning (distribute evenly in a circle)
+    // Each pin gets placed at a different angle around the camera
+    const angle = (pinCount * 45 + Math.random() * 20) % 360; // Add some randomness to the angle
+    const radian = angle * (Math.PI / 180);
     
-    // Check if the camera has conical view parameters
-    if (locationInfo.conicalView && 
-        locationInfo.viewingDirection !== undefined && 
-        locationInfo.viewingAngle !== undefined) {
-      
-      // Use conical distribution for camera with direction
-      console.log(`Using conical distribution with direction ${locationInfo.viewingDirection}° and angle ${locationInfo.viewingAngle}°`);
-      
-      // Convert viewing direction and angle to radians
-      const directionRad = (parseFloat(locationInfo.viewingDirection) * Math.PI) / 180;
-      const viewingAngleRad = (parseFloat(locationInfo.viewingAngle) * Math.PI) / 180;
-      
-      // Calculate random angle within the viewing cone
-      // We need a random angle that's within the viewing cone centered at the viewing direction
-      const halfAngle = viewingAngleRad / 2;
-      const randomAngleDelta = (Math.random() * viewingAngleRad) - halfAngle;
-      const finalAngle = directionRad + randomAngleDelta;
-      
-      // Randomize the distance from the center (between 20% and 90% of max range)
-      const distanceFactor = 0.2 + (Math.random() * 0.7);
-      
-      // Calculate the position using trigonometry
-      const offsetLat = baseRadius * distanceFactor * Math.cos(finalAngle);
-      const offsetLng = baseRadius * distanceFactor * Math.sin(finalAngle);
-      
-      // Add some randomness to the exact position (10% variance)
-      const jitterFactor = 0.1;
-      const jitterLat = baseRadius * jitterFactor * (Math.random() * 2 - 1);
-      const jitterLng = baseRadius * jitterFactor * (Math.random() * 2 - 1);
-      
-      // Final position
-      animalPosition = {
-        lat: coordinates.lat + offsetLat + jitterLat,
-        lng: coordinates.lng + offsetLng + jitterLng
-      };
-      
-      console.log(`Placed pin at angle ${(finalAngle * 180) / Math.PI}° (direction ${locationInfo.viewingDirection}° ± ${(randomAngleDelta * 180) / Math.PI}°)`);
-      
-    } else {
-      // Use circular distribution for camera without direction
-      console.log('Using circular distribution (camera has no direction)');
-      
-      // Calculate position using a circle distribution around the camera within perception range
-      const pinCount = index || 0; // Use index to distribute pins evenly
-      
-      // Calculate angle based on pin index (distribute around a circle)
-      const angle = (pinCount * 45) % 360; // 45 degrees between pins, wrapping at 360
-      const radian = angle * (Math.PI / 180);
-      
-      // Randomize the distance from the center (between 20% and 90% of max range)
-      const distanceFactor = 0.2 + (Math.random() * 0.7);
-      
-      // Use trigonometry to place the pin at the specified angle and distance
-      const offsetLat = baseRadius * distanceFactor * Math.sin(radian);
-      const offsetLng = baseRadius * distanceFactor * Math.cos(radian);
-      
-      // Add some randomness to the exact position (10% variance)
-      const jitterFactor = 0.1;
-      const jitterLat = baseRadius * jitterFactor * (Math.random() * 2 - 1);
-      const jitterLng = baseRadius * jitterFactor * (Math.random() * 2 - 1);
-      
-      // Final position
-      animalPosition = {
-        lat: coordinates.lat + offsetLat + jitterLat,
-        lng: coordinates.lng + offsetLng + jitterLng
-      };
-    }
+    // Calculate the offset from the camera position
+    const offsetLat = smallRadius * Math.sin(radian);
+    const offsetLng = smallRadius * Math.cos(radian);
+    
+    // Add a tiny bit of randomness to make it look natural
+    const jitterLat = smallRadius * 0.2 * (Math.random() * 2 - 1);
+    const jitterLng = smallRadius * 0.2 * (Math.random() * 2 - 1);
+    
+    // Final position close to the camera
+    const animalPosition = {
+      lat: coordinates.lat + offsetLat + jitterLat,
+      lng: coordinates.lng + offsetLng + jitterLng
+    };
+    
+    console.log(`Placing ${animalType} pin at angle ${angle}° close to camera ${cameraId}`);
     
     // Create timestamp for detection (now)
     const timestamp = new Date().toISOString();
@@ -500,7 +449,7 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       is_camera: false,
       status: 'active',
       camera_id: cameraId,
-      perception_range: perceptionRange // Include the perception range in the pin data
+      perception_range: parseFloat(locationInfo.perceptionRange || 30) // Include the perception range in the pin data
     };
     
     // Add the pin to the map

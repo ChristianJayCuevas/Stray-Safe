@@ -363,14 +363,20 @@ function createMarker(pinData) {
         );
       }
     } else if (pinType === 'dog') {
-      marker.style.backgroundColor = '#38a3a5'; // Dog color
+      // Dog marker - blue color
+      marker.style.backgroundColor = '#38a3a5';
       marker.innerHTML = '<i class="fas fa-dog"></i>';
+      marker.title = 'Dog sighting';
     } else if (pinType === 'cat') {
-      marker.style.backgroundColor = '#57cc99'; // Cat color
+      // Cat marker - green color
+      marker.style.backgroundColor = '#57cc99';
       marker.innerHTML = '<i class="fas fa-cat"></i>';
+      marker.title = 'Cat sighting';
     } else {
-      marker.style.backgroundColor = '#4f6642'; // Default color
+      // Default marker - gray color
+      marker.style.backgroundColor = '#4f6642';
       marker.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+      marker.title = 'Unknown pin type';
     }
     
     // Create marker instance
@@ -398,9 +404,10 @@ function createMarker(pinData) {
       const displayType = pinType.charAt(0).toUpperCase() + pinType.slice(1); // Capitalize first letter
       popupHTML = `
         <div class="pin-popup">
-          <h3>${displayType}</h3>
+          <h3>${displayType} Sighting</h3>
           ${pinData.description ? `<p>${pinData.description}</p>` : ''}
           ${pinData.detection_timestamp ? `<p><small>Detected: ${new Date(pinData.detection_timestamp).toLocaleString()}</small></p>` : ''}
+          ${pinData.camera_id ? `<p><small>Detected by Camera ID: ${pinData.camera_id}</small></p>` : ''}
           ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
         </div>
       `;
@@ -1044,11 +1051,26 @@ function retryMapLoad() {
   border: 2px solid white;
   transition: transform 0.2s ease;
   position: relative;
+  font-size: 12px;
+  color: white;
+  z-index: 5;
 }
 
 .custom-marker:hover {
   transform: scale(1.2);
   cursor: pointer;
+  z-index: 10;
+}
+
+/* Animal marker specific styles */
+.custom-marker[style*="background-color: #38a3a5"] { /* Dog marker */
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #38a3a5, 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.custom-marker[style*="background-color: #57cc99"] { /* Cat marker */
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #57cc99, 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 /* Camera direction indicator */
@@ -1069,6 +1091,10 @@ function retryMapLoad() {
 .camera-marker {
   background-color: #2c3e50;
   color: white;
+  font-size: 12px;
+  z-index: 6;
+  border: 3px solid white;
+  box-shadow: 0 0 0 2px #2c3e50, 0 0 12px rgba(0, 0, 0, 0.6);
 }
 
 /* Popup styles */
