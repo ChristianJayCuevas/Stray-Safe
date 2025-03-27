@@ -511,42 +511,24 @@ async function addCameraPin(coordinates, cameraInfo) {
     }
     
     console.log('Adding camera pin at coordinates:', coordinates, 'with camera info:', cameraInfo);
-
-    // Create a detailed camera object for the marker
-    const cameraData = {
+    
+    markerInstance = createMarker({
       coordinates: coordinates,
       camera_id: cameraInfo.id || '',
-      rtmp_key: cameraInfo.rtmp_key || cameraInfo.id || '',
       camera_name: cameraInfo.name || '',
-      location: cameraInfo.location || 'Unknown Location',
       hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : '',
-      isCamera: true,
-      viewingDirection: cameraInfo.viewingDirection || 0,
-      viewingAngle: cameraInfo.viewingAngle || 60,
-      conicalView: cameraInfo.conicalView || false,
-      perceptionRange: cameraInfo.perceptionRange || 30,
-      original_id: cameraInfo.original_id || cameraInfo.id || ''
-    };
-    
-    markerInstance = createMarker(cameraData);
+      isCamera: true
+    });
     console.log('Marker instance created:', markerInstance);
     
     try {
       console.log('Sending API request to save camera pin...');
       
-      // Create payload for the API
       const payload = {
         coordinates: coordinates,
         camera_id: cameraInfo.id || '',
-        rtmp_key: cameraInfo.rtmp_key || cameraInfo.id || '',
         camera_name: cameraInfo.name || '',
-        location: cameraInfo.location || 'Unknown Location',
-        hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : '',
-        viewing_direction: cameraInfo.viewingDirection || 0,
-        viewing_angle: cameraInfo.viewingAngle || 60,
-        conical_view: cameraInfo.conicalView || false,
-        perception_range: cameraInfo.perceptionRange || 30,
-        original_id: cameraInfo.original_id || cameraInfo.id || ''
+        hls_url: cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : ''
       };
       
       console.log('Sending formatted payload to API:', payload);
@@ -564,16 +546,27 @@ async function addCameraPin(coordinates, cameraInfo) {
       
       console.log("Camera pin API response:", response.data);
       
-      // Add to pins list with all properties
-      pinsList.value.push(cameraData);
+      pinsList.value.push({
+        coordinates: coordinates,
+        cameraId: cameraInfo.id,
+        cameraName: cameraInfo.name,
+        hlsUrl: cameraInfo.videoSrc[0],
+        isCamera: true
+      });
       
       console.log("Camera pin added successfully:", response.data);
       return response.data;
     } catch (apiError) {
       console.error('API Error when adding camera pin:', apiError);
       
-      // Add to pins list anyway for visual representation
-      pinsList.value.push(cameraData);
+      pinsList.value.push({
+        coordinates: coordinates,
+        cameraId: cameraInfo.id,
+        cameraName: cameraInfo.name,
+        hlsUrl: cameraInfo.videoSrc[0],
+        isCamera: true,
+        isSyncPending: true
+      });
       
       console.log("Camera pin added visually but failed to save to backend");
       return { 
@@ -846,7 +839,11 @@ async function getCameraPinLocations() {
         if (coordinates && !isNaN(coordinates.lat) && !isNaN(coordinates.lng)) {
           cameraPins.push({
             id: pin.cameraId || pin.id,
-            name: pin.cameraName || pin.name,
+            cameraId: pin.cameraId || pin.id,
+            rtmp_key: pin.rtmp_key || pin.cameraId || pin.id,
+            original_id: pin.original_id || pin.cameraId || pin.id,
+            name: pin.cameraName || pin.name || 'Unknown Camera',
+            location: pin.location || 'Unknown Location',
             coordinates: coordinates,
             perceptionRange: parseFloat(pin.perceptionRange || 30),
             viewingDirection: parseFloat(pin.viewingDirection || 0),
