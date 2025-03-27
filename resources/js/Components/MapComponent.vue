@@ -74,9 +74,6 @@ async function initializeMap() {
     map.value.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
     console.log('Scale control added');
 
-    // Clear pinsList to start with a clean slate
-    pinsList.value = [];
-
     // Set up map click handler for pin placement
     map.value.on('click', handleMapClick);
     console.log('Map click handler set up');
@@ -227,18 +224,13 @@ function disablePinPlacementMode() {
   if (map.value) {
     // Reset cursor
     map.value.getCanvas().style.cursor = '';
-    
-    console.log('Map cursor reset');
-  } else {
-    console.warn('Map not available when trying to disable pin placement mode');
   }
   
   // Reset state
   isPlacingCameraPin.value = false;
   placementCallback.value = null;
-  selectedCameraForPin.value = null;
   
-  console.log('Pin placement mode disabled - all state cleared');
+  console.log('Pin placement mode disabled');
 }
 
 // Handle map click during pin placement mode
@@ -251,142 +243,28 @@ function handleMapClick(e) {
     const coordinates = [e.lngLat.lng, e.lngLat.lat];
     console.log('Calling pin placement callback with coordinates:', coordinates);
     
-    try {
-      // Call the callback with the clicked coordinates
-      placementCallback.value(coordinates);
-    } catch (error) {
-      console.error('Error in pin placement callback:', error);
-      // Reset placement mode if there's an error
-      isPlacingCameraPin.value = false;
-      placementCallback.value = null;
-      
-      if (map.value) {
-        map.value.getCanvas().style.cursor = '';
-      }
-    }
+    // Call the callback with the clicked coordinates
+    placementCallback.value(coordinates);
   } else if (isPlacingCameraPin.value && !placementCallback.value) {
     console.error('⚠️ Pin placement mode is active but no callback is registered');
-    // Reset placement mode
-    isPlacingCameraPin.value = false;
-    
-    if (map.value) {
-      map.value.getCanvas().style.cursor = '';
-    }
   }
 }
 
 // Fetch pins from the backend
 async function fetchPins() {
   try {
-    console.log('Fetching pins from the server...');
     const response = await axios.get('/pins');
     const pins = response.data;
-    console.log('Fetched pins:', pins);
 
-    // Clear existing pins
-    pinsList.value = [];
-    console.log('Cleared existing pins list');
-
-    if (!pins || pins.length === 0) {
-      console.log('No pins received from server');
-      return;
-    }
-
-    console.log(`Processing ${pins.length} pins from server...`);
-
-    // Process and add each pin
-    for (const pin of pins) {
-      try {
-        // Verify coordinates
-        if (!pin.coordinates) {
-          console.warn('Pin has no coordinates, skipping:', pin);
-          continue;
-        }
-
-        // Convert coordinates to proper format
-        if (typeof pin.coordinates === 'string') {
-          try {
-            pin.coordinates = JSON.parse(pin.coordinates);
-            console.log('Parsed string coordinates:', pin.coordinates);
-          } catch (parseError) {
-            console.error('Failed to parse coordinates string:', pin.coordinates, parseError);
-            continue;
-          }
-        }
-
-        // Determine if this is a camera pin
-        const isCamera = pin.is_camera === true || pin.type === 'camera' || pin.type === 'Camera';
-        
-        // For camera pins, ensure all attributes are properly loaded
-        if (isCamera) {
-          // Normalize camera data format
-          const cameraPin = {
-            coordinates: pin.coordinates,
-            id: pin.camera_id || pin.id,
-            cameraId: pin.camera_id || pin.id,
-            rtmp_key: pin.rtmp_key || pin.camera_id || pin.id,
-            camera_id: pin.camera_id || pin.id,
-            name: pin.camera_name || pin.name || 'Camera',
-            cameraName: pin.camera_name || pin.name || 'Camera',
-            camera_name: pin.camera_name || pin.name || 'Camera',
-            location: pin.location || 'Unknown Location',
-            hls_url: pin.hls_url || '',
-            isCamera: true,
-            type: 'Camera',
-            // Load directional and perception properties
-            perceptionRange: parseFloat(pin.perception_range || pin.perceptionRange || 30),
-            viewingDirection: parseFloat(pin.viewing_direction || pin.viewingDirection || 0),
-            viewingAngle: parseFloat(pin.viewing_angle || pin.viewingAngle || 60),
-            conicalView: pin.conical_view === true || pin.conicalView === true,
-            status: pin.status || 'active'
-          };
-          
-          console.log('Creating camera pin from database:', cameraPin);
-          
-          // Save to pinsList before creating marker, so the marker can find it in the list
-          pinsList.value.push(cameraPin);
-          
-          // Create marker after adding to pinsList
-          const marker = createMarker(cameraPin);
-          if (marker) {
-            console.log('Created camera marker successfully');
-          } else {
-            console.error('Failed to create marker for camera pin');
-          }
-        } else {
-          // Regular animal pin
-          console.log('Creating animal pin from database:', pin);
-          const animalPin = {
-            coordinates: pin.coordinates,
-            id: pin.id,
-            type: pin.animal_type,
-            animal_type: pin.animal_type,
-            animalType: pin.animal_type,
-            description: pin.description || `${pin.animal_type} sighting`,
-            image_url: pin.image_url,
-            detection_timestamp: pin.detection_timestamp,
-            camera_id: pin.camera_id,
-            isCamera: false,
-            status: pin.status || 'active'
-          };
-          
-          // Save to pinsList before creating marker
-          pinsList.value.push(animalPin);
-          
-          // Create marker after adding to pinsList
-          const marker = createMarker(animalPin);
-          if (marker) {
-            console.log(`Created ${animalPin.animal_type} marker successfully`);
-          } else {
-            console.error(`Failed to create marker for ${animalPin.animal_type} pin`);
-          }
-        }
-      } catch (pinError) {
-        console.error('Error processing pin:', pin, pinError);
-      }
-    }
-    
-    console.log('Finished loading pins:', pinsList.value.length, 'pins loaded');
+    pins.forEach((pin) => {
+      const marker = createMarker(pin);
+      pinsList.value.push({
+        id: pin.id,
+        coordinates: pin.coordinates,
+        animalType: pin.animal_type,
+        marker: marker
+      });
+    });
   } catch (error) {
     console.error('Error fetching pins:', error);
   }
@@ -499,8 +377,34 @@ function createMarker(pinData) {
     console.log('Creating marker at coordinates:', mapboxCoords);
     const markerInstance = new mapboxgl.Marker(marker).setLngLat(mapboxCoords);
     
-    // Create popup content
-    const popupHTML = createPopupHTML(pinData, pinType, isCamera);
+    // Create popup content based on pin type
+    let popupHTML = '';
+    
+    if (isCamera) {
+      // Camera pin popup
+      popupHTML = `
+        <div class="camera-popup">
+          <h3>${pinData.cameraName || pinData.name || 'Camera'}</h3>
+          <p>${pinData.location || 'Location not specified'}</p>
+          <p><small>Status: ${pinData.status || 'Unknown'}</small></p>
+          ${pinData.perceptionRange ? `<p><small>Perception Range: ${pinData.perceptionRange}m</small></p>` : ''}
+          ${pinData.viewingDirection !== undefined ? `<p><small>Direction: ${pinData.viewingDirection}°</small></p>` : ''}
+          ${pinData.viewingAngle !== undefined ? `<p><small>Field of View: ${pinData.viewingAngle}°</small></p>` : ''}
+          ${pinData.id || pinData.cameraId ? `<button class="delete-pin-btn" data-pin-id="${pinData.id || pinData.cameraId}">Delete Pin</button>` : ''}
+        </div>
+      `;
+    } else {
+      // Animal pin popup
+      const displayType = pinType.charAt(0).toUpperCase() + pinType.slice(1); // Capitalize first letter
+      popupHTML = `
+        <div class="pin-popup">
+          <h3>${displayType}</h3>
+          ${pinData.description ? `<p>${pinData.description}</p>` : ''}
+          ${pinData.detection_timestamp ? `<p><small>Detected: ${new Date(pinData.detection_timestamp).toLocaleString()}</small></p>` : ''}
+          ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
+        </div>
+      `;
+    }
     
     // Create and attach popup
     const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHTML);
@@ -608,62 +512,23 @@ async function addCameraPin(coordinates, cameraInfo) {
     
     console.log('Adding camera pin at coordinates:', coordinates, 'with camera info:', cameraInfo);
     
-    // Extract camera ID - use rtmp_key if available, otherwise use id
-    const cameraId = cameraInfo.rtmp_key || cameraInfo.id || '';
-    console.log('Using camera ID:', cameraId);
-    
-    // Create camera pin data object with all available information
-    const pinData = {
+    markerInstance = createMarker({
       coordinates: coordinates,
-      id: cameraId, // Set ID directly to rtmp_key/id
-      cameraId: cameraId, // Also set cameraId for backwards compatibility
-      camera_id: cameraId, // Also set camera_id for API format compatibility
-      rtmp_key: cameraInfo.rtmp_key || cameraInfo.id, // Store rtmp_key explicitly
-      cameraName: cameraInfo.name || '',
+      camera_id: cameraInfo.id || '',
       camera_name: cameraInfo.name || '',
-      name: cameraInfo.name || '',
-      location: cameraInfo.location || '',
       hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : '',
-      type: 'Camera',
-      isCamera: true,
-      perceptionRange: parseFloat(cameraInfo.perceptionRange || 30),
-      // Store directional properties
-      viewingDirection: cameraInfo.viewingDirection !== undefined ? parseFloat(cameraInfo.viewingDirection) : 0,
-      viewingAngle: cameraInfo.viewingAngle !== undefined ? parseFloat(cameraInfo.viewingAngle) : 60,
-      conicalView: cameraInfo.conicalView !== undefined ? !!cameraInfo.conicalView : false,
-      // Add additional properties for persistence
-      originalId: cameraInfo.originalId || cameraInfo.original_id || cameraInfo.id,
-      original_id: cameraInfo.originalId || cameraInfo.original_id || cameraInfo.id,
-      status: cameraInfo.status || 'active'
-    };
+      isCamera: true
+    });
+    console.log('Marker instance created:', markerInstance);
     
-    // First save to pinsList for local tracking
-    pinsList.value.push(pinData);
-    console.log('Added camera pin to pinsList:', pinData);
-    
-    // Then create the marker after adding to pinsList
-    markerInstance = createMarker(pinData);
-    console.log('Created camera marker:', markerInstance);
-    
-    // Try to save to backend API
     try {
       console.log('Sending API request to save camera pin...');
       
       const payload = {
         coordinates: coordinates,
-        camera_id: cameraId,
-        rtmp_key: cameraInfo.rtmp_key || cameraInfo.id,
+        camera_id: cameraInfo.id || '',
         camera_name: cameraInfo.name || '',
-        location: cameraInfo.location || '',
-        hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : '',
-        // Include directional and perception properties
-        viewing_direction: pinData.viewingDirection,
-        viewing_angle: pinData.viewingAngle,
-        conical_view: pinData.conicalView,
-        perception_range: pinData.perceptionRange,
-        original_id: pinData.original_id,
-        type: 'Camera',
-        is_camera: true
+        hls_url: cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : ''
       };
       
       console.log('Sending formatted payload to API:', payload);
@@ -681,35 +546,27 @@ async function addCameraPin(coordinates, cameraInfo) {
       
       console.log("Camera pin API response:", response.data);
       
-      // If API gives us a new ID, update our local reference
-      if (response.data.id) {
-        const pinIndex = pinsList.value.findIndex(pin => pin.id === cameraId || pin.cameraId === cameraId);
-        if (pinIndex !== -1) {
-          pinsList.value[pinIndex].id = response.data.id;
-          console.log("Updated pin with API-provided ID:", response.data.id);
-        }
-      }
+      pinsList.value.push({
+        coordinates: coordinates,
+        cameraId: cameraInfo.id,
+        cameraName: cameraInfo.name,
+        hlsUrl: cameraInfo.videoSrc[0],
+        isCamera: true
+      });
       
-      // If API response has additional camera data, update our local reference
-      if (response.data.pin && Object.keys(response.data.pin).length > 0) {
-        const pinIndex = pinsList.value.findIndex(pin => pin.id === cameraId || pin.cameraId === cameraId);
-        if (pinIndex !== -1) {
-          // Merge any new data from the API response with our local pin data
-          pinsList.value[pinIndex] = { ...pinsList.value[pinIndex], ...response.data.pin };
-          console.log("Updated pin with API data:", pinsList.value[pinIndex]);
-        }
-      }
-      
+      console.log("Camera pin added successfully:", response.data);
       return response.data;
     } catch (apiError) {
       console.error('API Error when adding camera pin:', apiError);
       
-      // Find the pin in pinsList
-      const pinIndex = pinsList.value.findIndex(pin => pin.id === cameraId || pin.cameraId === cameraId);
-      if (pinIndex !== -1) {
-        pinsList.value[pinIndex].isSyncPending = true;
-        console.log("Marked pin as pending sync:", pinsList.value[pinIndex]);
-      }
+      pinsList.value.push({
+        coordinates: coordinates,
+        cameraId: cameraInfo.id,
+        cameraName: cameraInfo.name,
+        hlsUrl: cameraInfo.videoSrc[0],
+        isCamera: true,
+        isSyncPending: true
+      });
       
       console.log("Camera pin added visually but failed to save to backend");
       return { 
@@ -944,7 +801,6 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
 async function getCameraPinLocations() {
   try {
     console.log('Getting camera pin locations from map');
-    console.log('Current pinsList contains:', pinsList.value.length, 'pins');
     
     if (!map.value) {
       console.error('Map is not initialized, cannot get camera pins');
@@ -954,39 +810,9 @@ async function getCameraPinLocations() {
     const cameraPins = [];
     
     // Loop through pinsList to find camera pins
-    pinsList.value.forEach((pin, index) => {
-      // More inclusive check for camera pins
-      const isCamera = pin.isCamera === true || 
-                       pin.type === 'camera' || 
-                       pin.type === 'Camera' || 
-                       pin.cameraId || 
-                       pin.camera_id ||
-                       pin.rtmp_key;
-      
-      if (isCamera) {
-        console.log(`Found camera pin #${index}:`, pin);
-        
-        // Extract camera ID
-        let cameraId = '';
-        if (pin.rtmp_key) {
-          cameraId = pin.rtmp_key;
-          console.log('Using rtmp_key as camera ID:', cameraId);
-        } else if (pin.cameraId) {
-          cameraId = pin.cameraId;
-          console.log('Using cameraId as camera ID:', cameraId);
-        } else if (pin.camera_id) {
-          cameraId = pin.camera_id;
-          console.log('Using camera_id as camera ID:', cameraId);
-        } else if (pin.id) {
-          cameraId = pin.id;
-          console.log('Using id as camera ID:', cameraId);
-        } else {
-          console.warn('No ID found for camera pin, generating temporary ID');
-          cameraId = `camera-${Date.now()}-${index}`;
-        }
-        
-        // Get coordinates in consistent format
-        let coordinates = null;
+    pinsList.value.forEach(pin => {
+      if (pin.isCamera || pin.cameraId) {
+        let coordinates;
         
         // Handle different coordinate formats - ensuring we parse string values to numbers
         if (Array.isArray(pin.coordinates)) {
@@ -994,42 +820,39 @@ async function getCameraPinLocations() {
             lat: parseFloat(pin.coordinates[1]), 
             lng: parseFloat(pin.coordinates[0]) 
           };
+          console.log('Camera pin with array coordinates:', coordinates);
         } else if (pin.coordinates && typeof pin.coordinates === 'object') {
           coordinates = {
             lat: parseFloat(pin.coordinates.lat || 0),
             lng: parseFloat(pin.coordinates.lng || 0)
           };
+          console.log('Camera pin with object coordinates:', coordinates);
         } else if (pin.lat !== undefined && pin.lng !== undefined) {
           coordinates = { 
             lat: parseFloat(pin.lat), 
             lng: parseFloat(pin.lng) 
           };
+          console.log('Camera pin with lat/lng properties:', coordinates);
         }
         
         // Verify that the parsed coordinates are valid numbers
         if (coordinates && !isNaN(coordinates.lat) && !isNaN(coordinates.lng)) {
-          // Ensure IDs are strings
-          const cameraPin = {
-            id: String(cameraId), // This is the key ID used for matching with API counters
-            name: pin.cameraName || pin.camera_name || pin.name || 'Unnamed Camera',
-            rtmp_key: pin.rtmp_key ? String(pin.rtmp_key) : undefined, // Include rtmp_key explicitly for matching
-            original_id: pin.original_id || pin.originalId,
+          cameraPins.push({
+            id: pin.cameraId || pin.id,
+            name: pin.cameraName || pin.name,
             coordinates: coordinates,
-            perceptionRange: parseFloat(pin.perceptionRange || pin.perception_range || 30),
-            viewingDirection: parseFloat(pin.viewingDirection || pin.viewing_direction || 0),
-            viewingAngle: parseFloat(pin.viewingAngle || pin.viewing_angle || 60),
-            conicalView: pin.conicalView === true || pin.conical_view === true
-          };
-          
-          console.log('Added camera pin to result:', cameraPin);
-          cameraPins.push(cameraPin);
+            perceptionRange: parseFloat(pin.perceptionRange || 30),
+            viewingDirection: parseFloat(pin.viewingDirection || 0),
+            viewingAngle: parseFloat(pin.viewingAngle || 60),
+            conicalView: !!pin.conicalView
+          });
         } else {
           console.warn('Invalid coordinates for camera pin:', pin);
         }
       }
     });
     
-    console.log('Final camera pins result:', cameraPins);
+    console.log('Found camera pins:', cameraPins);
     return cameraPins;
   } catch (error) {
     console.error('Error getting camera pin locations:', error);
@@ -1149,44 +972,6 @@ function retryMapLoad() {
     // Reinitialize map
     initializeMap();
   }, 500);
-}
-
-// Create popup content based on pin type
-function createPopupHTML(pinData, pinType, isCamera) {
-  let popupHTML = '';
-  
-  if (isCamera) {
-    // Camera pin popup
-    popupHTML = `
-      <div class="camera-popup">
-        <h3>${pinData.cameraName || pinData.name || 'Camera'}</h3>
-        <p>${pinData.location || 'Location not specified'}</p>
-        <p><small>Status: ${pinData.status || 'Unknown'}</small></p>
-        ${pinData.id || pinData.cameraId ? `<p><small>Camera ID: ${pinData.id || pinData.cameraId}</small></p>` : ''}
-        ${pinData.rtmp_key ? `<p><small>RTMP Key: ${pinData.rtmp_key}</small></p>` : ''}
-        ${pinData.perceptionRange ? `<p><small>Perception Range: ${pinData.perceptionRange}m</small></p>` : ''}
-        ${pinData.viewingDirection !== undefined ? `<p><small>Direction: ${pinData.viewingDirection}°</small></p>` : ''}
-        ${pinData.viewingAngle !== undefined ? `<p><small>Field of View: ${pinData.viewingAngle}°</small></p>` : ''}
-        ${pinData.conicalView ? `<p><small>Viewing Mode: Directional</small></p>` : ''}
-        ${!pinData.conicalView && pinData.viewingAngle ? `<p><small>Viewing Mode: 360°</small></p>` : ''}
-        ${pinData.id || pinData.cameraId ? `<button class="delete-pin-btn" data-pin-id="${pinData.id || pinData.cameraId}">Delete Pin</button>` : ''}
-      </div>
-    `;
-  } else {
-    // Animal pin popup
-    const displayType = pinType.charAt(0).toUpperCase() + pinType.slice(1); // Capitalize first letter
-    popupHTML = `
-      <div class="pin-popup">
-        <h3>${displayType}</h3>
-        ${pinData.description ? `<p>${pinData.description}</p>` : ''}
-        ${pinData.detection_timestamp ? `<p><small>Detected: ${new Date(pinData.detection_timestamp).toLocaleString()}</small></p>` : ''}
-        ${pinData.camera_id ? `<p><small>Camera: ${pinData.camera_id}</small></p>` : ''}
-        ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
-      </div>
-    `;
-  }
-  
-  return popupHTML;
 }
 </script>
 
