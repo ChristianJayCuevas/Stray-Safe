@@ -151,6 +151,51 @@ function startPinPlacement() {
     }
     
     console.log('Found camera info:', cameraInfo);
+    
+    // Create a dialog to set directional information
+    if (confirm('Is this a directional camera? Click OK for directional, Cancel for standard 360° view.')) {
+        // Prompt for direction (0-359 degrees, where 0 is North)
+        let directionInput = prompt('Enter camera viewing direction in degrees (0-359, where 0 is North):', '0');
+        // Default to 0 if cancelled or invalid
+        let direction = 0; 
+        if (directionInput !== null) {
+            direction = parseInt(directionInput);
+            if (isNaN(direction) || direction < 0 || direction > 359) {
+                alert('Invalid direction. Using default of 0 degrees (North).');
+                direction = 0;
+            }
+        }
+        
+        // Prompt for viewing angle (10-180 degrees field of view)
+        let angleInput = prompt('Enter camera field of view in degrees (10-180):', '60');
+        // Default to 60 if cancelled or invalid
+        let angle = 60;
+        if (angleInput !== null) {
+            angle = parseInt(angleInput);
+            if (isNaN(angle) || angle < 10 || angle > 180) {
+                alert('Invalid angle. Using default of 60 degrees.');
+                angle = 60;
+            }
+        }
+        
+        // Set conical view to true with the provided direction and angle
+        cameraInfo.conicalView = true;
+        cameraInfo.viewingDirection = direction;
+        cameraInfo.viewingAngle = angle;
+        
+        console.log('Camera set with directional properties:', { 
+            direction: direction, 
+            angle: angle, 
+            conical: true 
+        });
+    } else {
+        // Standard 360° view
+        cameraInfo.conicalView = false;
+        cameraInfo.viewingDirection = 0;
+        cameraInfo.viewingAngle = 360;
+        console.log('Camera set with standard 360° view');
+    }
+    
     placingPinMode.value = true;
     showCameraDialog.value = false;
     
@@ -221,7 +266,11 @@ async function addCameraPin(coordinates, cameraInfo) {
         // Add perception range to camera info
         const cameraInfoWithRange = {
             ...cameraInfo,
-            perceptionRange: perceptionRange.value
+            perceptionRange: perceptionRange.value,
+            // Ensure directional information is included
+            conicalView: cameraInfo.conicalView || false,
+            viewingDirection: cameraInfo.viewingDirection !== undefined ? cameraInfo.viewingDirection : 0,
+            viewingAngle: cameraInfo.viewingAngle !== undefined ? cameraInfo.viewingAngle : 60
         };
         
         // Forward the addCameraPin call to the map component
@@ -248,13 +297,7 @@ async function addCameraPin(coordinates, cameraInfo) {
         return result;
     } catch (error) {
         console.error('Error in addCameraPin:', error);
-        addPinError.value = `Failed to add camera pin: ${error.message}`;
-        
-        // Clear error message after 5 seconds
-        setTimeout(() => {
-            addPinError.value = '';
-        }, 5000);
-        
+        addPinError.value = 'Failed to add camera pin: ' + error.message;
         throw error;
     }
 }
@@ -492,33 +535,82 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       console.log(`Using default coordinates for camera ${cameraId}:`, coordinates);
     }
     
-    // Use a much smaller radius to place animals very close to the camera
-    // We'll use a radius between 5-15 meters instead of the full perception range
-    const smallRadius = (5 + Math.random() * 10) * 0.000009; // 5-15 meters converted to degrees
+    // IMPROVED: Use a dynamic radius that varies by animal type and index
+    // Cats tend to stay closer to cameras, dogs might wander a bit further
+    let minRadius, maxRadius;
+    if (animalType === 'cat') {
+      minRadius = 3 + (index % 3); // 3-5 meters for cats
+      maxRadius = 8 + (index % 5); // 8-12 meters for cats
+    } else { // dog
+      minRadius = 5 + (index % 4); // 5-8 meters for dogs
+      maxRadius = 12 + (index % 8); // 12-19 meters for dogs
+    }
     
-    // Calculate position using a circle distribution around the camera
+    // Generate a random radius between min and max
+    const radius = (minRadius + Math.random() * (maxRadius - minRadius)) * 0.000009; // Convert to degrees
+    
+    // IMPROVED: Make positioning more natural with golden angle
+    // Using golden angle (137.5 degrees) helps create a more natural-looking distribution
+    // This avoids pins lining up in straight lines or simple patterns
+    const baseAngle = 137.5; // golden angle for natural distribution
     const pinCount = index || 0;
+    let angle;
     
-    // Calculate angle for positioning (distribute evenly in a circle)
-    // Each pin gets placed at a different angle around the camera
-    const angle = (pinCount * 45 + Math.random() * 20) % 360; // Add some randomness to the angle
+    // Check if camera has directional information
+    if (locationInfo.conicalView && locationInfo.viewingDirection !== undefined && 
+        locationInfo.viewingAngle !== undefined) {
+      // If it's a directional camera, place animals mostly within the viewing angle
+      // but with some chance to be outside (animals don't always stay in camera view)
+      const direction = parseFloat(locationInfo.viewingDirection);
+      const viewAngle = parseFloat(locationInfo.viewingAngle);
+      
+      // 80% chance to be within viewing angle, 20% chance to be anywhere
+      if (Math.random() < 0.8) {
+        // Calculate a random angle within the camera's viewing direction ± half of viewing angle
+        const halfAngle = viewAngle / 2;
+        const minAngle = direction - halfAngle;
+        const maxAngle = direction + halfAngle;
+        
+        // Get a random angle within the cone
+        angle = minAngle + Math.random() * (maxAngle - minAngle);
+        
+        // Add a small variation based on golden angle and index for better distribution
+        angle += (pinCount * 13.7) % 20 - 10; // Add variation of ±10 degrees
+      } else {
+        // Place randomly around the camera but away from the viewing direction
+        // This simulates animals that might be behind or to the sides of the camera
+        angle = (direction + 180 + (Math.random() * 180 - 90)) % 360;
+      }
+    } else {
+      // For non-directional cameras, distribute around the full circle using golden angle
+      angle = (pinCount * baseAngle) % 360;
+      
+      // Add randomness to the angle, more randomness for higher pin counts
+      // This prevents animals from forming too regular patterns
+      const randomFactor = Math.min(45, 15 + pinCount * 5); // More randomness as pins increase
+      angle += (Math.random() * randomFactor * 2) - randomFactor;
+    }
+    
+    // Convert to radians
     const radian = angle * (Math.PI / 180);
     
     // Calculate the offset from the camera position
-    const offsetLat = smallRadius * Math.sin(radian);
-    const offsetLng = smallRadius * Math.cos(radian);
+    const offsetLat = radius * Math.sin(radian);
+    const offsetLng = radius * Math.cos(radian);
     
-    // Add a tiny bit of randomness to make it look natural
-    const jitterLat = smallRadius * 0.2 * (Math.random() * 2 - 1);
-    const jitterLng = smallRadius * 0.2 * (Math.random() * 2 - 1);
+    // Add a bit of natural jitter to make it look realistic
+    // Jitter increases slightly with distance to simulate more wandering at greater distances
+    const jitterFactor = 0.15 + (radius * 1000); // More jitter for pins further away
+    const jitterLat = radius * jitterFactor * (Math.random() * 2 - 1);
+    const jitterLng = radius * jitterFactor * (Math.random() * 2 - 1);
     
-    // Final position close to the camera
+    // Final position around the camera
     const animalPosition = {
       lat: coordinates.lat + offsetLat + jitterLat,
       lng: coordinates.lng + offsetLng + jitterLng
     };
     
-    console.log(`Placing ${animalType} pin at angle ${angle}° close to camera ${cameraId}`);
+    console.log(`Placing ${animalType} pin at angle ${angle.toFixed(1)}° and distance ${(radius/0.000009).toFixed(1)}m from camera ${cameraId}`);
     
     // Create timestamp for detection (now)
     const timestamp = new Date().toISOString();

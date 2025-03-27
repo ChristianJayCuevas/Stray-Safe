@@ -387,9 +387,13 @@ function createMarker(pinData) {
           <h3>${pinData.cameraName || pinData.name || 'Camera'}</h3>
           <p>${pinData.location || 'Location not specified'}</p>
           <p><small>Status: ${pinData.status || 'Unknown'}</small></p>
+          ${pinData.id || pinData.cameraId ? `<p><small>Camera ID: ${pinData.id || pinData.cameraId}</small></p>` : ''}
+          ${pinData.rtmp_key ? `<p><small>RTMP Key: ${pinData.rtmp_key}</small></p>` : ''}
           ${pinData.perceptionRange ? `<p><small>Perception Range: ${pinData.perceptionRange}m</small></p>` : ''}
           ${pinData.viewingDirection !== undefined ? `<p><small>Direction: ${pinData.viewingDirection}°</small></p>` : ''}
           ${pinData.viewingAngle !== undefined ? `<p><small>Field of View: ${pinData.viewingAngle}°</small></p>` : ''}
+          ${pinData.conicalView ? `<p><small>Viewing Mode: Directional</small></p>` : ''}
+          ${!pinData.conicalView && pinData.viewingAngle ? `<p><small>Viewing Mode: 360°</small></p>` : ''}
           ${pinData.id || pinData.cameraId ? `<button class="delete-pin-btn" data-pin-id="${pinData.id || pinData.cameraId}">Delete Pin</button>` : ''}
         </div>
       `;
@@ -401,6 +405,7 @@ function createMarker(pinData) {
           <h3>${displayType}</h3>
           ${pinData.description ? `<p>${pinData.description}</p>` : ''}
           ${pinData.detection_timestamp ? `<p><small>Detected: ${new Date(pinData.detection_timestamp).toLocaleString()}</small></p>` : ''}
+          ${pinData.camera_id ? `<p><small>Camera: ${pinData.camera_id}</small></p>` : ''}
           ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
         </div>
       `;
@@ -516,7 +521,7 @@ async function addCameraPin(coordinates, cameraInfo) {
     const cameraId = cameraInfo.rtmp_key || cameraInfo.id || '';
     console.log('Using camera ID:', cameraId);
     
-    // Create camera pin data object
+    // Create camera pin data object with all available information
     const pinData = {
       coordinates: coordinates,
       id: cameraId, // Set ID directly to rtmp_key/id
@@ -531,7 +536,14 @@ async function addCameraPin(coordinates, cameraInfo) {
       type: 'Camera',
       isCamera: true,
       perceptionRange: parseFloat(cameraInfo.perceptionRange || 30),
-      status: 'active'
+      // Store directional properties
+      viewingDirection: cameraInfo.viewingDirection !== undefined ? parseFloat(cameraInfo.viewingDirection) : 0,
+      viewingAngle: cameraInfo.viewingAngle !== undefined ? parseFloat(cameraInfo.viewingAngle) : 60,
+      conicalView: cameraInfo.conicalView !== undefined ? !!cameraInfo.conicalView : false,
+      // Add additional properties for persistence
+      originalId: cameraInfo.originalId || cameraInfo.original_id || cameraInfo.id,
+      original_id: cameraInfo.originalId || cameraInfo.original_id || cameraInfo.id,
+      status: cameraInfo.status || 'active'
     };
     
     // Create the marker
@@ -552,7 +564,13 @@ async function addCameraPin(coordinates, cameraInfo) {
         rtmp_key: cameraInfo.rtmp_key || cameraInfo.id,
         camera_name: cameraInfo.name || '',
         location: cameraInfo.location || '',
-        hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : ''
+        hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : '',
+        // Include directional and perception properties
+        viewing_direction: pinData.viewingDirection,
+        viewing_angle: pinData.viewingAngle,
+        conical_view: pinData.conicalView,
+        perception_range: pinData.perceptionRange,
+        original_id: pinData.original_id
       };
       
       console.log('Sending formatted payload to API:', payload);
@@ -576,6 +594,16 @@ async function addCameraPin(coordinates, cameraInfo) {
         if (pinIndex !== -1) {
           pinsList.value[pinIndex].id = response.data.id;
           console.log("Updated pin with API-provided ID:", response.data.id);
+        }
+      }
+      
+      // If API response has additional camera data, update our local reference
+      if (response.data.pin && Object.keys(response.data.pin).length > 0) {
+        const pinIndex = pinsList.value.findIndex(pin => pin.id === cameraId || pin.cameraId === cameraId);
+        if (pinIndex !== -1) {
+          // Merge any new data from the API response with our local pin data
+          pinsList.value[pinIndex] = { ...pinsList.value[pinIndex], ...response.data.pin };
+          console.log("Updated pin with API data:", pinsList.value[pinIndex]);
         }
       }
       
