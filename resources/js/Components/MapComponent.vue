@@ -305,6 +305,19 @@ async function fetchPins() {
         const isCamera = pin.is_camera === true || pin.animal_type === 'Camera';
         console.log(`Processing pin ID ${pin.id}, type: ${isCamera ? 'Camera' : pin.animal_type}`);
         
+        // Convert string "true"/"false" to boolean if needed
+        let conicalView = false;
+        if (typeof pin.conical_view === 'boolean') {
+          conicalView = pin.conical_view;
+        } else if (pin.conical_view === 'true' || pin.conical_view === '1' || pin.conical_view === 1) {
+          conicalView = true;
+        }
+        
+        console.log(`Pin ${pin.id} conical view:`, {
+          original: pin.conical_view,
+          converted: conicalView
+        });
+        
         // Create a full pin object with all available properties
         const pinData = {
           id: pin.id,
@@ -328,7 +341,7 @@ async function fetchPins() {
           perceptionRange: parseFloat(pin.perception_range || 30),
           viewingDirection: parseFloat(pin.viewing_direction || 0),
           viewingAngle: parseFloat(pin.viewing_angle || 60),
-          conicalView: pin.conical_view === true,
+          conicalView: conicalView,
           
           // Additional properties
           detection_timestamp: pin.detection_timestamp,
@@ -347,6 +360,38 @@ async function fetchPins() {
           pinData.marker = marker;
           pinsList.value.push(pinData);
           console.log(`Added pin ID ${pin.id} to pinsList`);
+          
+          // Ensure the perception range is visible
+          // If this failed during marker creation, try again directly
+          if (isCamera && pinData.perceptionRange) {
+            if (pinData.conicalView && 
+                pinData.viewingDirection !== undefined && 
+                pinData.viewingAngle !== undefined) {
+              // Re-add the conical perception range if not already visible
+              const coneId = `cone-${pinData.id}`;
+              if (!map.value.getLayer(coneId)) {
+                console.log(`Ensuring conical view is visible for camera ${pinData.id}`);
+                addConicalPerceptionRange(
+                  coordinates,
+                  pinData.perceptionRange,
+                  pinData.viewingDirection,
+                  pinData.viewingAngle,
+                  pinData.id
+                );
+              }
+            } else {
+              // Re-add the circular perception range if not already visible
+              const circleId = `perception-circle-${pinData.id}`;
+              if (!map.value.getLayer(circleId)) {
+                console.log(`Ensuring perception circle is visible for camera ${pinData.id}`);
+                addPerceptionRangeCircle(
+                  coordinates,
+                  pinData.perceptionRange,
+                  pinData.id
+                );
+              }
+            }
+          }
         } else {
           console.error(`Failed to create marker for pin ID ${pin.id}`);
         }
@@ -427,8 +472,15 @@ function createMarker(pinData) {
       marker.className = 'custom-marker camera-marker';
       marker.innerHTML = '<i class="fas fa-video"></i>';
       
+      console.log(`Camera pin settings for ${pinData.id}:`, {
+        conicalView: pinData.conicalView,
+        viewingDirection: pinData.viewingDirection,
+        viewingAngle: pinData.viewingAngle
+      });
+      
       // Add direction indicator if this is a directional camera
-      if (pinData.conicalView && pinData.viewingDirection !== undefined) {
+      if (pinData.conicalView === true && pinData.viewingDirection !== undefined) {
+        console.log(`Adding direction indicator for camera ${pinData.id} pointing at ${pinData.viewingDirection}°`);
         const directionIndicator = document.createElement('div');
         directionIndicator.className = 'camera-direction-indicator';
         directionIndicator.style.transform = `rotate(${pinData.viewingDirection}deg)`;
@@ -436,8 +488,11 @@ function createMarker(pinData) {
       }
       
       // Add perception range visualization
-      if (pinData.conicalView && pinData.viewingDirection !== undefined && pinData.viewingAngle !== undefined) {
+      if (pinData.conicalView === true && 
+          pinData.viewingDirection !== undefined && 
+          pinData.viewingAngle !== undefined) {
         // Use conical perception range
+        console.log(`Adding conical perception range for camera ${pinData.id} with direction ${pinData.viewingDirection}° and angle ${pinData.viewingAngle}°`);
         addConicalPerceptionRange(
           mapboxCoords, 
           pinData.perceptionRange || 30, 
@@ -447,6 +502,7 @@ function createMarker(pinData) {
         );
       } else if (pinData.perceptionRange) {
         // Use circular perception range as fallback
+        console.log(`Adding circular perception range for camera ${pinData.id}`);
         addPerceptionRangeCircle(
           mapboxCoords, 
           pinData.perceptionRange, 
@@ -947,10 +1003,14 @@ async function getCameraPinLocations() {
         
         // Verify that the parsed coordinates are valid numbers
         if (coordinates && !isNaN(coordinates.lat) && !isNaN(coordinates.lng)) {
+          // Preserve the original rtmp_key if it exists
+          const rtmpKey = pin.rtmp_key || pin.cameraId || pin.id;
+          console.log(`Camera pin ${pin.id} rtmp_key:`, rtmpKey);
+          
           cameraPins.push({
             id: pin.cameraId || pin.id,
             cameraId: pin.cameraId || pin.id,
-            rtmp_key: pin.rtmp_key || pin.cameraId || pin.id,
+            rtmp_key: rtmpKey,
             original_id: pin.original_id || pin.cameraId || pin.id,
             name: pin.cameraName || pin.name || 'Unknown Camera',
             location: pin.location || 'Unknown Location',

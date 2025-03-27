@@ -78,7 +78,9 @@ async function fetchCCTVs() {
                     id: stream.id,
                     name: stream.name || 'Unnamed Camera',
                     location: stream.location || 'Unknown Location',
-                    videoSrc: [stream.hls_url.replace('http://', 'https://')]
+                    videoSrc: [stream.hls_url.replace('http://', 'https://')],
+                    rtmp_key: stream.rtmp_key || stream.id, // Capture rtmp_key from API
+                    original_id: stream.id // Store original ID for reference
                 };
                 
                 console.log('Mapped camera:', camera);
@@ -99,7 +101,9 @@ async function fetchCCTVs() {
             id: 'main-camera',
             name: 'Main Camera',
             location: 'Main Gate',
-            videoSrc: ['https://straysafe.me/hls/main-camera.m3u8']
+            videoSrc: ['https://straysafe.me/hls/main-camera.m3u8'],
+            rtmp_key: 'main-camera',
+            original_id: 'main-camera'
         }];
         
         console.log('Using fallback camera data:', availableCCTVs.value);
@@ -182,7 +186,7 @@ function startPinPlacement() {
         viewingDirection: viewingDirection,
         viewingAngle: viewingAngle,
         conicalView: isDirectional,
-        rtmp_key: cameraInfo.id, // Make sure to include rtmp_key
+        rtmp_key: cameraInfo.rtmp_key || cameraInfo.id, // Use the RTMP key from the API if available
         original_id: cameraInfo.id, // Store original ID for reference
     };
     
