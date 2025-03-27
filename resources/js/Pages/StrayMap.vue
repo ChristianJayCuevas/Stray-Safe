@@ -74,14 +74,9 @@ async function fetchCCTVs() {
         availableCCTVs.value = streams
             .filter(stream => stream.status === 'active') // Only show online cameras
             .map(stream => {
-                // Use rtmp_key as the primary identifier if available, otherwise use id
-                const cameraKey = stream.rtmp_key || stream.id;
-                
                 const camera = {
-                    id: cameraKey, // This is what will be selected in the dropdown
-                    rtmp_key: stream.rtmp_key, // Store original rtmp_key
-                    original_id: stream.id, // Store original ID
-                    name: stream.name || `Camera ${cameraKey}`,
+                    id: stream.id,
+                    name: stream.name || 'Unnamed Camera',
                     location: stream.location || 'Unknown Location',
                     videoSrc: [stream.hls_url.replace('http://', 'https://')]
                 };
@@ -102,8 +97,6 @@ async function fetchCCTVs() {
         // Use sample data if API fails
         availableCCTVs.value = [{
             id: 'main-camera',
-            rtmp_key: 'main-camera',
-            original_id: 'main-camera',
             name: 'Main Camera',
             location: 'Main Gate',
             videoSrc: ['https://straysafe.me/hls/main-camera.m3u8']
@@ -151,51 +144,6 @@ function startPinPlacement() {
     }
     
     console.log('Found camera info:', cameraInfo);
-    
-    // Create a dialog to set directional information
-    if (confirm('Is this a directional camera? Click OK for directional, Cancel for standard 360° view.')) {
-        // Prompt for direction (0-359 degrees, where 0 is North)
-        let directionInput = prompt('Enter camera viewing direction in degrees (0-359, where 0 is North):', '0');
-        // Default to 0 if cancelled or invalid
-        let direction = 0; 
-        if (directionInput !== null) {
-            direction = parseInt(directionInput);
-            if (isNaN(direction) || direction < 0 || direction > 359) {
-                alert('Invalid direction. Using default of 0 degrees (North).');
-                direction = 0;
-            }
-        }
-        
-        // Prompt for viewing angle (10-180 degrees field of view)
-        let angleInput = prompt('Enter camera field of view in degrees (10-180):', '60');
-        // Default to 60 if cancelled or invalid
-        let angle = 60;
-        if (angleInput !== null) {
-            angle = parseInt(angleInput);
-            if (isNaN(angle) || angle < 10 || angle > 180) {
-                alert('Invalid angle. Using default of 60 degrees.');
-                angle = 60;
-            }
-        }
-        
-        // Set conical view to true with the provided direction and angle
-        cameraInfo.conicalView = true;
-        cameraInfo.viewingDirection = direction;
-        cameraInfo.viewingAngle = angle;
-        
-        console.log('Camera set with directional properties:', { 
-            direction: direction, 
-            angle: angle, 
-            conical: true 
-        });
-    } else {
-        // Standard 360° view
-        cameraInfo.conicalView = false;
-        cameraInfo.viewingDirection = 0;
-        cameraInfo.viewingAngle = 360;
-        console.log('Camera set with standard 360° view');
-    }
-    
     placingPinMode.value = true;
     showCameraDialog.value = false;
     
@@ -266,11 +214,7 @@ async function addCameraPin(coordinates, cameraInfo) {
         // Add perception range to camera info
         const cameraInfoWithRange = {
             ...cameraInfo,
-            perceptionRange: perceptionRange.value,
-            // Ensure directional information is included
-            conicalView: cameraInfo.conicalView || false,
-            viewingDirection: cameraInfo.viewingDirection !== undefined ? cameraInfo.viewingDirection : 0,
-            viewingAngle: cameraInfo.viewingAngle !== undefined ? cameraInfo.viewingAngle : 60
+            perceptionRange: perceptionRange.value
         };
         
         // Forward the addCameraPin call to the map component
@@ -297,16 +241,19 @@ async function addCameraPin(coordinates, cameraInfo) {
         return result;
     } catch (error) {
         console.error('Error in addCameraPin:', error);
-        addPinError.value = 'Failed to add camera pin: ' + error.message;
+        addPinError.value = `Failed to add camera pin: ${error.message}`;
+        
+        // Clear error message after 5 seconds
+        setTimeout(() => {
+            addPinError.value = '';
+        }, 5000);
+        
         throw error;
     }
 }
 
 // Check for new detections by comparing current with previous counts
 async function checkForNewDetections(currentCounters) {
-  // Debug current detections
-  console.log('Checking for new detections, current counters:', currentCounters);
-  
   // Fetch camera streams data to get locations
   let streams = [];
   try {
@@ -319,172 +266,152 @@ async function checkForNewDetections(currentCounters) {
   }
   
   // Create a map of camera IDs to their locations
-  // Use rtmp_key as the primary ID if available, otherwise use id
   const streamLocations = {};
   streams.forEach(stream => {
+    // First try to use rtmp_key if available, otherwise fall back to id
     const streamId = stream.rtmp_key || stream.id;
+    
     streamLocations[streamId] = {
-      id: streamId, // Use rtmp_key/id consistently
-      rtmp_key: stream.rtmp_key, // Store rtmp_key explicitly
+      id: stream.id,
+      rtmp_key: stream.rtmp_key || stream.id,
+      original_id: stream.id,
       name: stream.name || 'Unnamed Camera',
       location: stream.location || 'Unknown Location',
       coordinates: null, // Will be filled in based on existing pins
-      perceptionRange: 30 // Default perception range
+      perceptionRange: 30, // Default perception range
+      conicalView: false, // Default to non-directional
+      viewingDirection: 0,
+      viewingAngle: 360
     };
-    console.log(`Stream ${streamId} added to locations map`);
+    
+    // If we create an entry with rtmp_key, also create a fallback entry with ID
+    // This ensures we can match cameras even if the identification method varies
+    if (stream.rtmp_key && stream.rtmp_key !== stream.id) {
+      streamLocations[stream.id] = { ...streamLocations[streamId] };
+    }
   });
   
+  console.log('Created stream locations map:', streamLocations);
+  
   // Get existing camera pin locations from the map
+  let cameraPins = [];
   if (mapRef.value) {
     try {
-      const cameraPins = await mapRef.value.getCameraPinLocations();
+      cameraPins = await mapRef.value.getCameraPinLocations();
       console.log('Current camera pin locations:', cameraPins);
-      
-      // If no camera pins found, log a warning
-      if (!cameraPins || cameraPins.length === 0) {
-        console.warn('No camera pins found on the map. Make sure to place camera pins before monitoring detections.');
-      }
       
       // Match stream IDs with camera pin locations
       cameraPins.forEach(pin => {
-        // Try different ways to get the ID
+        // Try matching with both rtmp_key and id
         const pinId = pin.rtmp_key || pin.id;
-        console.log(`Checking camera pin with ID: ${pinId}`);
         
-        // Try direct match first (using rtmp_key is now the preferred method)
-        if (streamLocations[pinId]) {
-          console.log(`✅ Direct match found for camera with ID: ${pinId}`);
+        // Check for direct match with stream ID
+        if (pinId && streamLocations[pinId]) {
+          console.log(`Found direct match for camera pin ${pinId}`);
           streamLocations[pinId].coordinates = pin.coordinates;
-          
-          // Copy over any additional properties
-          if (pin.perceptionRange) {
-            streamLocations[pinId].perceptionRange = pin.perceptionRange;
-          }
-          if (pin.viewingDirection !== undefined) {
-            streamLocations[pinId].viewingDirection = pin.viewingDirection;
-            streamLocations[pinId].conicalView = true;
-          }
-          if (pin.viewingAngle !== undefined) {
-            streamLocations[pinId].viewingAngle = pin.viewingAngle;
-          }
-        } else {
-          // Try to find a partial match or another stream ID that might correspond
-          console.log(`⚠️ No direct match for ${pinId}, checking for partial matches...`);
-          
-          // Find a stream ID that matches (or contains) the pin ID
-          const matchingStreamId = Object.keys(streamLocations).find(streamId => 
-            // Check if either contains the other
-            pinId.includes(streamId) || streamId.includes(pinId)
-          );
-          
-          if (matchingStreamId) {
-            console.log(`✅ Partial match found: Pin ID ${pinId} matches stream ID ${matchingStreamId}`);
-            streamLocations[matchingStreamId].coordinates = pin.coordinates;
-            
-            // Copy over any additional properties
-            if (pin.perceptionRange) {
-              streamLocations[matchingStreamId].perceptionRange = pin.perceptionRange;
+          streamLocations[pinId].perceptionRange = pin.perceptionRange;
+          streamLocations[pinId].conicalView = pin.conicalView;
+          streamLocations[pinId].viewingDirection = pin.viewingDirection;
+          streamLocations[pinId].viewingAngle = pin.viewingAngle;
+        } 
+        // Also match with all IDs that might contain the pin ID
+        else {
+          for (const streamId in streamLocations) {
+            // If streamId contains pinId or pinId contains streamId, it's likely a match
+            if (streamId.includes(pinId) || (pinId && pinId.includes(streamId))) {
+              console.log(`Found partial match between camera pin ${pinId} and stream ${streamId}`);
+              streamLocations[streamId].coordinates = pin.coordinates;
+              streamLocations[streamId].perceptionRange = pin.perceptionRange;
+              streamLocations[streamId].conicalView = pin.conicalView;
+              streamLocations[streamId].viewingDirection = pin.viewingDirection;
+              streamLocations[streamId].viewingAngle = pin.viewingAngle;
             }
-            if (pin.viewingDirection !== undefined) {
-              streamLocations[matchingStreamId].viewingDirection = pin.viewingDirection;
-              streamLocations[matchingStreamId].conicalView = true;
-            }
-            if (pin.viewingAngle !== undefined) {
-              streamLocations[matchingStreamId].viewingAngle = pin.viewingAngle;
-            }
-          } else {
-            console.log(`❌ No matching stream found for camera pin: ${pinId}`);
           }
         }
       });
     } catch (error) {
-      console.error('Error getting camera pins:', error);
+      console.error('Error getting camera pin locations:', error);
     }
   }
   
-  // Log the stream locations after matching with pins
-  console.log('Stream locations after matching with pins:', streamLocations);
-  
   // Iterate through cameras in current counters
-  for (const counterId in currentCounters) {
-    // Try to find a matching stream location
-    let matchingStreamId = null;
+  for (const cameraId in currentCounters) {
+    // Try to find matching stream location for this camera ID
+    let locationInfo = null;
     
     // First try direct match
-    if (streamLocations[counterId] && streamLocations[counterId].coordinates) {
-      matchingStreamId = counterId;
-      console.log(`✅ Found direct match for counter ID ${counterId}`);
+    if (streamLocations[cameraId]) {
+      locationInfo = streamLocations[cameraId];
+      console.log(`Found direct match for counter ID ${cameraId}`);
     } else {
-      // Try to find a partial match
-      console.log(`⚠️ No direct match for counter ID ${counterId}, checking partial matches...`);
-      matchingStreamId = Object.keys(streamLocations).find(streamId => 
-        (streamId.includes(counterId) || counterId.includes(streamId)) && 
-        streamLocations[streamId].coordinates
-      );
-      
-      if (matchingStreamId) {
-        console.log(`✅ Found partial match: Counter ID ${counterId} matches stream ID ${matchingStreamId}`);
-      } else {
-        console.log(`❌ Skipping camera ${counterId} as it doesn't have a pin on the map`);
-        continue;
+      // Try partial matching
+      for (const streamId in streamLocations) {
+        if (streamId.includes(cameraId) || cameraId.includes(streamId)) {
+          locationInfo = streamLocations[streamId];
+          console.log(`Found partial match for counter ID ${cameraId} with stream ${streamId}`);
+          break;
+        }
       }
     }
     
-    // We have a matching stream with coordinates
-    const locationInfo = streamLocations[matchingStreamId];
+    // Skip cameras that don't have pins placed on the map
+    if (!locationInfo || !locationInfo.coordinates) {
+      console.log(`Skipping camera ${cameraId} as it doesn't have a pin on the map`);
+      continue;
+    }
     
-    if (!previousDetections.value[counterId]) {
+    if (!previousDetections.value[cameraId]) {
       // This is a new camera, treat all detections as new
-      previousDetections.value[counterId] = { cat: 0, dog: 0 };
+      previousDetections.value[cameraId] = { cat: 0, dog: 0 };
       
       // First time seeing this camera - create pins for all existing detections
-      const initialDetections = currentCounters[counterId];
+      const initialDetections = currentCounters[cameraId];
       
       // Create cat pins for the initial count
       if (initialDetections.cat > 0) {
-        console.log(`Adding ${initialDetections.cat} initial cat pins for camera ${counterId}`);
+        console.log(`Adding ${initialDetections.cat} initial cat pins for camera ${cameraId}`);
         // Create pins one by one to ensure proper distribution
         for (let i = 0; i < initialDetections.cat; i++) {
-          await createAnimalDetectionPin(counterId, 'cat', 1, locationInfo, i);
+          await createAnimalDetectionPin(cameraId, 'cat', 1, locationInfo, i);
         }
       }
       
       // Create dog pins for the initial count
       if (initialDetections.dog > 0) {
-        console.log(`Adding ${initialDetections.dog} initial dog pins for camera ${counterId}`);
+        console.log(`Adding ${initialDetections.dog} initial dog pins for camera ${cameraId}`);
         // Create pins one by one to ensure proper distribution
         for (let i = 0; i < initialDetections.dog; i++) {
-          await createAnimalDetectionPin(counterId, 'dog', 1, locationInfo, i);
+          await createAnimalDetectionPin(cameraId, 'dog', 1, locationInfo, i);
         }
       }
       
       // Set the previous detections to match current, as we've created pins for all
-      previousDetections.value[counterId] = { ...initialDetections };
+      previousDetections.value[cameraId] = { ...initialDetections };
       continue; // Skip to next camera, as we've handled this one
     }
     
-    const current = currentCounters[counterId];
-    const previous = previousDetections.value[counterId];
+    const current = currentCounters[cameraId];
+    const previous = previousDetections.value[cameraId];
     
     // Check for new cat detections
     if (current.cat > previous.cat) {
       const newCats = current.cat - previous.cat;
-      console.log(`Detected ${newCats} new cat(s) on camera ${counterId}`);
+      console.log(`Detected ${newCats} new cat(s) on camera ${cameraId}`);
       
       // Create a pin for each new cat, with different positions
       for (let i = 0; i < newCats; i++) {
-        await createAnimalDetectionPin(counterId, 'cat', 1, locationInfo, i);
+        await createAnimalDetectionPin(cameraId, 'cat', 1, locationInfo, i);
       }
     }
     
     // Check for new dog detections
     if (current.dog > previous.dog) {
       const newDogs = current.dog - previous.dog;
-      console.log(`Detected ${newDogs} new dog(s) on camera ${counterId}`);
+      console.log(`Detected ${newDogs} new dog(s) on camera ${cameraId}`);
       
       // Create a pin for each new dog, with different positions
       for (let i = 0; i < newDogs; i++) {
-        await createAnimalDetectionPin(counterId, 'dog', 1, locationInfo, i);
+        await createAnimalDetectionPin(cameraId, 'dog', 1, locationInfo, i);
       }
     }
   }
@@ -535,7 +462,7 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       console.log(`Using default coordinates for camera ${cameraId}:`, coordinates);
     }
     
-    // IMPROVED: Use a dynamic radius that varies by animal type and index
+    // IMPROVED: Different radius range for different animal types
     // Cats tend to stay closer to cameras, dogs might wander a bit further
     let minRadius, maxRadius;
     if (animalType === 'cat') {
@@ -546,71 +473,85 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       maxRadius = 12 + (index % 8); // 12-19 meters for dogs
     }
     
-    // Generate a random radius between min and max
-    const radius = (minRadius + Math.random() * (maxRadius - minRadius)) * 0.000009; // Convert to degrees
+    // Generate a random radius between min and max (in meters)
+    const radiusInMeters = minRadius + Math.random() * (maxRadius - minRadius);
     
-    // IMPROVED: Make positioning more natural with golden angle
-    // Using golden angle (137.5 degrees) helps create a more natural-looking distribution
-    // This avoids pins lining up in straight lines or simple patterns
-    const baseAngle = 137.5; // golden angle for natural distribution
-    const pinCount = index || 0;
+    // Convert radius from meters to approximate degrees
+    // 1 degree is about 111km at equator, so 1m is roughly 0.000009 degrees
+    const radius = radiusInMeters * 0.000009;
+    
+    console.log(`Using radius of ${radiusInMeters.toFixed(1)}m for ${animalType} detection on camera ${cameraId}`);
+    
+    // Check if camera has directional information (conical view)
     let angle;
+    const hasConicalView = locationInfo.conicalView === true || 
+                           locationInfo.conical_view === true;
     
-    // Check if camera has directional information
-    if (locationInfo.conicalView && locationInfo.viewingDirection !== undefined && 
-        locationInfo.viewingAngle !== undefined) {
-      // If it's a directional camera, place animals mostly within the viewing angle
-      // but with some chance to be outside (animals don't always stay in camera view)
-      const direction = parseFloat(locationInfo.viewingDirection);
-      const viewAngle = parseFloat(locationInfo.viewingAngle);
+    const viewingDirection = parseFloat(locationInfo.viewingDirection || 
+                                        locationInfo.viewing_direction || 0);
+                                        
+    const viewingAngle = parseFloat(locationInfo.viewingAngle || 
+                                     locationInfo.viewing_angle || 360);
+    
+    if (hasConicalView && viewingAngle < 360) {
+      console.log(`Camera ${cameraId} has conical view: direction=${viewingDirection}°, angle=${viewingAngle}°`);
       
       // 80% chance to be within viewing angle, 20% chance to be anywhere
       if (Math.random() < 0.8) {
-        // Calculate a random angle within the camera's viewing direction ± half of viewing angle
-        const halfAngle = viewAngle / 2;
-        const minAngle = direction - halfAngle;
-        const maxAngle = direction + halfAngle;
+        // Place the animal within the camera's viewing cone
+        // Divide the viewing angle into segments based on how many animals we're placing
+        const halfAngle = viewingAngle / 2;
+        const segmentSize = Math.min(30, viewingAngle / 2);  // Max 30 degrees per segment
         
-        // Get a random angle within the cone
+        // Calculate base position in the cone, with variation based on index
+        const basePosition = (index % 3) - 1;  // -1, 0, or 1 to spread across the cone
+        
+        // Calculate a random angle within the camera's viewing direction ± half of viewing angle
+        const minAngle = viewingDirection - halfAngle + (basePosition * segmentSize);
+        const maxAngle = minAngle + segmentSize;
+        
+        // Get a random angle within this segment
         angle = minAngle + Math.random() * (maxAngle - minAngle);
         
-        // Add a small variation based on golden angle and index for better distribution
-        angle += (pinCount * 13.7) % 20 - 10; // Add variation of ±10 degrees
+        // Add small random variation to avoid perfect alignment
+        angle += (Math.random() * 10) - 5;  // ±5 degrees random variation
+        
+        console.log(`Placing ${animalType} inside conical view at angle ${angle.toFixed(1)}° (direction=${viewingDirection}°±${halfAngle}°)`);
       } else {
-        // Place randomly around the camera but away from the viewing direction
+        // Place randomly around the camera but outside the viewing direction
         // This simulates animals that might be behind or to the sides of the camera
-        angle = (direction + 180 + (Math.random() * 180 - 90)) % 360;
+        const outsideDirection = (viewingDirection + 180 + (Math.random() * 180 - 90)) % 360;
+        angle = outsideDirection;
+        console.log(`Placing ${animalType} outside conical view at angle ${angle.toFixed(1)}°`);
       }
     } else {
-      // For non-directional cameras, distribute around the full circle using golden angle
-      angle = (pinCount * baseAngle) % 360;
+      // Standard 360-degree camera or no directional information
+      // Use golden angle (137.5°) for more natural distribution
+      const baseAngle = 137.5;
+      angle = (index * baseAngle) % 360;
       
-      // Add randomness to the angle, more randomness for higher pin counts
-      // This prevents animals from forming too regular patterns
-      const randomFactor = Math.min(45, 15 + pinCount * 5); // More randomness as pins increase
-      angle += (Math.random() * randomFactor * 2) - randomFactor;
+      // Add randomness to prevent animals from forming patterns
+      angle += (Math.random() * 40) - 20;  // ±20 degrees random variation
+      console.log(`Placing ${animalType} in 360° view at angle ${angle.toFixed(1)}°`);
     }
     
-    // Convert to radians
+    // Convert to radians for Math functions
     const radian = angle * (Math.PI / 180);
     
     // Calculate the offset from the camera position
     const offsetLat = radius * Math.sin(radian);
     const offsetLng = radius * Math.cos(radian);
     
-    // Add a bit of natural jitter to make it look realistic
-    // Jitter increases slightly with distance to simulate more wandering at greater distances
-    const jitterFactor = 0.15 + (radius * 1000); // More jitter for pins further away
+    // Add natural jitter to make it look more realistic
+    const jitterFactor = 0.2;  // 20% jitter for natural look
     const jitterLat = radius * jitterFactor * (Math.random() * 2 - 1);
     const jitterLng = radius * jitterFactor * (Math.random() * 2 - 1);
     
-    // Final position around the camera
+    // Final position
     const animalPosition = {
       lat: coordinates.lat + offsetLat + jitterLat,
       lng: coordinates.lng + offsetLng + jitterLng
     };
-    
-    console.log(`Placing ${animalType} pin at angle ${angle.toFixed(1)}° and distance ${(radius/0.000009).toFixed(1)}m from camera ${cameraId}`);
     
     // Create timestamp for detection (now)
     const timestamp = new Date().toISOString();
@@ -618,7 +559,7 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
     // Camera name for description
     const cameraName = locationInfo.name || 'Unknown Camera';
     
-    // Create animal pin payload
+    // Create animal pin payload with all camera information
     const pinData = {
       lat: animalPosition.lat,
       lng: animalPosition.lng,
@@ -629,15 +570,15 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       is_automated: true,
       is_camera: false,
       status: 'active',
-      camera_id: cameraId, // The counter ID
-      rtmp_key: locationInfo.rtmp_key, // Include the rtmp_key
-      original_stream_id: locationInfo.id, // Include the original stream ID
+      camera_id: cameraId,
+      rtmp_key: locationInfo.rtmp_key, // Include the rtmp_key for better matching
+      original_id: locationInfo.original_id, // Include original ID for better matching
       perception_range: parseFloat(locationInfo.perceptionRange || 30) // Include the perception range in the pin data
     };
     
     // Add the pin to the map
     if (mapRef.value) {
-      console.log(`Adding ${animalType} detection pin:`, pinData);
+      console.log(`Adding ${animalType} detection pin at angle ${angle.toFixed(1)}° and distance ${radiusInMeters.toFixed(1)}m:`, pinData);
       const result = await mapRef.value.addAnimalPin(pinData);
       console.log('Animal detection pin added result:', result);
       return result;
