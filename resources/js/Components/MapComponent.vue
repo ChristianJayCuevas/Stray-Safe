@@ -310,14 +310,9 @@ function createMarker(pinData) {
       return null;
     }
     
-    // Store pin ID information - ensure various ID formats are handled
-    const pinId = pinData.id || pinData.cameraId || pinData.camera_id || `pin-${Date.now()}`;
-    console.log(`Pin ID for this marker: ${pinId}`);
-    
     // Create element based on pin type
     const marker = document.createElement('div');
     marker.className = 'custom-marker';
-    marker.dataset.pinId = pinId; // Store ID in DOM element for reference
     
     // Determine pin type - normalize to lowercase for consistent comparison
     let pinType = '';
@@ -333,26 +328,8 @@ function createMarker(pinData) {
     
     console.log('Determined pin type:', pinType);
     
-    // Check if it's a camera pin - multiple ways to identify
-    const isCamera = pinData.isCamera === true || 
-                     pinType === 'camera' ||
-                     pinData.cameraId !== undefined ||
-                     pinData.camera_id !== undefined || 
-                     (typeof pinId === 'string' && pinId.includes('cam'));
-    
-    // Log camera pin detection
-    if (isCamera) {
-      console.log(`✅ This is a camera pin with ID: ${pinId}`);
-    }
-    
-    // Add to pinsList to track the pin
-    const pinObject = {
-      ...pinData,
-      id: pinId,
-      type: pinType,
-      isCamera: isCamera,
-      coordinates: mapboxCoords
-    };
+    // Check if it's a camera pin
+    const isCamera = pinData.isCamera === true || pinType === 'camera';
     
     // Apply specific styles based on type
     if (isCamera) {
@@ -375,31 +352,25 @@ function createMarker(pinData) {
           pinData.perceptionRange || 30, 
           pinData.viewingDirection, 
           pinData.viewingAngle, 
-          pinId
+          pinData.id || pinData.cameraId || Date.now().toString()
         );
       } else if (pinData.perceptionRange) {
         // Use circular perception range as fallback
         addPerceptionRangeCircle(
           mapboxCoords, 
           pinData.perceptionRange, 
-          pinId
+          pinData.id || pinData.cameraId || Date.now().toString()
         );
       }
     } else if (pinType === 'dog') {
-      // Dog marker - blue color
-      marker.style.backgroundColor = '#38a3a5';
+      marker.style.backgroundColor = '#38a3a5'; // Dog color
       marker.innerHTML = '<i class="fas fa-dog"></i>';
-      marker.title = 'Dog sighting';
     } else if (pinType === 'cat') {
-      // Cat marker - green color
-      marker.style.backgroundColor = '#57cc99';
+      marker.style.backgroundColor = '#57cc99'; // Cat color
       marker.innerHTML = '<i class="fas fa-cat"></i>';
-      marker.title = 'Cat sighting';
     } else {
-      // Default marker - gray color
-      marker.style.backgroundColor = '#4f6642';
+      marker.style.backgroundColor = '#4f6642'; // Default color
       marker.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
-      marker.title = 'Unknown pin type';
     }
     
     // Create marker instance
@@ -411,17 +382,15 @@ function createMarker(pinData) {
     
     if (isCamera) {
       // Camera pin popup
-      const cameraName = pinData.cameraName || pinData.camera_name || pinData.name || 'Camera';
       popupHTML = `
         <div class="camera-popup">
-          <h3>${cameraName}</h3>
+          <h3>${pinData.cameraName || pinData.name || 'Camera'}</h3>
           <p>${pinData.location || 'Location not specified'}</p>
-          <p><small>ID: ${pinId}</small></p>
           <p><small>Status: ${pinData.status || 'Unknown'}</small></p>
           ${pinData.perceptionRange ? `<p><small>Perception Range: ${pinData.perceptionRange}m</small></p>` : ''}
           ${pinData.viewingDirection !== undefined ? `<p><small>Direction: ${pinData.viewingDirection}°</small></p>` : ''}
           ${pinData.viewingAngle !== undefined ? `<p><small>Field of View: ${pinData.viewingAngle}°</small></p>` : ''}
-          <button class="delete-pin-btn" data-pin-id="${pinId}">Delete Pin</button>
+          ${pinData.id || pinData.cameraId ? `<button class="delete-pin-btn" data-pin-id="${pinData.id || pinData.cameraId}">Delete Pin</button>` : ''}
         </div>
       `;
     } else {
@@ -429,11 +398,10 @@ function createMarker(pinData) {
       const displayType = pinType.charAt(0).toUpperCase() + pinType.slice(1); // Capitalize first letter
       popupHTML = `
         <div class="pin-popup">
-          <h3>${displayType} Sighting</h3>
+          <h3>${displayType}</h3>
           ${pinData.description ? `<p>${pinData.description}</p>` : ''}
           ${pinData.detection_timestamp ? `<p><small>Detected: ${new Date(pinData.detection_timestamp).toLocaleString()}</small></p>` : ''}
-          ${pinData.camera_id ? `<p><small>Detected by Camera ID: ${pinData.camera_id}</small></p>` : ''}
-          <button class="delete-pin-btn" data-pin-id="${pinId}">Delete Pin</button>
+          ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
         </div>
       `;
     }
@@ -445,6 +413,7 @@ function createMarker(pinData) {
     // Add click handler for delete button
     popup.on('open', () => {
       setTimeout(() => {
+        const pinId = pinData.id || pinData.cameraId;
         const deleteBtn = document.querySelector(`.delete-pin-btn[data-pin-id="${pinId}"]`);
         if (deleteBtn) {
           deleteBtn.addEventListener('click', () => {
@@ -459,22 +428,6 @@ function createMarker(pinData) {
     // Add marker to map
     markerInstance.addTo(map.value);
     console.log('Marker added to map successfully');
-    
-    // Check if this pin is already in the pinsList to avoid duplicates
-    const existingPinIndex = pinsList.value.findIndex(p => 
-      p.id === pinId || 
-      (p.coordinates && p.coordinates[0] === mapboxCoords[0] && p.coordinates[1] === mapboxCoords[1])
-    );
-    
-    if (existingPinIndex === -1) {
-      // Pin not found in list, add it
-      pinsList.value.push(pinObject);
-      console.log(`Added pin to pinsList with ID: ${pinId}`);
-    } else {
-      // Update existing pin
-      console.log(`Updating existing pin in pinsList with ID: ${pinId}`);
-      pinsList.value[existingPinIndex] = { ...pinsList.value[existingPinIndex], ...pinObject };
-    }
     
     return markerInstance;
   } catch (error) {
@@ -559,16 +512,17 @@ async function addCameraPin(coordinates, cameraInfo) {
     
     console.log('Adding camera pin at coordinates:', coordinates, 'with camera info:', cameraInfo);
     
-    // Extract camera ID
-    const cameraId = cameraInfo.id || '';
+    // Extract camera ID - use rtmp_key if available, otherwise use id
+    const cameraId = cameraInfo.rtmp_key || cameraInfo.id || '';
     console.log('Using camera ID:', cameraId);
     
     // Create camera pin data object
     const pinData = {
       coordinates: coordinates,
-      id: cameraId, // Set ID directly
+      id: cameraId, // Set ID directly to rtmp_key/id
       cameraId: cameraId, // Also set cameraId for backwards compatibility
       camera_id: cameraId, // Also set camera_id for API format compatibility
+      rtmp_key: cameraInfo.rtmp_key || cameraInfo.id, // Store rtmp_key explicitly
       cameraName: cameraInfo.name || '',
       camera_name: cameraInfo.name || '',
       name: cameraInfo.name || '',
@@ -595,6 +549,7 @@ async function addCameraPin(coordinates, cameraInfo) {
       const payload = {
         coordinates: coordinates,
         camera_id: cameraId,
+        rtmp_key: cameraInfo.rtmp_key || cameraInfo.id,
         camera_name: cameraInfo.name || '',
         location: cameraInfo.location || '',
         hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : ''
@@ -890,13 +845,17 @@ async function getCameraPinLocations() {
                        pin.type === 'Camera' || 
                        pin.cameraId || 
                        pin.camera_id ||
-                       (pin.id && typeof pin.id === 'string' && pin.id.includes('cam'));
+                       pin.rtmp_key;
       
       if (isCamera) {
         console.log(`Found potential camera pin ${index}:`, pin);
         
         let coordinates;
-        let cameraId = pin.cameraId || pin.camera_id || pin.id;
+        
+        // Extract the most reliable camera identifier
+        // Priority: rtmp_key > camera_id > cameraId > id
+        let cameraId = pin.rtmp_key || pin.camera_id || pin.cameraId || pin.id;
+        console.log(`Using camera identifier: ${cameraId}`);
         
         // Handle different coordinate formats - ensuring we parse string values to numbers
         if (Array.isArray(pin.coordinates)) {
@@ -922,8 +881,9 @@ async function getCameraPinLocations() {
         // Verify that the parsed coordinates are valid numbers
         if (coordinates && !isNaN(coordinates.lat) && !isNaN(coordinates.lng)) {
           const cameraPin = {
-            id: cameraId,
+            id: cameraId, // This is the key ID used for matching with API counters
             name: pin.cameraName || pin.camera_name || pin.name || 'Unnamed Camera',
+            rtmp_key: pin.rtmp_key, // Include rtmp_key explicitly for matching
             coordinates: coordinates,
             perceptionRange: parseFloat(pin.perceptionRange || 30),
             viewingDirection: parseFloat(pin.viewingDirection || 0),
