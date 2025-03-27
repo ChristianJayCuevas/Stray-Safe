@@ -133,12 +133,7 @@ function handleMapClick(e) {
   if (isPlacingCameraPin.value && placementCallback.value) {
     console.log('✅ Pin placement mode is active and callback is registered');
     
-    // Format coordinates in both object and array formats
-    const coordinates = {
-      lat: e.lngLat.lat,
-      lng: e.lngLat.lng
-    };
-    
+    const coordinates = [e.lngLat.lng, e.lngLat.lat];
     console.log('Calling pin placement callback with coordinates:', coordinates);
     
     // Call the callback with the clicked coordinates
@@ -165,101 +160,6 @@ async function fetchPins() {
     });
   } catch (error) {
     console.error('Error fetching pins:', error);
-  }
-}
-
-// Create a marker based on pin type and data
-function createMarker(pinData) {
-  try {
-    if (!map.value) {
-      console.error('Map is not initialized, cannot create marker');
-      return null;
-    }
-    
-    // Get coordinates in the format mapbox expects [lng, lat]
-    let mapboxCoords;
-    
-    if (Array.isArray(pinData.coordinates) && pinData.coordinates.length >= 2) {
-      // Already in [lng, lat] format
-      mapboxCoords = pinData.coordinates;
-    } else if (pinData.lat !== undefined && pinData.lng !== undefined) {
-      // Object with lat/lng properties
-      mapboxCoords = [pinData.lng, pinData.lat];
-    } else {
-      console.error('Invalid coordinates format for marker:', pinData.coordinates);
-      return null;
-    }
-    
-    // Create element based on pin type
-    const marker = document.createElement('div');
-    marker.className = 'custom-marker';
-    
-    // Apply specific styles based on type
-    const pinType = pinData.type || pinData.animalType || 'Default';
-    
-    if (pinType === 'Camera' || pinData.isCamera) {
-      marker.className = 'custom-marker camera-marker';
-      marker.innerHTML = '<i class="fas fa-video"></i>';
-    } else if (pinType === 'Dog') {
-      marker.style.backgroundColor = '#38a3a5'; // Dog color
-    } else if (pinType === 'Cat') {
-      marker.style.backgroundColor = '#57cc99'; // Cat color
-    } else {
-      marker.style.backgroundColor = '#4f6642'; // Default color
-    }
-    
-    // Create marker instance
-    const markerInstance = new mapboxgl.Marker(marker).setLngLat(mapboxCoords);
-    
-    // Create popup content based on pin type
-    let popupHTML = '';
-    
-    if (pinType === 'Camera' || pinData.isCamera) {
-      // Camera pin popup
-      popupHTML = `
-        <div class="camera-popup">
-          <h3>${pinData.cameraName || pinData.name || 'Camera'}</h3>
-          <p>${pinData.location || 'Location not specified'}</p>
-          <p><small>Status: ${pinData.status || 'Unknown'}</small></p>
-          ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
-        </div>
-      `;
-    } else {
-      // Animal pin popup
-      popupHTML = `
-        <div class="pin-popup">
-          <h3>${pinType}</h3>
-          ${pinData.description ? `<p>${pinData.description}</p>` : ''}
-          ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
-        </div>
-      `;
-    }
-    
-    // Create and attach popup
-    const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHTML);
-    markerInstance.setPopup(popup);
-    
-    // Add click handler for delete button
-    popup.on('open', () => {
-      setTimeout(() => {
-        const deleteBtn = document.querySelector(`.delete-pin-btn[data-pin-id="${pinData.id}"]`);
-        if (deleteBtn) {
-          deleteBtn.addEventListener('click', () => {
-            if (confirm('Are you sure you want to delete this pin?')) {
-              deletePin(pinData.id, markerInstance);
-            }
-          });
-        }
-      }, 100);
-    });
-    
-    // Add marker to map
-    markerInstance.addTo(map.value);
-    
-    return markerInstance;
-  } catch (error) {
-    console.error('Error creating marker:', error);
-    return null;
   }
 }
 
@@ -352,8 +252,33 @@ async function deletePin(pinId, markerInstance) {
       markerInstance.remove();
     }
     
-    // Remove from local list
+    // Find the pin in the local list
     const pinIndex = pinsList.value.findIndex(pin => pin.id === pinId);
+    const pin = pinIndex !== -1 ? pinsList.value[pinIndex] : null;
+    
+    // If it's a camera pin, remove its perception range circle and label
+    if (pin && (pin.isCamera || pin.type === 'Camera')) {
+      // Remove perception range circle and label if they exist
+      const circleId = `perception-circle-${pinId}`;
+      const sourceId = `perception-source-${pinId}`;
+      const labelId = `${circleId}-label`;
+      
+      if (map.value.getLayer(labelId)) {
+        map.value.removeLayer(labelId);
+      }
+      
+      if (map.value.getLayer(circleId)) {
+        map.value.removeLayer(circleId);
+      }
+      
+      if (map.value.getSource(sourceId)) {
+        map.value.removeSource(sourceId);
+      }
+      
+      console.log(`Removed perception range circle and label for camera pin ${pinId}`);
+    }
+    
+    // Remove from local list
     if (pinIndex !== -1) {
       pinsList.value.splice(pinIndex, 1);
     }
@@ -368,80 +293,6 @@ async function deletePin(pinId, markerInstance) {
     }
   } catch (error) {
     console.error('Error deleting pin:', error);
-  }
-}
-
-// Get all camera pin locations from the map
-async function getCameraPinLocations() {
-  try {
-    console.log('Retrieving camera pin locations...');
-    
-    if (!map.value) {
-      console.error('Map not initialized, cannot retrieve camera pins');
-      return [];
-    }
-    
-    // We'll collect all camera pins from our pinsList
-    const cameraPins = [];
-    
-    // Iterate through the pinsList to find camera pins
-    for (const pin of pinsList.value) {
-      if (pin.isCamera || pin.animalType === 'Camera') {
-        console.log('Found camera pin:', pin);
-        
-        // Extract camera information
-        const cameraInfo = {
-          id: pin.cameraId || pin.id,
-          name: pin.cameraName || pin.name || 'Unknown Camera',
-          location: pin.location || 'Unknown Location'
-        };
-        
-        // Handle coordinates in different formats
-        let coordinates = null;
-        
-        // Check if coordinates exist as an object with lat/lng
-        if (pin.coordinates && typeof pin.coordinates === 'object') {
-          if ('lat' in pin.coordinates && 'lng' in pin.coordinates) {
-            coordinates = {
-              lat: pin.coordinates.lat,
-              lng: pin.coordinates.lng
-            };
-          } 
-          // Check if coordinates exist as an array [lng, lat]
-          else if (Array.isArray(pin.coordinates) && pin.coordinates.length >= 2) {
-            coordinates = {
-              lat: pin.coordinates[1],
-              lng: pin.coordinates[0]
-            };
-          }
-        }
-        // Check if lat and lng exist as direct properties
-        else if (pin.lat !== undefined && pin.lng !== undefined) {
-          coordinates = {
-            lat: pin.lat,
-            lng: pin.lng
-          };
-        }
-        
-        // Only add if we have valid coordinates
-        if (coordinates) {
-          cameraPins.push({
-            id: cameraInfo.id,
-            name: cameraInfo.name,
-            location: cameraInfo.location,
-            coordinates: coordinates
-          });
-        } else {
-          console.warn(`No valid coordinates found for camera: ${cameraInfo.name}`);
-        }
-      }
-    }
-    
-    console.log('Retrieved camera pin locations:', cameraPins);
-    return cameraPins;
-  } catch (error) {
-    console.error('Error retrieving camera pin locations:', error);
-    return [];
   }
 }
 
@@ -470,6 +321,9 @@ async function addCameraPin(coordinates, cameraInfo) {
       throw new Error('Invalid coordinates format. Expected [longitude, latitude] array or {lat, lng} object');
     }
     
+    // Extract perception range if provided
+    const perceptionRange = cameraInfo.perceptionRange || 30; // default to 30m
+    
     // Create pin object with all camera data
     const pin = {
       id: cameraInfo.id || `camera-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -484,6 +338,7 @@ async function addCameraPin(coordinates, cameraInfo) {
       type: 'Camera',
       isCamera: true,
       status: 'active',
+      perceptionRange: perceptionRange,
       cameraData: { ...cameraInfo }
     };
     
@@ -498,7 +353,8 @@ async function addCameraPin(coordinates, cameraInfo) {
         coordinates: validCoords,
         camera_id: cameraInfo.id || '',
         camera_name: cameraInfo.name || '',
-        hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : ''
+        hls_url: cameraInfo.videoSrc && cameraInfo.videoSrc[0] ? cameraInfo.videoSrc[0] : '',
+        perception_range: perceptionRange
       };
       
       console.log('Sending formatted payload to API:', payload);
@@ -519,6 +375,12 @@ async function addCameraPin(coordinates, cameraInfo) {
       // Update pin with backend ID if provided
       if (response.data && response.data.id) {
         pin.id = response.data.id;
+        
+        // Update perception range circle ID if needed
+        if (map.value.getLayer(`perception-circle-${pin.id}`)) {
+          // Original circle was created with a temporary ID, need to recreate with new ID
+          addPerceptionRangeCircle(validCoords, perceptionRange, pin.id);
+        }
       }
       
       // Add to local pins list with all data
@@ -557,94 +419,64 @@ async function addCameraPin(coordinates, cameraInfo) {
 }
 
 // Add an animal pin to the map - exposed for parent components
-async function addAnimalPin(pinData) {
+async function addAnimalPin(coordinates, animalType, details = {}) {
   let markerInstance = null;
   
   try {
-    console.log('Adding animal pin with data:', pinData);
+    console.log('Adding animal pin at coordinates:', coordinates, 'with type:', animalType);
     
-    if (!map.value) {
-      throw new Error('Map not initialized');
+    // Add the marker visually to the map
+    markerInstance = addMarker(coordinates, animalType, details);
+    
+    // Create data to send to the backend
+    const formData = new FormData();
+    formData.append('coordinates[0]', coordinates[0]);
+    formData.append('coordinates[1]', coordinates[1]);
+    formData.append('animal_type', animalType);
+    
+    if (details.description) {
+      formData.append('description', details.description);
     }
     
-    // Validate required fields
-    if (!pinData.lat || !pinData.lng || !pinData.animal_type) {
-      throw new Error('Missing required pin data (lat, lng, animal_type)');
+    if (details.image) {
+      formData.append('image', details.image);
     }
     
-    // Create a standardized pin object
-    const pin = {
-      id: pinData.id || `pin-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      coordinates: [pinData.lng, pinData.lat],
-      lat: pinData.lat,
-      lng: pinData.lng,
-      animalType: pinData.animal_type,
-      description: pinData.description || '',
-      imageUrl: pinData.image_url || null,
-      isCamera: false,
-      status: 'active',
-      isAutomated: !!pinData.is_automated
-    };
-    
-    // Add marker to the map using our helper
-    markerInstance = createMarker(pin);
-    
-    // Add pin to local list
-    pinsList.value.push(pin);
-    
-    // If this is from automated detection, don't try to save to backend
-    if (pinData.is_automated) {
-      console.log('Animal pin added (automated detection - not saving to backend)');
-      return { 
-        success: true, 
-        message: 'Automated detection pin added (visual only)',
-        pin: pin
-      };
-    }
-    
-    // Try to save to backend
+    // Send the data to the backend
     try {
-      // Create data to send to the backend
-      const formData = new FormData();
-      formData.append('coordinates[0]', pin.lng);
-      formData.append('coordinates[1]', pin.lat);
-      formData.append('animal_type', pin.animalType);
-      
-      if (pin.description) {
-        formData.append('description', pin.description);
-      }
-      
-      if (pinData.image) {
-        formData.append('image', pinData.image);
-      }
-      
-      // Send the data to the backend
-      const response = await axios.post('/pin', formData);
-      
-      console.log("Animal pin saved to backend:", response.data);
-      
-      // Update pin ID if returned from backend
-      if (response.data && response.data.id) {
-        const pinIndex = pinsList.value.findIndex(p => p.id === pin.id);
-        if (pinIndex !== -1) {
-          pinsList.value[pinIndex].id = response.data.id;
+      const response = await axios.post('/api/animal-pin', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': 'Bearer StraySafeTeam3' // Static token for API authentication
         }
-      }
+      });
       
-      return {
-        success: true,
-        message: 'Pin added successfully',
-        pin: pin,
-        response: response.data
-      };
+      // Add to local pins list
+      pinsList.value.push({
+        coordinates: coordinates,
+        animalType: animalType,
+        description: details.description,
+        imageUrl: details.imageUrl
+      });
+      
+      console.log("Animal pin added successfully:", response.data);
+      return response.data;
     } catch (apiError) {
-      console.error('API Error when saving animal pin:', apiError);
+      console.error('API Error when adding animal pin:', apiError);
+      
+      // Still add the pin to the local list to maintain visual state
+      pinsList.value.push({
+        coordinates: coordinates,
+        animalType: animalType,
+        description: details.description,
+        imageUrl: details.imageUrl,
+        isSyncPending: true // Mark as pending sync with backend
+      });
       
       return { 
         success: false, 
         message: 'Pin added visually but failed to save to server',
-        error: apiError.message,
-        pin: pin
+        error: apiError.message
       };
     }
   } catch (error) {
@@ -675,6 +507,269 @@ defineExpose({
   },
   getCurrentMapCenter: () => map.value ? map.value.getCenter() : null,
 });
+
+// Create a marker based on pin type and data
+function createMarker(pinData) {
+  try {
+    if (!map.value) {
+      console.error('Map is not initialized, cannot create marker');
+      return null;
+    }
+    
+    // Get coordinates in the format mapbox expects [lng, lat]
+    let mapboxCoords;
+    
+    if (Array.isArray(pinData.coordinates) && pinData.coordinates.length >= 2) {
+      // Already in [lng, lat] format
+      mapboxCoords = pinData.coordinates;
+    } else if (pinData.lat !== undefined && pinData.lng !== undefined) {
+      // Object with lat/lng properties
+      mapboxCoords = [pinData.lng, pinData.lat];
+    } else {
+      console.error('Invalid coordinates format for marker:', pinData.coordinates);
+      return null;
+    }
+    
+    // Create element based on pin type
+    const marker = document.createElement('div');
+    marker.className = 'custom-marker';
+    
+    // Apply specific styles based on type
+    const pinType = pinData.type || pinData.animalType || 'Default';
+    
+    if (pinType === 'Camera' || pinData.isCamera) {
+      marker.className = 'custom-marker camera-marker';
+      marker.innerHTML = '<i class="fas fa-video"></i>';
+      
+      // Add perception range visualization if specified
+      if (pinData.perceptionRange) {
+        addPerceptionRangeCircle(mapboxCoords, pinData.perceptionRange, pinData.id);
+      }
+    } else if (pinType === 'Dog') {
+      marker.style.backgroundColor = '#38a3a5'; // Dog color
+    } else if (pinType === 'Cat') {
+      marker.style.backgroundColor = '#57cc99'; // Cat color
+    } else {
+      marker.style.backgroundColor = '#4f6642'; // Default color
+    }
+    
+    // Create marker instance
+    const markerInstance = new mapboxgl.Marker(marker).setLngLat(mapboxCoords);
+    
+    // Create popup content based on pin type
+    let popupHTML = '';
+    
+    if (pinType === 'Camera' || pinData.isCamera) {
+      // Camera pin popup
+      popupHTML = `
+        <div class="camera-popup">
+          <h3>${pinData.cameraName || pinData.name || 'Camera'}</h3>
+          <p>${pinData.location || 'Location not specified'}</p>
+          <p><small>Status: ${pinData.status || 'Unknown'}</small></p>
+          ${pinData.perceptionRange ? `<p><small>Perception Range: ${pinData.perceptionRange}m</small></p>` : ''}
+          ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
+        </div>
+      `;
+    } else {
+      // Animal pin popup
+      popupHTML = `
+        <div class="pin-popup">
+          <h3>${pinType}</h3>
+          ${pinData.description ? `<p>${pinData.description}</p>` : ''}
+          ${pinData.id ? `<button class="delete-pin-btn" data-pin-id="${pinData.id}">Delete Pin</button>` : ''}
+        </div>
+      `;
+    }
+    
+    // Create and attach popup
+    const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHTML);
+    markerInstance.setPopup(popup);
+    
+    // Add click handler for delete button
+    popup.on('open', () => {
+      setTimeout(() => {
+        const deleteBtn = document.querySelector(`.delete-pin-btn[data-pin-id="${pinData.id}"]`);
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to delete this pin?')) {
+              deletePin(pinData.id, markerInstance);
+            }
+          });
+        }
+      }, 100);
+    });
+    
+    // Add marker to map
+    markerInstance.addTo(map.value);
+    
+    return markerInstance;
+  } catch (error) {
+    console.error('Error creating marker:', error);
+    return null;
+  }
+}
+
+// Add a perception range circle to the map for a camera
+function addPerceptionRangeCircle(coordinates, rangeInMeters, cameraId) {
+  // Generate a unique ID for this range circle
+  const circleId = `perception-circle-${cameraId || Date.now()}`;
+  const sourceId = `perception-source-${cameraId || Date.now()}`;
+  
+  try {
+    if (!map.value) {
+      console.error('Map not initialized, cannot add perception range');
+      return;
+    }
+    
+    console.log(`Adding perception range circle of ${rangeInMeters}m for camera at`, coordinates);
+    
+    // Check if map is already loaded
+    if (!map.value.isStyleLoaded()) {
+      console.log('Map style not yet loaded, waiting...');
+      map.value.once('style.load', () => {
+        addPerceptionRangeCircle(coordinates, rangeInMeters, cameraId);
+      });
+      return;
+    }
+    
+    // Remove any existing circles for this camera
+    if (map.value.getLayer(circleId)) {
+      map.value.removeLayer(circleId);
+    }
+    
+    if (map.value.getSource(sourceId)) {
+      map.value.removeSource(sourceId);
+    }
+    
+    // Convert meters to approximate degrees (rough calculation)
+    // 1 degree is about 111km at equator, so 1m is roughly 0.000009 degrees
+    const radiusInDegrees = rangeInMeters * 0.000009;
+    
+    // Add a new source for this circle
+    map.value.addSource(sourceId, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: coordinates
+        },
+        properties: {
+          camera_id: cameraId
+        }
+      }
+    });
+    
+    // Add a circle layer using the source
+    map.value.addLayer({
+      id: circleId,
+      type: 'circle',
+      source: sourceId,
+      paint: {
+        'circle-radius': {
+          stops: [
+            [10, 10], // At zoom level
+            [20, radiusInDegrees * 10000] // Use a multiplier to make it visible
+          ],
+          base: 2
+        },
+        'circle-color': 'rgba(66, 133, 244, 0.2)',
+        'circle-stroke-width': 1,
+        'circle-stroke-color': 'rgba(66, 133, 244, 0.6)'
+      }
+    });
+    
+    // Store the circle information for later removal if needed
+    const circleInfo = {
+      circleId: circleId,
+      sourceId: sourceId,
+      cameraId: cameraId,
+      coordinates: coordinates,
+      radius: rangeInMeters
+    };
+    
+    return circleInfo;
+  } catch (error) {
+    console.error('Error adding perception range circle:', error);
+    return null;
+  }
+}
+
+// Get all camera pin locations from the map
+async function getCameraPinLocations() {
+  try {
+    console.log('Retrieving camera pin locations...');
+    
+    if (!map.value) {
+      console.error('Map not initialized, cannot retrieve camera pins');
+      return [];
+    }
+    
+    // We'll collect all camera pins from our pinsList
+    const cameraPins = [];
+    
+    // Iterate through the pinsList to find camera pins
+    for (const pin of pinsList.value) {
+      if (pin.isCamera || pin.animalType === 'Camera') {
+        console.log('Found camera pin:', pin);
+        
+        // Extract camera information
+        const cameraInfo = {
+          id: pin.cameraId || pin.id,
+          name: pin.cameraName || pin.name || 'Unknown Camera',
+          location: pin.location || 'Unknown Location',
+          perceptionRange: pin.perceptionRange || 30 // Include perception range, default to 30m
+        };
+        
+        // Handle coordinates in different formats
+        let coordinates = null;
+        
+        // Check if coordinates exist as an object with lat/lng
+        if (pin.coordinates && typeof pin.coordinates === 'object') {
+          if ('lat' in pin.coordinates && 'lng' in pin.coordinates) {
+            coordinates = {
+              lat: pin.coordinates.lat,
+              lng: pin.coordinates.lng
+            };
+          } 
+          // Check if coordinates exist as an array [lng, lat]
+          else if (Array.isArray(pin.coordinates) && pin.coordinates.length >= 2) {
+            coordinates = {
+              lat: pin.coordinates[1],
+              lng: pin.coordinates[0]
+            };
+          }
+        }
+        // Check if lat and lng exist as direct properties
+        else if (pin.lat !== undefined && pin.lng !== undefined) {
+          coordinates = {
+            lat: pin.lat,
+            lng: pin.lng
+          };
+        }
+        
+        // Only add if we have valid coordinates
+        if (coordinates) {
+          cameraPins.push({
+            id: cameraInfo.id,
+            name: cameraInfo.name,
+            location: cameraInfo.location,
+            coordinates: coordinates,
+            perceptionRange: cameraInfo.perceptionRange
+          });
+        } else {
+          console.warn(`No valid coordinates found for camera: ${cameraInfo.name}`);
+        }
+      }
+    }
+    
+    console.log('Retrieved camera pin locations:', cameraPins);
+    return cameraPins;
+  } catch (error) {
+    console.error('Error retrieving camera pin locations:', error);
+    return [];
+  }
+}
 </script>
 
 <template>

@@ -36,6 +36,7 @@ const addingPin = ref(false);
 const addPinError = ref(null);
 const placingPinMode = ref(false);
 const addPinSuccess = ref('');
+const perceptionRange = ref(30); // Default perception range in meters
 
 // Detection monitoring variables
 const previousDetections = ref({});
@@ -210,8 +211,14 @@ async function addCameraPin(coordinates, cameraInfo) {
             throw new Error('Map reference not available');
         }
         
+        // Add perception range to camera info
+        const cameraInfoWithRange = {
+            ...cameraInfo,
+            perceptionRange: perceptionRange.value
+        };
+        
         // Forward the addCameraPin call to the map component
-        const result = await mapRef.value.addCameraPin(coordinates, cameraInfo);
+        const result = await mapRef.value.addCameraPin(coordinates, cameraInfoWithRange);
         
         console.log('Camera pin add result:', result);
         
@@ -264,7 +271,8 @@ async function checkForNewDetections(currentCounters) {
     streamLocations[stream.id] = {
       name: stream.name || 'Unnamed Camera',
       location: stream.location || 'Unknown Location',
-      coordinates: null // Will be filled in based on existing pins
+      coordinates: null, // Will be filled in based on existing pins
+      perceptionRange: 30 // Default perception range
     };
   });
   
@@ -277,12 +285,22 @@ async function checkForNewDetections(currentCounters) {
     cameraPins.forEach(pin => {
       if (pin.id && streamLocations[pin.id]) {
         streamLocations[pin.id].coordinates = pin.coordinates;
+        // If the pin has a perception range, use it
+        if (pin.perceptionRange) {
+          streamLocations[pin.id].perceptionRange = pin.perceptionRange;
+        }
       }
     });
   }
   
   // Iterate through cameras in current counters
   for (const cameraId in currentCounters) {
+    // Skip cameras that don't have pins placed on the map
+    if (!streamLocations[cameraId] || !streamLocations[cameraId].coordinates) {
+      console.log(`Skipping camera ${cameraId} as it doesn't have a pin on the map`);
+      continue;
+    }
+    
     if (!previousDetections.value[cameraId]) {
       // This is a new camera, treat all detections as new
       previousDetections.value[cameraId] = { cat: 0, dog: 0 };
@@ -385,17 +403,28 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       console.log(`Using default coordinates for camera ${cameraId}:`, coordinates);
     }
     
-    // Calculate position using a circle distribution around the camera
-    const baseRadius = 0.0003; // ~30 meters base radius
+    // Get perception range from camera info, default to 30m if not specified
+    const perceptionRange = locationInfo.perceptionRange || 30;
+    
+    // Convert perception range from meters to approximate degrees
+    // This is a rough calculation (1 degree is approximately 111km at the equator)
+    // So 1 meter is about 0.000009 degrees
+    const baseRadius = perceptionRange * 0.000009;
+    console.log(`Using perception range of ${perceptionRange}m (${baseRadius} degrees) for camera ${cameraId}`);
+    
+    // Calculate position using a circle distribution around the camera within perception range
     const pinCount = index || 0; // Use index to distribute pins evenly
     
     // Calculate angle based on pin index (distribute around a circle)
     const angle = (pinCount * 45) % 360; // 45 degrees between pins, wrapping at 360
     const radian = angle * (Math.PI / 180);
     
+    // Randomize the distance from the center (between 20% and 90% of max range)
+    const distanceFactor = 0.2 + (Math.random() * 0.7);
+    
     // Use trigonometry to place the pin at the specified angle and distance
-    const offsetLat = baseRadius * Math.sin(radian);
-    const offsetLng = baseRadius * Math.cos(radian);
+    const offsetLat = baseRadius * distanceFactor * Math.sin(radian);
+    const offsetLng = baseRadius * distanceFactor * Math.cos(radian);
     
     // Add some randomness to the exact position (10% variance)
     const jitterFactor = 0.1;
@@ -425,12 +454,13 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
       is_automated: true,
       is_camera: false,
       status: 'active',
-      camera_id: cameraId
+      camera_id: cameraId,
+      perception_range: perceptionRange // Include the perception range in the pin data
     };
     
     // Add the pin to the map
     if (mapRef.value) {
-      console.log(`Adding ${animalType} detection pin at angle ${angle}°:`, pinData);
+      console.log(`Adding ${animalType} detection pin at angle ${angle}° and ${Math.round(distanceFactor * 100)}% of max range:`, pinData);
       const result = await mapRef.value.addAnimalPin(pinData);
       console.log('Animal detection pin added result:', result);
       return result;
@@ -799,6 +829,28 @@ onUnmounted(() => {
                             </q-item>
                         </template>
                     </q-select>
+
+                    <!-- Perception Range Slider -->
+                    <div class="q-mt-md">
+                        <div class="text-subtitle2 q-mb-sm">Camera Perception Range</div>
+                        <div class="flex items-center">
+                            <span class="q-mr-sm">10m</span>
+                            <q-slider
+                                v-model="perceptionRange"
+                                :min="10"
+                                :max="100"
+                                :step="5"
+                                label
+                                :label-value="`${perceptionRange}m`"
+                                class="col"
+                                color="primary"
+                            />
+                            <span class="q-ml-sm">100m</span>
+                        </div>
+                        <p class="text-caption text-grey q-mt-xs">
+                            Set how far this camera can detect animals ({{ perceptionRange }} meters)
+                        </p>
+                    </div>
                 </q-card-section>
 
                 <q-card-section class="q-pt-none">
