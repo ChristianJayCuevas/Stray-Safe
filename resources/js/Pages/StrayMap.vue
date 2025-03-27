@@ -245,53 +245,6 @@ async function addCameraPin(coordinates, cameraInfo) {
     }
 }
 
-// Function to monitor detection changes from API
-async function monitorDetections() {
-  console.log('Starting detection monitor');
-  isMonitoring.value = true;
-  
-  // Clear any existing interval
-  if (detectionMonitorInterval.value) {
-    clearInterval(detectionMonitorInterval.value);
-  }
-  
-  // Initial fetch to establish baseline
-  try {
-    const initialCounters = await fetchDetectionCounters();
-    previousDetections.value = JSON.parse(JSON.stringify(initialCounters));
-    console.log('Established detection baseline:', previousDetections.value);
-  } catch (error) {
-    console.error('Failed to establish detection baseline:', error);
-  }
-  
-  // Set up the interval to check for new detections every 10 seconds
-  detectionMonitorInterval.value = setInterval(async () => {
-    try {
-      const currentCounters = await fetchDetectionCounters();
-      console.log('Current detection counters:', currentCounters);
-      
-      // Check for new detections by comparing with previous values
-      await checkForNewDetections(currentCounters);
-      
-      // Update previous detections for next comparison
-      previousDetections.value = JSON.parse(JSON.stringify(currentCounters));
-    } catch (error) {
-      console.error('Error monitoring detections:', error);
-    }
-  }, 10000); // Check every 10 seconds
-}
-
-// Fetch the current detection counters from the API
-async function fetchDetectionCounters() {
-  try {
-    const response = await axios.get('https://straysafe.me/api2/counters');
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch detection counters:', error);
-    throw error;
-  }
-}
-
 // Check for new detections by comparing current with previous counts
 async function checkForNewDetections(currentCounters) {
   // Fetch camera streams data to get locations
@@ -333,6 +286,31 @@ async function checkForNewDetections(currentCounters) {
     if (!previousDetections.value[cameraId]) {
       // This is a new camera, treat all detections as new
       previousDetections.value[cameraId] = { cat: 0, dog: 0 };
+      
+      // First time seeing this camera - create pins for all existing detections
+      const initialDetections = currentCounters[cameraId];
+      
+      // Create cat pins for the initial count
+      if (initialDetections.cat > 0) {
+        console.log(`Adding ${initialDetections.cat} initial cat pins for camera ${cameraId}`);
+        // Create pins one by one to ensure proper distribution
+        for (let i = 0; i < initialDetections.cat; i++) {
+          await createAnimalDetectionPin(cameraId, 'cat', 1, streamLocations[cameraId], i);
+        }
+      }
+      
+      // Create dog pins for the initial count
+      if (initialDetections.dog > 0) {
+        console.log(`Adding ${initialDetections.dog} initial dog pins for camera ${cameraId}`);
+        // Create pins one by one to ensure proper distribution
+        for (let i = 0; i < initialDetections.dog; i++) {
+          await createAnimalDetectionPin(cameraId, 'dog', 1, streamLocations[cameraId], i);
+        }
+      }
+      
+      // Set the previous detections to match current, as we've created pins for all
+      previousDetections.value[cameraId] = { ...initialDetections };
+      continue; // Skip to next camera, as we've handled this one
     }
     
     const current = currentCounters[cameraId];
@@ -342,32 +320,56 @@ async function checkForNewDetections(currentCounters) {
     if (current.cat > previous.cat) {
       const newCats = current.cat - previous.cat;
       console.log(`Detected ${newCats} new cat(s) on camera ${cameraId}`);
-      await createAnimalDetectionPin(cameraId, 'cat', newCats, streamLocations[cameraId]);
+      
+      // Create a pin for each new cat, with different positions
+      for (let i = 0; i < newCats; i++) {
+        await createAnimalDetectionPin(cameraId, 'cat', 1, streamLocations[cameraId], i);
+      }
     }
     
     // Check for new dog detections
     if (current.dog > previous.dog) {
       const newDogs = current.dog - previous.dog;
       console.log(`Detected ${newDogs} new dog(s) on camera ${cameraId}`);
-      await createAnimalDetectionPin(cameraId, 'dog', newDogs, streamLocations[cameraId]);
+      
+      // Create a pin for each new dog, with different positions
+      for (let i = 0; i < newDogs; i++) {
+        await createAnimalDetectionPin(cameraId, 'dog', 1, streamLocations[cameraId], i);
+      }
     }
   }
 }
 
 // Create an animal detection pin near a camera
-async function createAnimalDetectionPin(cameraId, animalType, count, locationInfo) {
+async function createAnimalDetectionPin(cameraId, animalType, count, locationInfo, index = 0) {
   if (!locationInfo || !locationInfo.coordinates) {
     console.warn(`No location info available for camera ${cameraId}, cannot place animal pin`);
     return;
   }
   
   try {
-    // Create a slightly randomized position near the camera
-    // This ensures multiple detections don't stack exactly on top of each other
-    const jitter = 0.0003; // ~30 meters of jitter
+    // Calculate position using a circle distribution around the camera
+    // This ensures pins are evenly distributed in a circle around the camera
+    const baseRadius = 0.0003; // ~30 meters base radius
+    const pinCount = index || 0; // Use index to distribute pins evenly
+    
+    // Calculate angle based on pin index (distribute around a circle)
+    const angle = (pinCount * 45) % 360; // 45 degrees between pins, wrapping at 360
+    const radian = angle * (Math.PI / 180);
+    
+    // Use trigonometry to place the pin at the specified angle and distance
+    const offsetLat = baseRadius * Math.sin(radian);
+    const offsetLng = baseRadius * Math.cos(radian);
+    
+    // Add some randomness to the exact position (10% variance)
+    const jitterFactor = 0.1;
+    const jitterLat = baseRadius * jitterFactor * (Math.random() * 2 - 1);
+    const jitterLng = baseRadius * jitterFactor * (Math.random() * 2 - 1);
+    
+    // Final position
     const animalPosition = {
-      lat: locationInfo.coordinates.lat + (Math.random() * jitter * 2 - jitter),
-      lng: locationInfo.coordinates.lng + (Math.random() * jitter * 2 - jitter)
+      lat: locationInfo.coordinates.lat + offsetLat + jitterLat,
+      lng: locationInfo.coordinates.lng + offsetLng + jitterLng
     };
     
     // Create timestamp for detection (now)
@@ -389,12 +391,68 @@ async function createAnimalDetectionPin(cameraId, animalType, count, locationInf
     
     // Add the pin to the map
     if (mapRef.value) {
-      console.log('Adding animal detection pin:', pinData);
+      console.log(`Adding ${animalType} detection pin at angle ${angle}°:`, pinData);
       const result = await mapRef.value.addAnimalPin(pinData);
       console.log('Animal detection pin added result:', result);
     }
   } catch (error) {
     console.error('Failed to create animal detection pin:', error);
+  }
+}
+
+// Function to monitor detection changes from API
+async function monitorDetections() {
+  console.log('Starting detection monitor');
+  isMonitoring.value = true;
+  
+  // Clear any existing interval
+  if (detectionMonitorInterval.value) {
+    clearInterval(detectionMonitorInterval.value);
+  }
+  
+  // Initial fetch to establish baseline and create initial pins
+  try {
+    const initialCounters = await fetchDetectionCounters();
+    console.log('Initial detection counters:', initialCounters);
+    
+    // Initialize empty previous detections (to force pin creation for all existing detections)
+    previousDetections.value = {}; 
+    
+    // Check for initial detections and create pins accordingly
+    await checkForNewDetections(initialCounters);
+    
+    // After creating initial pins, update the previous detections for accurate future comparisons
+    previousDetections.value = JSON.parse(JSON.stringify(initialCounters));
+    console.log('Established detection baseline:', previousDetections.value);
+  } catch (error) {
+    console.error('Failed to establish detection baseline:', error);
+  }
+  
+  // Set up the interval to check for new detections every 5 seconds (more frequent checks)
+  detectionMonitorInterval.value = setInterval(async () => {
+    try {
+      const currentCounters = await fetchDetectionCounters();
+      console.log('Current detection counters:', currentCounters);
+      
+      // Check for new detections by comparing with previous values
+      await checkForNewDetections(currentCounters);
+      
+      // Update previous detections for next comparison
+      previousDetections.value = JSON.parse(JSON.stringify(currentCounters));
+    } catch (error) {
+      console.error('Error monitoring detections:', error);
+    }
+  }, 5000); // Check every 5 seconds
+}
+
+// Fetch the current detection counters from the API
+async function fetchDetectionCounters() {
+  try {
+    const response = await axios.get('https://straysafe.me/api2/counters');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch detection counters:', error);
+    throw error;
   }
 }
 

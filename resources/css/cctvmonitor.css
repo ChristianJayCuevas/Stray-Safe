@@ -587,3 +587,124 @@ p{
   --dark-icon-color: #3b82f6;
   --dark-table-header-bg: rgba(59, 130, 246, 0.1);
 }
+
+/* Snapshot notification */
+.snapshot-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.snapshot-notification-content {
+  display: flex;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  max-width: 300px;
+}
+
+.snapshot-thumbnail {
+  width: 80px;
+  height: 60px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-right: 10px;
+}
+
+.snapshot-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.snapshot-info {
+  flex: 1;
+}
+
+.snapshot-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin: 0 0 5px 0;
+}
+
+.snapshot-time {
+  font-size: 12px;
+  color: #aaa;
+  margin: 0;
+}
+
+.close-snapshot-btn {
+  background: none;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.close-snapshot-btn:hover {
+  color: white;
+}
+
+/* Live indicator */
+.live-indicator {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  padding: 3px 8px;
+  z-index: 5;
+}
+
+.pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: red;
+  margin-right: 5px;
+  animation: pulse 1.5s infinite;
+}
+
+.live-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 0.5px;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+  }
+  
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 5px rgba(255, 0, 0, 0);
+  }
+  
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(255, 0, 0, 0);
+  }
+}

@@ -417,6 +417,38 @@ async function removeCustomCard(cardId) {
     alert('Error deleting custom CCTV: ' + (error.response?.data?.message || error.message));
   }
 }
+
+// Snapshot notification state
+const snapshotNotification = ref({
+  show: false,
+  image: '',
+  time: '',
+  camera: ''
+});
+
+// Function to handle snapshot
+function handleSnapshot(snapshotData) {
+  console.log('Snapshot received:', snapshotData);
+  
+  snapshotNotification.value = {
+    show: true,
+    image: snapshotData.dataUrl,
+    time: new Date().toLocaleString(),
+    camera: snapshotData.cameraName || 'Unknown Camera'
+  };
+  
+  // Auto-hide the notification after 5 seconds
+  setTimeout(() => {
+    if (snapshotNotification.value.show) {
+      snapshotNotification.value.show = false;
+    }
+  }, 5000);
+}
+
+// Function to close snapshot notification
+function closeSnapshotNotification() {
+  snapshotNotification.value.show = false;
+}
 </script>
 
 <template>
@@ -529,7 +561,10 @@ async function removeCustomCard(cardId) {
             <span class="live-text">LIVE</span>
           </div>
           <div class="cctv-feed">
-            <StreamPlayer :streamUrl="cctv.videoSrc[0]" />
+            <StreamPlayer 
+              :streamUrl="cctv.videoSrc[0]" 
+              @snapshot="handleSnapshot"
+            />
           </div>
           <div class="cctv-info">
             <div class="cctv-title">{{ cctv.name }}</div>
@@ -555,6 +590,22 @@ async function removeCustomCard(cardId) {
           color="primary"
           active-color="primary"
         />
+      </div>
+
+      <!-- Snapshot notification -->
+      <div v-if="snapshotNotification.show" class="snapshot-notification">
+        <div class="snapshot-notification-content">
+          <div class="snapshot-thumbnail">
+            <img :src="snapshotNotification.image" alt="Snapshot" />
+          </div>
+          <div class="snapshot-info">
+            <p class="snapshot-title">Snapshot Captured</p>
+            <p class="snapshot-time">{{ snapshotNotification.time }}</p>
+          </div>
+          <button @click="closeSnapshotNotification" class="close-snapshot-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
       </div>
 
       <!-- Recent Detections Section -->
