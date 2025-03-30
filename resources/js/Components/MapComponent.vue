@@ -1170,7 +1170,7 @@ function retryMapLoad() {
 .map-container-wrapper {
   width: 100%;
   height: 600px;
-  margin: 0 20px 100px 20px;
+  margin: 0 20px 0px 0px;
   position: relative;
 }
 

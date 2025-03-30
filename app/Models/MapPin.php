@@ -8,7 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 class MapPin extends Model
 {
     use HasFactory;
-
+    protected $casts = [
+        'coordinates' => 'array',
+        'conical_view' => 'boolean',
+        'perception_range' => 'float',
+        'viewing_direction' => 'float',
+        'viewing_angle' => 'float',
+    ];
+    
     protected $fillable = [
         'animal_type',
         'stray_status', // New attribute

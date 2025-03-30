@@ -61,24 +61,8 @@ class MapPinController extends Controller
      */
     public function index()
     {
-        try {
-            $pins = MapPin::all();
-
-            // Return the original coordinates without randomization
-            $response = $pins->map(function ($pin) {
-                return [
-                    'id' => $pin->id,
-                    'animal_type' => $pin->animal_type,
-                    'stray_status' => $pin->stray_status,
-                    'coordinates' => [$pin->longitude, $pin->latitude], // Original coordinates
-                ];
-            });
-
-            return response()->json($response, 200);
-        } catch (\Exception $e) {
-            Log::error("Failed to fetch pins: " . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Failed to fetch pins'], 500);
-        }
+        $pins = MapPin::all();
+        return MapPinResource::collection($pins);
     }
 
     /**
