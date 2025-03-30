@@ -254,15 +254,15 @@ function handleMapClick(e) {
 async function fetchPins() {
   try {
     console.log('Fetching pins from backend...');
-    
+
     // Clear existing pinsList
     pinsList.value = [];
-    
+
     const response = await axios.get('/pins');
-    const pins = response.data.data; 
-    
+    const pins = response.data.data;
+
     console.log('Received pins from backend:', pins);
-    
+
     if (!pins || pins.length === 0) {
       console.log('No pins received from backend');
       return;
@@ -272,61 +272,50 @@ async function fetchPins() {
       try {
         // Ensure coordinates are valid
         let coordinates;
-        
-        // Handle potential string coordinates stored as JSON
+
         if (pin.coordinates) {
           if (typeof pin.coordinates === 'string') {
             try {
-              // Try to parse as JSON if it's a string
               pin.coordinates = JSON.parse(pin.coordinates);
               console.log('Parsed pin coordinates from JSON string:', pin.coordinates);
             } catch (e) {
               console.warn('Failed to parse coordinates from JSON string:', pin.coordinates);
             }
           }
-          
+
           if (Array.isArray(pin.coordinates)) {
             coordinates = [parseFloat(pin.coordinates[0]), parseFloat(pin.coordinates[1])];
           } else if (pin.coordinates.lat !== undefined && pin.coordinates.lng !== undefined) {
             coordinates = [parseFloat(pin.coordinates.lng), parseFloat(pin.coordinates.lat)];
           }
         }
-        
+
         if (!coordinates && pin.latitude !== undefined && pin.longitude !== undefined) {
           coordinates = [parseFloat(pin.longitude), parseFloat(pin.latitude)];
         }
-        
+
         if (!coordinates) {
           console.warn('Pin has invalid coordinates format:', pin);
-          return; // Skip this pin
+          return;
         }
-        
-        // Determine if this is a camera pin
+
         const isCamera = pin.is_camera === true || pin.animal_type === 'Camera';
         console.log(`Processing pin ID ${pin.id}, type: ${isCamera ? 'Camera' : pin.animal_type}`);
-        
-        // Convert string "true"/"false" to boolean if needed
+
         let conicalView = false;
         if (typeof pin.conical_view === 'boolean') {
           conicalView = pin.conical_view;
         } else if (pin.conical_view === 'true' || pin.conical_view === '1' || pin.conical_view === 1) {
           conicalView = true;
         }
-        
-        console.log(`Pin ${pin.id} conical view:`, {
-          original: pin.conical_view,
-          converted: conicalView
-        });
-        
-        // Create a full pin object with all available properties
+
         const pinData = {
           id: pin.id,
           coordinates: coordinates,
           type: isCamera ? 'camera' : pin.animal_type,
           animal_type: pin.animal_type,
           isCamera: isCamera,
-          
-          // Add all properties with appropriate defaults
+
           camera_id: pin.camera_id || pin.id,
           cameraId: pin.camera_id || pin.id,
           rtmp_key: pin.rtmp_key || pin.camera_id || pin.id,
@@ -336,41 +325,42 @@ async function fetchPins() {
           location: pin.location || 'Unknown Location',
           description: pin.description || '',
           status: pin.stray_status || 'active',
-          
-          // Camera specific properties
+
           perceptionRange: parseFloat(pin.perception_range || 30),
           viewingDirection: parseFloat(pin.viewing_direction || 0),
           viewingAngle: parseFloat(pin.viewing_angle || 60),
           conicalView: conicalView,
-          
-          // Additional properties
+
           detection_timestamp: pin.detection_timestamp,
           image_url: pin.image_url,
           snapshot_path: pin.snapshot_path,
           hls_url: pin.hls_url
         };
-        
+
         console.log(`Created pin data object:`, pinData);
-        
-        // Create the marker using this pin data
+
         const marker = createMarker(pinData);
-        
+
         if (marker) {
-          // Add to pins list 
           pinData.marker = marker;
           pinsList.value.push(pinData);
           console.log(`Added pin ID ${pin.id} to pinsList`);
-          
-          // Ensure the perception range is visible
-          // If this failed during marker creation, try again directly
+
           if (isCamera && pinData.perceptionRange) {
-            if (pinData.conicalView && 
-                pinData.viewingDirection !== undefined && 
+            const coneId = `cone-${pinData.id}`;
+            const circleId = `perception-circle-${pinData.id}`;
+
+            console.log('🔍 Checking perception visuals for:', {
+              conicalView: pinData.conicalView,
+              direction: pinData.viewingDirection,
+              angle: pinData.viewingAngle
+            });
+
+            if (pinData.conicalView &&
+                pinData.viewingDirection !== undefined &&
                 pinData.viewingAngle !== undefined) {
-              // Re-add the conical perception range if not already visible
-              const coneId = `cone-${pinData.id}`;
               if (!map.value.getLayer(coneId)) {
-                console.log(`Ensuring conical view is visible for camera ${pinData.id}`);
+                console.log(`✅ Adding conical view for camera ${pinData.id}`);
                 addConicalPerceptionRange(
                   coordinates,
                   pinData.perceptionRange,
@@ -380,10 +370,8 @@ async function fetchPins() {
                 );
               }
             } else {
-              // Re-add the circular perception range if not already visible
-              const circleId = `perception-circle-${pinData.id}`;
               if (!map.value.getLayer(circleId)) {
-                console.log(`Ensuring perception circle is visible for camera ${pinData.id}`);
+                console.log(`🔁 Adding fallback circular perception for camera ${pinData.id}`);
                 addPerceptionRangeCircle(
                   coordinates,
                   pinData.perceptionRange,
@@ -399,7 +387,7 @@ async function fetchPins() {
         console.error('Error processing pin:', pin, pinError);
       }
     });
-    
+
     console.log(`Loaded ${pinsList.value.length} pins into pinsList`);
   } catch (error) {
     console.error('Error fetching pins:', error);
