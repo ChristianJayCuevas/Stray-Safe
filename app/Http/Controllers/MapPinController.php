@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\MapPin;
 use Log;
-
+use App\Http\Resources\MapPinResource;
 class MapPinController extends Controller
 {
     /**
