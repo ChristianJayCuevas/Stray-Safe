@@ -259,7 +259,7 @@ async function fetchPins() {
     pinsList.value = [];
     
     const response = await axios.get('/pins');
-    const pins = response.data;
+    const pins = response.data.data; 
     
     console.log('Received pins from backend:', pins);
     
