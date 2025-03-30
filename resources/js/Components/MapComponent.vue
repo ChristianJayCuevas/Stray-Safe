@@ -167,36 +167,8 @@ onUnmounted(() => {
 
 // State for pin placement mode
 const isPlacingCameraPin = ref(false);
-const selectedCameraForPin = ref(null);
 const placementCallback = ref(null);
 
-// Enter camera pin placement mode
-function startCameraPinPlacement(cameraInfo) {
-  if (!map.value) return;
-  
-  selectedCameraForPin.value = cameraInfo;
-  isPlacingCameraPin.value = true;
-  
-  // Change cursor style to indicate placement mode
-  map.value.getCanvas().style.cursor = 'crosshair';
-  
-  // Show instruction message to the user
-  console.log('Click on the map to place the camera pin');
-}
-
-// Exit camera pin placement mode
-function cancelCameraPinPlacement() {
-  if (!map.value) return;
-  
-  selectedCameraForPin.value = null;
-  isPlacingCameraPin.value = false;
-  
-  // Reset cursor style
-  map.value.getCanvas().style.cursor = '';
-}
-
-// Setup click handler for the map
-let mapClickHandler = null;
 
 // Function to enable camera pin placement mode
 function enablePinPlacementMode(callback) {

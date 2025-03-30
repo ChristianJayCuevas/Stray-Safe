@@ -22,11 +22,15 @@ class CameraPinController extends Controller
             // Validate the request
             $validated = $request->validate([
                 'coordinates' => 'required|array|size:2',
-                'coordinates.0' => 'required|numeric', // longitude
-                'coordinates.1' => 'required|numeric', // latitude
+                'coordinates.0' => 'required|numeric',
+                'coordinates.1' => 'required|numeric',
                 'camera_id' => 'required|string',
                 'camera_name' => 'required|string',
                 'hls_url' => 'required|string',
+                'conical_view' => 'sometimes|boolean',
+                'viewing_direction' => 'nullable|numeric',
+                'viewing_angle' => 'nullable|numeric',
+                'perception_range' => 'nullable|numeric',
             ]);
             
             Log::info('Camera pin validation successful', $validated);
@@ -42,8 +46,16 @@ class CameraPinController extends Controller
                 'camera_id' => $request->camera_id,
                 'camera_name' => $request->camera_name,
                 'hls_url' => $request->hls_url,
-            ]);
             
+                // ✅ Add these missing camera fields:
+                'conical_view' => $request->boolean('conical_view'),
+                'viewing_direction' => $request->viewing_direction,
+                'viewing_angle' => $request->viewing_angle,
+                'perception_range' => $request->perception_range,
+                'original_id' => $request->original_id ?? $request->camera_id,
+                'location' => $request->location ?? 'Unknown Location',
+                'rtmp_key' => $request->rtmp_key ?? $request->camera_id,
+            ]);
             Log::info('Camera pin stored successfully', ['pin' => $pin]);
             
             return response()->json([

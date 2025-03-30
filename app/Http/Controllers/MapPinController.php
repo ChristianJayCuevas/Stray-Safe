@@ -62,6 +62,11 @@ class MapPinController extends Controller
     public function index()
     {
         $pins = MapPin::all();
+        console.log(`Raw backend values for pin ${pin.id}:`, {
+            conical_view: pin.conical_view,
+            direction: pin.viewing_direction,
+            angle: pin.viewing_angle
+          });
         return MapPinResource::collection($pins);
     }
 
