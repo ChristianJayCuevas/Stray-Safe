@@ -835,20 +835,23 @@ defineExpose({
 
 // Add a conical perception range to the map for a camera
 function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle, cameraId) {
-  // Generate unique IDs for this conical range
-  const coneId = `cone-${cameraId || Date.now()}`;
-  const sourceId = `cone-source-${cameraId || Date.now()}`;
-  
+  const timestamp = Date.now();
+  const coneId = `cone-${cameraId || timestamp}`;
+  const sourceId = `cone-source-${cameraId || timestamp}`;
+
   try {
     if (!map.value) {
       console.error('Map not initialized, cannot add conical perception range');
       return;
     }
-    
-    console.log(`Adding conical perception range of ${rangeInMeters}m for camera at`, coordinates);
-    console.log(`Direction: ${direction}°, Angle: ${angle}°`);
-    
-    // Check if map is already loaded
+
+    console.log(`\u{1F50D} Adding conical perception for camera ${cameraId}`, {
+      coordinates,
+      rangeInMeters,
+      direction,
+      angle
+    });
+
     if (!map.value.isStyleLoaded()) {
       console.log('Map style not yet loaded, waiting...');
       map.value.once('style.load', () => {
@@ -856,100 +859,75 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
       });
       return;
     }
-    
-    // Remove any existing layers and sources for this camera
+
     if (map.value.getLayer(coneId)) {
       map.value.removeLayer(coneId);
     }
-    
     if (map.value.getSource(sourceId)) {
       map.value.removeSource(sourceId);
     }
-    
-    // Convert meters to approximate degrees (rough calculation)
-    // 1 degree is about 111km at equator, so 1m is roughly 0.000009 degrees
+
     const radiusInDegrees = rangeInMeters * 0.000009;
-    
-    // Calculate the coordinates for the cone based on direction and angle
-    // We need to create a polygon that represents the conical field of view
-    const coordinates_lng = Array.isArray(coordinates) ? coordinates[0] : coordinates.lng;
-    const coordinates_lat = Array.isArray(coordinates) ? coordinates[1] : coordinates.lat;
-    
-    // Convert direction and angle to radians
+
+    const [lng, lat] = Array.isArray(coordinates)
+      ? coordinates
+      : [coordinates.lng, coordinates.lat];
+
     const directionRad = (direction * Math.PI) / 180;
     const halfAngleRad = (angle / 2 * Math.PI) / 180;
-    
-    // Calculate the points that make up the cone
-    const conePoints = [];
-    
-    // Add the camera position as the first point (cone apex)
-    conePoints.push([coordinates_lng, coordinates_lat]);
-    
-    // Add points along the arc of the cone
-    const numPoints = 20; // Number of points to create a smooth arc
+
+    const conePoints = [[lng, lat]];
+    const numPoints = 30;
     const startAngle = directionRad - halfAngleRad;
     const endAngle = directionRad + halfAngleRad;
-    
+
     for (let i = 0; i <= numPoints; i++) {
       const currentAngle = startAngle + (i / numPoints) * (endAngle - startAngle);
-      const x = coordinates_lng + radiusInDegrees * Math.sin(currentAngle);
-      const y = coordinates_lat + radiusInDegrees * Math.cos(currentAngle);
+      const x = lng + radiusInDegrees * Math.sin(currentAngle);
+      const y = lat + radiusInDegrees * Math.cos(currentAngle);
       conePoints.push([x, y]);
     }
-    
-    // Add the camera position again to close the polygon
-    conePoints.push([coordinates_lng, coordinates_lat]);
-    
-    // Create a GeoJSON polygon for the cone
+
+    conePoints.push([lng, lat]);
+
     const conePolygon = {
       type: 'Feature',
-      properties: {
-        camera_id: cameraId,
-        range_meters: rangeInMeters,
-        direction: direction,
-        angle: angle
-      },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [conePoints]
-      }
+      properties: { camera_id: cameraId, range_meters: rangeInMeters, direction, angle },
+      geometry: { type: 'Polygon', coordinates: [conePoints] }
     };
-    
-    // Add the source for the cone
+
     map.value.addSource(sourceId, {
       type: 'geojson',
       data: conePolygon
     });
-    
-    // Add a fill layer for the cone
+
     map.value.addLayer({
       id: coneId,
       type: 'fill',
       source: sourceId,
       layout: {},
       paint: {
-        'fill-color': 'rgba(66, 133, 244, 0.2)',
-        'fill-outline-color': 'rgba(66, 133, 244, 0.8)'
+        'fill-color': '#4285F4',
+        'fill-opacity': 0.25,
+        'fill-outline-color': '#4285F4'
       }
     });
-    
-    // Store the cone information for later use
-    const coneInfo = {
-      coneId: coneId,
-      sourceId: sourceId,
-      cameraId: cameraId,
-      coordinates: coordinates,
+
+    return {
+      coneId,
+      sourceId,
+      cameraId,
+      coordinates,
       radius: rangeInMeters,
-      direction: direction,
-      angle: angle
+      direction,
+      angle
     };
-    
-    return coneInfo;
   } catch (error) {
-    console.error('Error adding conical perception range:', error);
+    console.error('\u274C Error adding conical perception range:', error);
     return null;
   }
 }
+
 
 // Get camera pin locations - used by parent components for detection monitoring
 async function getCameraPinLocations() {
