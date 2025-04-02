@@ -19,7 +19,7 @@ import 'quasar/src/css/index.sass'; // Quasar core styles
 import VueApexCharts from "vue3-apexcharts";
 
 // Get app name from environment variables
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = "Stray Safe";
 
 // Create the app
 createInertiaApp({

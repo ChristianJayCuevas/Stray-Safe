@@ -12,10 +12,19 @@ from ultralytics import RTDETR
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 import requests
+import tensorflow as tf
+
 
 app = Flask(__name__)
 CORS(app)
-
+# --- CNN and ORB Feature Matcher Setup ---
+tf.config.set_visible_devices([], 'GPU')
+MODEL_PATH = "model.h5"
+DATABASE_PATH = "with_leash"
+cnn_model = tf.keras.models.load_model(MODEL_PATH)
+orb = cv2.ORB_create(nfeatures=10000)
+bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+MATCH_THRESHOLD = 10  # Lower means stricter matching
 HLS_CLEANUP_DIR = '/var/hls'
 HLS_CLEANED = False
 if not HLS_CLEANED and os.path.exists(HLS_CLEANUP_DIR):
@@ -47,9 +56,52 @@ animal_counters = defaultdict(lambda: {"dog": 0, "cat": 0})
 last_detected_animals = defaultdict(lambda: {"dog": [], "cat": []})
 
 
+# --- Notification Stubs ---
+def notify_owner(animal_id):
+    print(f"Owner notified for animal ID: {animal_id}")
+
+def notify_pound(image_path):
+    print(f"Animal pound notified with image: {image_path}")
+
+# --- Helper Functions ---
+def preprocess_image(image):
+    img = cv2.resize(image, (128, 128))
+    img = np.expand_dims(img, axis=-1) if len(img.shape) == 2 else img
+    img = img / 255.0
+    return np.expand_dims(img, axis=0)
+
+def remove_green_border(image):
+    # Filters out green background used in bounding boxes
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    lower_green = np.array([55, 80, 70])
+    upper_green = np.array([70, 255, 255])
+    mask = cv2.inRange(hsv, lower_green, upper_green)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
+        return image[y:y+h, x:x+w]
+    return image
+
+def find_best_match(query_img):
+    # Compares detected animal image to known database using ORB feature descriptors
+    kp_query, des_query = orb.detectAndCompute(query_img, None)
+    if des_query is None:
+        return None
+    best_match, best_score = None, float("inf")
+    for filename in os.listdir(DATABASE_PATH):
+        if filename.endswith((".jpg", ".png", ".jpeg")):
+            db_img = cv2.imread(os.path.join(DATABASE_PATH, filename), cv2.IMREAD_GRAYSCALE)
+            kp_db, des_db = orb.detectAndCompute(db_img, None)
+            if des_db is not None:
+                matches = bf.match(des_query, des_db)
+                score = sum(m.distance for m in matches) / len(matches) if matches else float("inf")
+                if score < best_score and score < MATCH_THRESHOLD:
+                    best_score, best_match = score, filename
+    return best_match if best_score < MATCH_THRESHOLD else None
+
 
 def stream_static_video(stream_id, video_path):
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(video_path) 
     if not cap.isOpened():
         print(f"[{stream_id}] Failed to open static video")
         return
@@ -64,7 +116,8 @@ def stream_static_video(stream_id, video_path):
         'hls_dir': hls_dir,
         'consec': 0,
         'high_conf_frame': None,
-        'high_score': 0
+        'high_score': 0,
+        'detected_type': None
     }
 
     while True:
@@ -86,6 +139,9 @@ def stream_static_video(stream_id, video_path):
                 if confidence > 0.8:
                     label = 'dog' if class_id == DOG_CLASS_ID else 'cat' if class_id == CAT_CLASS_ID else None
                     if label:
+                        # Draw green bounding box
+                        cv2.rectangle(resized, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
                         if is_new_animal((x1, y1, x2, y2), last_detected_animals[stream_id][label]):
                             last_detected_animals[stream_id][label].append({
                                 "coords": ((x1 + x2) // 2, (y1 + y2) // 2),
@@ -94,24 +150,38 @@ def stream_static_video(stream_id, video_path):
                             animal_counters[stream_id][label] += 1
                             print(f"[{stream_id}] New {label} detected. Total: {animal_counters[stream_id][label]}")
 
-                if class_id == DOG_CLASS_ID and confidence > 0.8:
-                    detected = True
-                    if confidence > stream_data[stream_id]['high_score']:
+                    if label and confidence > stream_data[stream_id]['high_score']:
+                        detected = True
                         stream_data[stream_id]['high_score'] = confidence
                         stream_data[stream_id]['high_conf_frame'] = resized[y1:y2, x1:x2]
+                        stream_data[stream_id]['detected_type'] = label
 
         if detected:
             stream_data[stream_id]['consec'] += 1
+            if stream_data[stream_id]['consec'] >= REQUIRED_CONSECUTIVE_FRAMES:
+                if stream_data[stream_id]['high_conf_frame'] is not None:
+                    classify_and_match(
+                        stream_data[stream_id]['high_conf_frame'],
+                        stream_id,
+                        stream_data[stream_id]['detected_type']
+                    )
+                    stream_data[stream_id]['consec'] = 0
+                    stream_data[stream_id]['high_conf_frame'] = None
+                    stream_data[stream_id]['high_score'] = 0
+                    stream_data[stream_id]['detected_type'] = None
         else:
             stream_data[stream_id]['consec'] = 0
+            stream_data[stream_id]['high_conf_frame'] = None
+            stream_data[stream_id]['high_score'] = 0
+            stream_data[stream_id]['detected_type'] = None
 
-        annotated = results[0].plot()
         with stream_data[stream_id]['lock']:
-            stream_data[stream_id]['frame_buffer'] = annotated.copy()
+            stream_data[stream_id]['frame_buffer'] = resized.copy()
 
         if ffmpeg_proc and ffmpeg_proc.stdin:
-            _, encoded = cv2.imencode('.jpg', annotated)
-            ffmpeg_proc.stdin.write(encoded.tobytes())
+            with stream_data[stream_id]['lock']:
+                _, encoded = cv2.imencode('.jpg', stream_data[stream_id]['frame_buffer'])
+                ffmpeg_proc.stdin.write(encoded.tobytes())
 
         time.sleep(1 / 30)
 
@@ -193,7 +263,8 @@ def process_stream(stream_id):
         "hls_dir": hls_dir,
         "consec": 0,
         "high_conf_frame": None,
-        "high_score": 0
+        "high_score": 0,
+        "detected_type": None
     })
 
     while True:
@@ -214,6 +285,9 @@ def process_stream(stream_id):
                 if confidence > 0.8:
                     label = 'dog' if class_id == DOG_CLASS_ID else 'cat' if class_id == CAT_CLASS_ID else None
                     if label:
+                        # Draw green bounding box
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
                         if is_new_animal((x1, y1, x2, y2), last_detected_animals[stream_id][label]):
                             last_detected_animals[stream_id][label].append({
                                 "coords": ((x1 + x2) // 2, (y1 + y2) // 2),
@@ -222,72 +296,115 @@ def process_stream(stream_id):
                             animal_counters[stream_id][label] += 1
                             print(f"[{stream_id}] New {label} detected. Total: {animal_counters[stream_id][label]}")
 
-                if class_id == DOG_CLASS_ID and confidence > 0.8:
-                    detected = True
-                    if confidence > stream_data[stream_id]['high_score']:
+                    if label and confidence > stream_data[stream_id]['high_score']:
+                        detected = True
                         stream_data[stream_id]['high_score'] = confidence
                         stream_data[stream_id]['high_conf_frame'] = frame[y1:y2, x1:x2]
+                        stream_data[stream_id]['detected_type'] = label
 
         if detected:
             stream_data[stream_id]['consec'] += 1
             if stream_data[stream_id]['consec'] >= REQUIRED_CONSECUTIVE_FRAMES:
                 if stream_data[stream_id]['high_conf_frame'] is not None:
-                    _, buffer = cv2.imencode('.jpg', stream_data[stream_id]['high_conf_frame'])
-                    base64_img = base64.b64encode(buffer).decode('utf-8')
-                    try:
-                        requests.post('http://127.0.0.1:8000/api/pin', json={
-                            'animal_type': 'dog',
-                            'coordinates': [121.039295, 14.631141],
-                            'snapshot': base64_img
-                        })
-                        print(f"[{stream_id}] Pin sent.")
-                    except Exception as e:
-                        print(f"[{stream_id}] Failed to send pin:", e)
+                    classify_and_match(
+                        stream_data[stream_id]['high_conf_frame'],
+                        stream_id,
+                        stream_data[stream_id]['detected_type']
+                    )
                     stream_data[stream_id]['consec'] = 0
                     stream_data[stream_id]['high_conf_frame'] = None
                     stream_data[stream_id]['high_score'] = 0
+                    stream_data[stream_id]['detected_type'] = None
         else:
             stream_data[stream_id]['consec'] = 0
             stream_data[stream_id]['high_conf_frame'] = None
             stream_data[stream_id]['high_score'] = 0
+            stream_data[stream_id]['detected_type'] = None
 
-        annotated = results[0].plot()
         with stream_data[stream_id]['lock']:
-            stream_data[stream_id]['frame_buffer'] = annotated.copy()
+            stream_data[stream_id]['frame_buffer'] = frame.copy()
 
         if ffmpeg_proc and ffmpeg_proc.stdin:
-            _, encoded = cv2.imencode('.jpg', annotated)
-            ffmpeg_proc.stdin.write(encoded.tobytes())
+            with stream_data[stream_id]['lock']:
+                _, encoded = cv2.imencode('.jpg', stream_data[stream_id]['frame_buffer'])
+                ffmpeg_proc.stdin.write(encoded.tobytes())
 
         time.sleep(1 / 30)
+# Main handler to analyze confirmed dog or cat image
 
+def classify_and_match(animal_img, stream_id, animal_type):
+    # Use green bounding box removal and CNN+ORB pipeline for stray classification
+    cropped = remove_green_border(animal_img)
+    prediction = cnn_model.predict(preprocess_image(cropped))
+    is_stray = prediction[0] >= 0.3
+
+    gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+    match = find_best_match(gray)
+
+    # Ensure venv/tmp directory exists
+    tmp_dir = os.path.join("venv", "tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    # Case 1: Not Stray, Registered
+    if not is_stray and match:
+        notify_owner(match)
+        print(f"[TEST LOG] Case: Not Stray, Registered | Match: {match}")
+        return
+
+    # Case 2: Not Stray, Not Registered
+    if not is_stray and not match:
+        tmp_path = os.path.join(tmp_dir, f"not_stray_unknown_{animal_type}_{stream_id}_{int(time.time())}.jpg")
+        cv2.imwrite(tmp_path, animal_img)
+        notify_pound(tmp_path)
+        print("[TEST LOG] Case: Not Stray, Not Registered | Notified Pound")
+        return
+
+    # Case 3: Stray, Registered
+    if is_stray and match:
+        notify_owner(match)
+        print(f"[TEST LOG] Case: Stray, Registered | Match: {match}")
+        return
+
+    # Case 4: Stray, Not Registered
+    if is_stray and not match:
+        tmp_path = os.path.join(tmp_dir, f"stray_unknown_{animal_type}_{stream_id}_{int(time.time())}.jpg")
+        cv2.imwrite(tmp_path, animal_img)
+        notify_pound(tmp_path)
+        print("[TEST LOG] Case: Stray, Not Registered | Notified Pound")
 
 @app.route('/api2/streams')
 def get_all_streams():
     active_streams = []
+    hls_output_dir = "/var/www/html/hls"  # adjust this to your actual HLS root
+
     for stream_id, data in stream_data.items():
-        is_active = (
-            'ffmpeg' in data and
-            data.get('url', '').startswith('static://')
-        ) or (
-            data.get('ffmpeg') is not None and
-            data['ffmpeg'].poll() is None and
-            data.get('frame_buffer') is not None
-        )
+        m3u8_path = os.path.join(hls_output_dir, f"{stream_id}.m3u8")
+
+        # Check if .m3u8 exists and at least one .ts segment for the stream
+        m3u8_exists = os.path.exists(m3u8_path)
+        ts_segments = [
+            f for f in os.listdir(hls_output_dir)
+            if f.startswith(stream_id) and f.endswith(".ts")
+        ]
+        is_active = m3u8_exists and len(ts_segments) > 0
+
         if is_active:
             active_streams.append({
                 "id": stream_id,
                 "name": f"Camera {stream_id}",
-                "location": f"RTSP or Static Source from {data['url']}",
+                "location": f"RTSP or Static Source from {data.get('url', 'unknown')}",
                 "status": "active",
-                "url": data['url'],
+                "url": data.get('url', 'unknown'),
                 "hls_url": f"http://straysafe.me/hls/{stream_id}.m3u8",
                 "flask_hls_url": f"http://straysafe.me/api/hls/{stream_id}/playlist.m3u8",
                 "video_url": f"http://straysafe.me/api/video/{stream_id}",
                 "rtmp_key": stream_id,
-                "type": "static" if data['url'].startswith('static://') else "rtsp"
+                "type": "static" if data.get('url', '').startswith('static://') else "rtsp"
             })
+
     return jsonify({"streams": active_streams})
+
+
 
 
 @app.route('/api2/counters')
@@ -315,7 +432,30 @@ def serve_hls_file(stream_id, filename):
         return "Stream not found", 404
     return send_from_directory(stream_data[stream_id]['hls_dir'], filename)
 
+@app.route("/api2/predict", methods=["POST"])
+def predict():
+    data = request.json
+    image_path = data.get("image_path")
+    animal_type = data.get("animal_type")
+    if not os.path.exists(image_path):
+        return jsonify({"error": "Image not found"}), 400
+    image = cv2.imread(image_path)
+    cropped = remove_green_border(image)
 
+    prediction = cnn_model.predict(preprocess_image(cropped))
+    is_stray = prediction[0] >= 0.3
+
+    if not is_stray:
+        return jsonify({"predicted_label": "not stray", "action": "none"})
+
+    best_match = find_best_match(cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY))
+    if best_match:
+        notify_owner(best_match)
+        return jsonify({"predicted_label": "stray", "match_found": True, "animal_id": best_match})
+    else:
+        notify_pound(image_path)
+        return jsonify({"predicted_label": "stray", "match_found": False})
+    
 if __name__ == '__main__':
     for ip in STREAM_IP_RANGE:
         stream_id = f'cam-{ip}'

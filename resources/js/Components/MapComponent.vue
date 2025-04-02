@@ -717,6 +717,12 @@ async function addAnimalPin(pinData) {
   let markerInstance = null;
   
   try {
+    if (pinData.cameraId && coneMap[pinData.cameraId]) {
+      const cone = coneMap[pinData.cameraId];
+      pinData.lng = getRandomPointInCone(cone)[0];
+      pinData.lat = getRandomPointInCone(cone)[1];
+    }
+
     console.log('Adding animal pin with data:', pinData);
     
     // Validate required fields
@@ -806,6 +812,101 @@ defineExpose({
 });
 
 // Add a conical perception range to the map for a camera
+// function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle, cameraId) {
+//   const timestamp = Date.now();
+//   const coneId = `cone-${cameraId || timestamp}`;
+//   const sourceId = `cone-source-${cameraId || timestamp}`;
+
+//   try {
+//     if (!map.value) {
+//       console.error('Map not initialized, cannot add conical perception range');
+//       return;
+//     }
+
+//     console.log(`\u{1F50D} Adding conical perception for camera ${cameraId}`, {
+//       coordinates,
+//       rangeInMeters,
+//       direction,
+//       angle
+//     });
+
+//     if (!map.value.isStyleLoaded()) {
+//       console.log('Map style not yet loaded, waiting...');
+//       map.value.once('style.load', () => {
+//         addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle, cameraId);
+//       });
+//       return;
+//     }
+
+//     if (map.value.getLayer(coneId)) {
+//       map.value.removeLayer(coneId);
+//     }
+//     if (map.value.getSource(sourceId)) {
+//       map.value.removeSource(sourceId);
+//     }
+
+//     const radiusInDegrees = rangeInMeters * 0.000009;
+
+//     const [lng, lat] = Array.isArray(coordinates)
+//       ? coordinates
+//       : [coordinates.lng, coordinates.lat];
+
+//     const directionRad = (direction * Math.PI) / 180;
+//     const halfAngleRad = (angle / 2 * Math.PI) / 180;
+
+//     const conePoints = [[lng, lat]];
+//     const numPoints = 30;
+//     const startAngle = directionRad - halfAngleRad;
+//     const endAngle = directionRad + halfAngleRad;
+
+//     for (let i = 0; i <= numPoints; i++) {
+//       const currentAngle = startAngle + (i / numPoints) * (endAngle - startAngle);
+//       const x = lng + radiusInDegrees * Math.sin(currentAngle);
+//       const y = lat + radiusInDegrees * Math.cos(currentAngle);
+//       conePoints.push([x, y]);
+//     }
+
+//     conePoints.push([lng, lat]);
+
+//     const conePolygon = {
+//       type: 'Feature',
+//       properties: { camera_id: cameraId, range_meters: rangeInMeters, direction, angle },
+//       geometry: { type: 'Polygon', coordinates: [conePoints] }
+//     };
+
+//     map.value.addSource(sourceId, {
+//       type: 'geojson',
+//       data: conePolygon
+//     });
+
+//     map.value.addLayer({
+//       id: coneId,
+//       type: 'fill',
+//       source: sourceId,
+//       layout: {},
+//       paint: {
+//         'fill-color': '#4285F4',
+//         'fill-opacity': 0.25,
+//         'fill-outline-color': '#4285F4'
+//       }
+//     });
+
+//     return {
+//       coneId,
+//       sourceId,
+//       cameraId,
+//       coordinates,
+//       radius: rangeInMeters,
+//       direction,
+//       angle
+//     };
+//   } catch (error) {
+//     console.error('\u274C Error adding conical perception range:', error);
+//     return null;
+//   }
+// }
+const coneMap = {};
+
 function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle, cameraId) {
   const timestamp = Date.now();
   const coneId = `cone-${cameraId || timestamp}`;
@@ -885,6 +986,15 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
       }
     });
 
+    // ✅ Store the cone definition for later use
+    coneMap[cameraId] = {
+      center: [lng, lat],
+      radius: rangeInMeters,
+      direction,
+      angle,
+      polygon: conePolygon.geometry.coordinates[0]
+    };
+
     return {
       coneId,
       sourceId,
@@ -898,6 +1008,21 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
     console.error('\u274C Error adding conical perception range:', error);
     return null;
   }
+}
+function getRandomPointInCone(cone) {
+  const { center, radius, direction, angle } = cone;
+
+  const randomRadius = Math.random() * radius * 0.9; // stay within the cone
+  const randomAngleOffset = (Math.random() - 0.5) * angle; // centered at direction
+
+  const finalAngle = direction + randomAngleOffset;
+  const rad = finalAngle * (Math.PI / 180);
+
+  const dx = randomRadius * 0.000009 * Math.sin(rad);
+  const dy = randomRadius * 0.000009 * Math.cos(rad);
+
+  const [lng, lat] = center;
+  return [lng + dx, lat + dy];
 }
 
 
