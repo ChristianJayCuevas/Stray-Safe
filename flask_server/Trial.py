@@ -13,9 +13,6 @@ from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 import requests
 import tensorflow as tf
-from keras.applications.resnet50 import ResNet50, preprocess_input
-from keras.models import Model
-from sklearn.metrics.pairwise import cosine_similarity
 
 
 app = Flask(__name__)
@@ -23,7 +20,7 @@ CORS(app)
 # --- CNN and ORB Feature Matcher Setup ---
 tf.config.set_visible_devices([], 'GPU')
 MODEL_PATH = "model.h5"
-DATABASE_PATH = "/home/straysafe/venv/with_leash"
+DATABASE_PATH = "with_leash"
 cnn_model = tf.keras.models.load_model(MODEL_PATH)
 orb = cv2.ORB_create(nfeatures=10000)
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
@@ -40,9 +37,6 @@ os.makedirs(HLS_CLEANUP_DIR, exist_ok=True)
 os.chmod(HLS_CLEANUP_DIR, 0o777)
 HLS_CLEANED = True
 
-feature_extractor = ResNet50(weights='imagenet', include_top=False, pooling='avg')
-
-
 FRAME_WIDTH, FRAME_HEIGHT = 960, 544
 REQUIRED_CONSECUTIVE_FRAMES = 20
 DOG_CLASS_ID = 1
@@ -57,11 +51,10 @@ model = RTDETR('best.pt')
 model.conf = 0.6
 model.to('cuda' if torch.cuda.is_available() else 'cpu')
 
-owner_embeddings = {}
-
 BUFFER_SIZE = 150  # 5 seconds at 30fps
 animal_counters = defaultdict(lambda: {"dog": 0, "cat": 0})
 last_detected_animals = defaultdict(lambda: {"dog": [], "cat": []})
+
 
 # --- Notification Stubs ---
 def notify_owner(animal_id):
@@ -89,35 +82,22 @@ def remove_green_border(image):
         return image[y:y+h, x:x+w]
     return image
 
-def get_image_embedding(img):
-    # Convert BGR (OpenCV) to RGB
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    resized = cv2.resize(img_rgb, (224, 224))
-    x = np.expand_dims(resized, axis=0).astype('float32')
-    x = preprocess_input(x)
-    return feature_extractor.predict(x)[0]
-
-def precompute_owner_embeddings():
-    for fname in os.listdir(DATABASE_PATH):
-        if fname.lower().endswith((".jpg", ".png", ".jpeg")):
-            path = os.path.join(DATABASE_PATH, fname)
-            img = cv2.imread(path)
-            if img is None:
-                continue
-            embedding = get_image_embedding(img)
-            owner_embeddings[fname] = embedding
-def match_snapshot_to_owner(snapshot_img, threshold=0.85):
-    query_embedding = get_image_embedding(snapshot_img)
-    best_score = -1
-    best_match = None
-
-    for fname, db_embedding in owner_embeddings.items():
-        sim = cosine_similarity([query_embedding], [db_embedding])[0][0]
-        if sim > best_score:
-            best_score = sim
-            best_match = fname
-
-    return best_match if best_score >= threshold else None
+def find_best_match(query_img):
+    # Compares detected animal image to known database using ORB feature descriptors
+    kp_query, des_query = orb.detectAndCompute(query_img, None)
+    if des_query is None:
+        return None
+    best_match, best_score = None, float("inf")
+    for filename in os.listdir(DATABASE_PATH):
+        if filename.endswith((".jpg", ".png", ".jpeg")):
+            db_img = cv2.imread(os.path.join(DATABASE_PATH, filename), cv2.IMREAD_GRAYSCALE)
+            kp_db, des_db = orb.detectAndCompute(db_img, None)
+            if des_db is not None:
+                matches = bf.match(des_query, des_db)
+                score = sum(m.distance for m in matches) / len(matches) if matches else float("inf")
+                if score < best_score and score < MATCH_THRESHOLD:
+                    best_score, best_match = score, filename
+    return best_match if best_score < MATCH_THRESHOLD else None
 
 
 def stream_static_video(stream_id, video_path):
@@ -358,7 +338,8 @@ def classify_and_match(animal_img, stream_id, animal_type):
     prediction = cnn_model.predict(preprocess_image(cropped))
     is_stray = prediction[0] >= 0.3
 
-    match = match_snapshot_to_owner(cropped)
+    gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+    match = find_best_match(gray)
 
     # Ensure venv/tmp directory exists
     tmp_dir = os.path.join("venv", "tmp")
@@ -390,11 +371,41 @@ def classify_and_match(animal_img, stream_id, animal_type):
         cv2.imwrite(tmp_path, animal_img)
         notify_pound(tmp_path)
         print("[TEST LOG] Case: Stray, Not Registered | Notified Pound")
+
+def upscale_with_esrgan(input_path, output_path):
+    ESRGAN_DIR = "/home/straysafe/realgan/Real-ESRGAN"
+    PYTHON_PATH = "/home/straysafe/venv/bin/python"
+
+    cmd = [
+        PYTHON_PATH,
+        os.path.join(ESRGAN_DIR, "inference_realesrgan.py"),
+        "-n", "RealESRGAN_x4plus",
+        "-i", input_path,
+        "-o", output_path
+    ]
+
+    try:
+        print(f"[ESRGAN] Running command: {' '.join(cmd)}")
+        subprocess.run(cmd, check=True)
+        if os.path.exists(output_path):
+            print(f"[ESRGAN] Output saved to {output_path}")
+            return True
+        else:
+            print("[ESRGAN] Output file not found after upscaling.")
+            return False
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] ESRGAN subprocess failed: {e}")
+        return False
+
+
+
 def save_debug_images(stream_id):
     debug_dir = os.path.join("venv", "debug", stream_id)
     os.makedirs(debug_dir, exist_ok=True)
+
     data = stream_data.get(stream_id)
     if not data or data['high_conf_frame'] is None:
+        print("[DEBUG] No high confidence frame found.")
         return None
 
     # Save 1: Snapshot with green box
@@ -403,25 +414,56 @@ def save_debug_images(stream_id):
 
     # Save 2: Cropped and cleaned
     cleaned = remove_green_border(data['high_conf_frame'])
+    if cleaned is None or cleaned.size == 0:
+        print("[ERROR] Cropped image is empty or invalid.")
+        return None
     cleaned_path = os.path.join(debug_dir, "2_cropped_cleaned.jpg")
     cv2.imwrite(cleaned_path, cleaned)
 
-    # Save 3: Classification result
-    prediction = cnn_model.predict(preprocess_image(cleaned))[0]
-    is_stray = prediction >= 0.3
-    classification_result = "stray" if is_stray else "not_stray"
+    # Save 2.5: ESRGAN-enhanced (upscaled)
+    esrgan_output_path = os.path.join(debug_dir, "2_upscaled.jpg")
+    upscale_success = False
+    try:
+        upscale_success = upscale_with_esrgan(cleaned_path, esrgan_output_path)
+        if upscale_success:
+            enhanced = cv2.imread(esrgan_output_path)
+            if enhanced is not None and enhanced.size > 0:
+                cleaned = enhanced
+            else:
+                print("[WARNING] ESRGAN ran but output image is unreadable.")
+                upscale_success = False
+    except Exception as e:
+        print(f"[WARNING] ESRGAN failed or is missing: {e}")
 
-    match = match_snapshot_to_owner(cleaned)
+
+    # Save 3: Classification result
+    try:
+        prediction = cnn_model.predict(preprocess_image(cleaned))[0]
+        is_stray = prediction >= 0.3
+        classification_result = "stray" if is_stray else "not_stray"
+    except Exception as e:
+        print(f"[ERROR] CNN classification failed: {e}")
+        return None
+
+    # Save 4: ORB matching result
+    match = None
     match_path = None
-    if match:
-        db_img = cv2.imread(os.path.join(DATABASE_PATH, match))
-        match_path = os.path.join(debug_dir, "3_feature_match.jpg")
-        stacked = np.hstack((cleaned, db_img))
-        cv2.imwrite(match_path, stacked)
+    try:
+        gray = cv2.cvtColor(cleaned, cv2.COLOR_BGR2GRAY)
+        match = find_best_match(gray)
+        if match:
+            db_img = cv2.imread(os.path.join(DATABASE_PATH, match))
+            if db_img is not None:
+                match_path = os.path.join(debug_dir, "3_feature_match.jpg")
+                stacked = np.hstack((cleaned, db_img))
+                cv2.imwrite(match_path, stacked)
+    except Exception as e:
+        print(f"[ERROR] ORB matching failed: {e}")
 
     return {
         "snapshot": snapshot_path,
         "cropped": cleaned_path,
+        "upscaled": esrgan_output_path if upscale_success else None,
         "classification": classification_result,
         "prediction_score": float(prediction),
         "match": match,
@@ -441,9 +483,9 @@ def debug_pipeline(stream_id):
         "classification": result["classification"],
         "prediction_score": result["prediction_score"],
         "match": result["match"],
+        "upscaled_url": f"/api2/debug-img/{stream_id}/2_upscaled.jpg" if result["upscaled"] else None,
         "match_img_url": f"/api2/debug-img/{stream_id}/3_feature_match.jpg" if result["match_img"] else None
     })
-
 @app.route('/api2/debug-img/<stream_id>/<filename>')
 def serve_debug_image(stream_id, filename):
     debug_dir = os.path.join("venv", "debug", stream_id)

@@ -16,6 +16,8 @@ const FilePond = vueFilePond(FilePondPluginImagePreview);
 const { auth } = usePage().props;
 const authUser = computed(() => auth.user || null);
 console.log("auth.user:", auth.user);
+console.log("User Permissions:", authUser.value?.permissions);
+console.log("User Roles:", authUser.value?.roles);
 
 const drawer = ref(false);
 const miniState = ref(true);
@@ -142,6 +144,13 @@ const handleLogout = () => {
   });
 };
 
+// Add this computed property to check for admin permissions
+const hasAdminAccess = computed(() => {
+  return authUser.value?.permissions?.includes('manage_roles') || 
+         authUser.value?.permissions?.includes('manage_users') ||
+         authUser.value?.permissions?.includes('manage_referral_codes');
+});
+
 </script>
 <template>
     <div :class="{'bg-website': !isDarkMode, 'bg-dark': isDarkMode}">
@@ -230,6 +239,58 @@ const handleLogout = () => {
                   </q-item-section>
                 </q-item>
               </Link>
+
+              <!-- Admin Section -->
+              <template v-if="hasAdminAccess">
+                <q-separator class="q-my-md" />
+                <q-item-label header class="text-weight-bold">Admin Panel</q-item-label>
+                
+                <Link :href="route('admin.roles')">
+                  <q-item 
+                    clickable 
+                    class="GPL__drawer-item q-my-sm" 
+                    :class="{ 'sidebar-active': route().current('admin.roles') && !isDarkMode, 'sidebar-active-dark': route().current('admin.roles') && isDarkMode }"
+                  >
+                    <q-item-section avatar>
+                      <q-icon name="admin_panel_settings" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label>Role Management</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                </Link>
+
+                <Link :href="route('admin.users')">
+                  <q-item 
+                    clickable 
+                    class="GPL__drawer-item q-my-sm" 
+                    :class="{ 'sidebar-active': route().current('admin.users') && !isDarkMode, 'sidebar-active-dark': route().current('admin.users') && isDarkMode }"
+                  >
+                    <q-item-section avatar>
+                      <q-icon name="people" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label>User Management</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                </Link>
+
+                <Link :href="route('admin.referral-codes')">
+                  <q-item 
+                    clickable 
+                    class="GPL__drawer-item q-my-sm" 
+                    :class="{ 'sidebar-active': route().current('admin.referral-codes') && !isDarkMode, 'sidebar-active-dark': route().current('admin.referral-codes') && isDarkMode }"
+                  >
+                    <q-item-section avatar>
+                      <q-icon name="qr_code" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label>Referral Codes</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                </Link>
+              </template>
+
               <q-separator class="q-my-md" />
   
               <Link :href="route('profile.edit')">

@@ -2,43 +2,49 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\User;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 
 class UserSeeder extends Seeder
 {
-    public function run()
+    public function run(): void
     {
-        // Super Admin
+        // Create super admin
         $superAdmin = User::create([
             'name' => 'Super Admin',
-            'email' => 'superadmin@example.com',
-            'password' => bcrypt('password'),
+            'email' => 'admin@straysafe.com',
+            'password' => Hash::make('Admin@123'),
+            'email_verified_at' => now(),
         ]);
         $superAdmin->assignRole('super_admin');
 
-        // IT Admin
+        // Create barangay official
         $barangayOfficial = User::create([
-            'name' => 'Barangay Sacred Heart',
-            'email' => 'sacredheart@example.com',
-            'password' => bcrypt('password'),
+            'name' => 'Barangay Official',
+            'email' => 'official@straysafe.com',
+            'password' => Hash::make('Official@123'),
+            'email_verified_at' => now(),
         ]);
         $barangayOfficial->assignRole('barangay_official');
 
-        // Regular User
+        // Create animal pound staff
         $animalPound = User::create([
-            'name' => 'Animal Pound',
-            'email' => 'animalpound@example.com',
-            'password' => bcrypt('password'),
+            'name' => 'Animal Pound Staff',
+            'email' => 'pound@straysafe.com',
+            'password' => Hash::make('Pound@123'),
+            'email_verified_at' => now(),
         ]);
         $animalPound->assignRole('animal_pound');
 
-        // Therapist
-        $regularUser = User::create([
-            'name' => 'Regular User',
-            'email' => 'regular@example.com',
-            'password' => bcrypt('password'),
+        // Create a regular viewer
+        $viewer = User::create([
+            'name' => 'Regular Viewer',
+            'email' => 'viewer@straysafe.com',
+            'password' => Hash::make('Viewer@123'),
+            'email_verified_at' => now(),
         ]);
-        $regularUser->assignRole('user');
+        $viewer->assignRole('viewer');
     }
 }

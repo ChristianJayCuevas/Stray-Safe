@@ -11,6 +11,7 @@ const form = useForm({
     email: '',
     password: '',
     password_confirmation: '',
+    referral_code: '',
 });
 
 const submit = () => {
@@ -95,6 +96,22 @@ const submit = () => {
                     bg-color="white"
                 />
                 <InputError class="mt-1" :message="form.errors.password_confirmation" />
+            </div>
+
+            <div class="mb-4">
+                <q-input
+                    outlined
+                    label="Referral Code"
+                    id="referral_code"
+                    type="text"
+                    class="w-full"
+                    v-model="form.referral_code"
+                    required
+                    color="teal"
+                    standout
+                    bg-color="white"
+                />
+                <InputError class="mt-1" :message="form.errors.referral_code" />
             </div>
             
             <div class="mb-6">

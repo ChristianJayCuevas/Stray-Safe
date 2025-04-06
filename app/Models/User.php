@@ -2,64 +2,39 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
-use Laravel\Sanctum\HasApiTokens; 
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasRoles, HasApiTokens;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
+    protected $guard_name = 'web'; // Needed for Spatie permission checks
+
     protected $fillable = [
         'name',
         'email',
         'password',
         'profile_image_link',
+        'referral_code',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
-    }
-    public function Posts()
-    {
-        return $this->hasMany(Post::class);
-    }
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
 
-    public function likes()
+    // Optional: Custom helper if you still want this alias
+    public function isAdmin(): bool
     {
-        return $this->belongsToMany(Post::class, 'liked_posts', 'post_id', 'user_id')->withTimestamps();
-    }
-
-    public function hasLiked(Post $post)
-    {
-        return $this->likes()->where('post_id', $post->id)->exists();
+        return $this->hasRole('super_admin'); // Assuming "admin" was a typo
     }
 }
