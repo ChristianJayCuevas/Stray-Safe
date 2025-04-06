@@ -39,7 +39,7 @@ jobs:
           echo "${{ secrets.AZURE_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa # Ensure correct permissions for the private key file
           touch ~/.ssh/known_hosts # Make sure the known_hosts file exists
-          ssh-keygen -R "${{ secrets.AZURE_HOST }}" -f ~/.ssh/known_hosts # Remove any existing entries for the host
+          ssh-keygen -R "${{ secrets.AZURE_HOST }}" -f ~/.ssh/known_hosts || true
           ssh-keyscan -t rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.AZURE_HOST }} >> ~/.ssh/known_hosts # Add host key
           chmod 600 ~/.ssh/known_hosts # Ensure correct permissions for known_hosts file
           cat ~/.ssh/known_hosts # Debugging: check if host key is added
