@@ -51,7 +51,12 @@ DOG_CLASS_ID = 1
 CAT_CLASS_ID = 0
 STREAM_IP_RANGE = range(3, 11)
 RTSP_BASE = 'rtsp://10.0.0.{ip}:8554/cam1'
-STATIC_VIDEO_PATH = 'sample_video.avi'
+
+STATIC_VIDEO_SOURCES = {
+    "static-demo1": "sample_video.avi",
+    "static-demo2": "sample_video2.avi",
+    "static-demo3": "sample_video3.avi"
+}
 
 stream_data = {}
 stream_threads = []
@@ -79,6 +84,7 @@ def notify_owner(owner_id, animal_img=None, animal_info=None):
         animal_info: Additional information about the detection
     """
     timestamp = datetime.now().isoformat()
+    stream_id = animal_info.get('stream_id', 'unknown') if animal_info else 'unknown'
     
     notification = {
         "id": f"owner_notify_{int(time.time())}",
@@ -86,7 +92,8 @@ def notify_owner(owner_id, animal_img=None, animal_info=None):
         "owner_id": owner_id,
         "timestamp": timestamp,
         "status": "sent",
-        "animal_info": animal_info
+        "animal_info": animal_info,
+        "stream_id": stream_id  # Explicitly include stream_id in notification
     }
     
     # Save the notification to history
@@ -96,7 +103,7 @@ def notify_owner(owner_id, animal_img=None, animal_info=None):
     if len(notification_history) > 1000:
         notification_history.pop()
     
-    print(f"Owner notified for animal ID: {owner_id}")
+    print(f"Owner notified for animal ID: {owner_id} from stream: {stream_id}")
     return notification
 
 def notify_pound(image_path, animal_info=None):
@@ -108,6 +115,7 @@ def notify_pound(image_path, animal_info=None):
         animal_info: Additional information about the detection
     """
     timestamp = datetime.now().isoformat()
+    stream_id = animal_info.get('stream_id', 'unknown') if animal_info else 'unknown'
     
     notification = {
         "id": f"pound_notify_{int(time.time())}",
@@ -115,7 +123,8 @@ def notify_pound(image_path, animal_info=None):
         "image_path": image_path,
         "timestamp": timestamp,
         "status": "sent",
-        "animal_info": animal_info
+        "animal_info": animal_info,
+        "stream_id": stream_id  # Explicitly include stream_id in notification
     }
     
     # Save the notification to history
@@ -125,7 +134,7 @@ def notify_pound(image_path, animal_info=None):
     if len(notification_history) > 1000:
         notification_history.pop()
     
-    print(f"Animal pound notified with image: {image_path}")
+    print(f"Animal pound notified with image: {image_path} from stream: {stream_id}")
     return notification
 
 # --- Helper Functions ---
@@ -1222,6 +1231,9 @@ def classify_and_match(animal_img, stream_id, animal_type, animal_id=None):
         if animal_id is None:
             animal_id = str(len(detected_animals_log) + 1)
     
+    # Generate a detection ID
+    detection_id = f"{stream_id}_{animal_type}{animal_id}_{int(time.time())}"
+    
     # Save a copy of the original frame for context if available
     snapshot_path = None
     if stream_data.get(stream_id, {}).get("frame_buffer") is not None:
@@ -1302,7 +1314,7 @@ def classify_and_match(animal_img, stream_id, animal_type, animal_id=None):
         color_matches_dir = os.path.join(debug_dir, "color_matches")
         os.makedirs(color_matches_dir, exist_ok=True)
         
-        # Save up to top 5 color matches for reference
+        # Save up to top 5 color matches for quick reference
         for idx, match_info in enumerate(all_matches[:5]):
             if 'path' not in match_info:
                 continue
@@ -1312,7 +1324,7 @@ def classify_and_match(animal_img, stream_id, animal_type, animal_id=None):
                 continue
             
             # Create comparison
-            color_match_path = os.path.join(color_matches_dir, f"dog{animal_id}_color_match_{idx+1}_{os.path.basename(match_info['path'])}")
+            color_match_path = os.path.join(color_matches_dir, f"color_match_{idx+1}_{os.path.basename(match_info['path'])}")
             
             # Resize images to same height
             h1, w1 = cleaned.shape[:2]
@@ -1352,7 +1364,8 @@ def classify_and_match(animal_img, stream_id, animal_type, animal_id=None):
         "match_method": match_method,
         "image_path": crop_path,
         "timestamp": datetime.now().isoformat(),
-        "detection_id": f"{stream_id}_{animal_type}{animal_id}_{int(time.time())}"
+        "detection_id": detection_id,
+        "notification_case": notification_case
     }
     
     # Log the detection with detailed information
@@ -1367,55 +1380,71 @@ def classify_and_match(animal_img, stream_id, animal_type, animal_id=None):
     
     # Send notification based on the case
     notification_info = None
-    
-    # Case 1: Not Stray, Registered
-    if not is_stray and match:
+    if is_stray and match:
+        # Stray pet with a match - notify owner
         notification_info = notify_owner(match, animal_img, animal_info)
-        print(f"[{stream_id}] Case: Not Stray, Registered | Match: {match} (score: {match_score:.2f}, method: {match_method})")
-        
-    # Case 2: Not Stray, Not Registered
-    elif not is_stray and not match:
-        tmp_dir = os.path.join("venv", "tmp")
-        os.makedirs(tmp_dir, exist_ok=True)
-        tmp_path = os.path.join(tmp_dir, f"not_stray_unknown_{animal_type}_{stream_id}_{int(time.time())}.jpg")
-        cv2.imwrite(tmp_path, animal_img)
-        notification_info = notify_pound(tmp_path, animal_info)
-        print(f"[{stream_id}] Case: Not Stray, Not Registered | Notified Pound")
-        
-    # Case 3: Stray, Registered
-    elif is_stray and match:
-        notification_info = notify_owner(match, animal_img, animal_info)
-        print(f"[{stream_id}] Case: Stray, Registered | Match: {match} (score: {match_score:.2f}, method: {match_method})")
-        
-    # Case 4: Stray, Not Registered
     elif is_stray and not match:
-        tmp_dir = os.path.join("venv", "tmp")
-        os.makedirs(tmp_dir, exist_ok=True)
-        tmp_path = os.path.join(tmp_dir, f"stray_unknown_{animal_type}_{stream_id}_{int(time.time())}.jpg")
-        cv2.imwrite(tmp_path, animal_img)
-        notification_info = notify_pound(tmp_path, animal_info)
-        print(f"[{stream_id}] Case: Stray, Not Registered | Notified Pound")
+        # Stray with no match - notify pound
+        notification_info = notify_pound(crop_path, animal_info)
+    elif not is_stray and match:
+        # Not a stray but has a match - still notify owner just in case
+        notification_info = notify_owner(match, animal_img, animal_info)
+    elif not is_stray and not match:
+        # Not a stray with no match - low priority pound notification
+        notification_info = notify_pound(crop_path, animal_info)
     
-    # Return comprehensive results
+    # Return detailed results
     return {
-        "animal_info": animal_info,
+        "animal_type": animal_type,
+        "animal_id": animal_id,
+        "classification": classification_result,
+        "prediction_score": float(prediction),
+        "is_stray": is_stray,
+        "match": match,
+        "match_score": match_score,
+        "match_method": match_method,
+        "image_path": crop_path,
+        "match_img": match_path,
+        "all_matches_count": len(all_matches),
+        "color_matches_paths": color_matches_paths,
         "notification_case": notification_case,
         "notification_info": notification_info,
-        "image_paths": {
-            "original": crop_path,
-            "cleaned": cleaned_path,
-            "snapshot": snapshot_path,
-            "match": match_path,
-            "color_matches": color_matches_paths
-        },
-        "analysis_time": datetime.now().isoformat()
+        "detection_id": detection_id,
+        "timestamp": datetime.now().isoformat(),
+        "analysis_time": time.strftime("%Y-%m-%d %H:%M:%S")
     }
 
 # Function to process animal in a separate thread
 def process_animal_async(animal_img, stream_id, animal_type, animal_id=None):
     """Run the classification and matching in a separate thread to avoid blocking the main stream processing"""
     result = classify_and_match(animal_img, stream_id, animal_type, animal_id)
-    print(f"[{stream_id}] Async processing complete for {animal_type}{animal_id}: {result['notification_case']}")
+    
+    # Log the detection to ensure it appears in the /api2/detected endpoint
+    # Add entry to the detected_animals_log
+    if 'detection_id' in result:
+        detection_entry = {
+            "id": result['detection_id'],
+            "stream_id": stream_id,
+            "animal_type": animal_type,
+            "animal_id": animal_id,
+            "timestamp": datetime.now().isoformat(),
+            "classification": result.get('classification', 'unknown'),
+            "image_path": result.get('image_path'),
+            "match": result.get('match'),
+            "match_score": result.get('match_score', 0),
+            "match_method": result.get('match_method', 'none'),
+            "notification_case": result.get('notification_case'),
+            "notification_type": "owner_notification" if result.get('match') else "pound_notification"
+        }
+        
+        # Add to the beginning of the list for most recent first
+        detected_animals_log.insert(0, detection_entry)
+        
+        # Keep the log at a reasonable size (store last 1000 detections)
+        if len(detected_animals_log) > 1000:
+            detected_animals_log.pop()
+    
+    print(f"[{stream_id}] Async processing complete for {animal_type}{animal_id}: {result.get('notification_case')}")
     return result
 
 def save_debug_images(stream_id):
@@ -1557,6 +1586,47 @@ def save_debug_images(stream_id):
             # Add path to list of color matches
             color_matches_paths.append(color_match_path)
 
+    # Prepare animal info for notifications
+    animal_info = {
+        "stream_id": stream_id,
+        "animal_type": animal_type,
+        "animal_id": animal_id,
+        "classification": classification_result,
+        "prediction_score": float(prediction),
+        "is_stray": is_stray,
+        "match": match,
+        "match_score": match_score,
+        "match_method": match_method,
+        "image_path": high_conf_path,
+        "timestamp": datetime.now().isoformat(),
+        "detection_id": f"{stream_id}_{animal_type}{animal_id}_{int(time.time())}",
+        "notification_case": notification_case
+    }
+    
+    # Log the detection
+    log_animal_detection(
+        stream_id=stream_id,
+        animal_type=animal_type,
+        animal_id=animal_id,
+        classification_result=classification_result,
+        match_result=match_result,
+        image_path=high_conf_path
+    )
+    
+    # Create notifications for debugging
+    if is_stray and match:
+        notify_owner(match, high_conf_frame, animal_info)
+        print(f"[{stream_id}] Debug: Created owner notification for stray registered animal")
+    elif is_stray and not match:
+        notify_pound(high_conf_path, animal_info)
+        print(f"[{stream_id}] Debug: Created pound notification for stray unregistered animal")
+    elif not is_stray and match:
+        notify_owner(match, high_conf_frame, animal_info)
+        print(f"[{stream_id}] Debug: Created owner notification for non-stray registered animal")
+    elif not is_stray and not match:
+        notify_pound(high_conf_path, animal_info)
+        print(f"[{stream_id}] Debug: Created pound notification for non-stray unregistered animal")
+
     # Save timestamp for when analysis was performed
     analysis_time = time.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -1585,7 +1655,24 @@ def get_detected_animals():
     stream_id = request.args.get('stream_id')
     animal_type = request.args.get('animal_type')  # 'dog' or 'cat'
     classification = request.args.get('classification')  # 'stray' or 'not_stray'
+    notification_type = request.args.get('notification_type')  # 'owner_notification' or 'pound_notification'
+    notification_case = request.args.get('notification_case')  # 'stray_registered', 'stray_unregistered', etc.
     limit = int(request.args.get('limit', 100))  # Default to 100 results
+    
+    # If no detections exist for the requested stream_id, run save_debug_images to populate the log
+    if stream_id and not any(d['stream_id'] == stream_id for d in detected_animals_log):
+        result = save_debug_images(stream_id)
+        # If debug analysis was successful, wait a moment for the log to update
+        if result:
+            time.sleep(0.2)  # Short delay to ensure the log is updated
+    # If no specific stream_id was provided, check all available streams
+    elif not stream_id:
+        # Get list of all stream IDs
+        all_streams = list(stream_data.keys())
+        for sid in all_streams:
+            # Only analyze streams with no detections in the log
+            if not any(d['stream_id'] == sid for d in detected_animals_log):
+                save_debug_images(sid)
     
     # Filter results based on query parameters
     filtered_results = detected_animals_log.copy()
@@ -1598,14 +1685,41 @@ def get_detected_animals():
     
     if classification:
         filtered_results = [d for d in filtered_results if d['classification'] == classification]
+        
+    if notification_type:
+        filtered_results = [d for d in filtered_results if d.get('notification_type') == notification_type]
+        
+    if notification_case:
+        filtered_results = [d for d in filtered_results if d.get('notification_case') == notification_case]
     
     # Limit the number of results
     filtered_results = filtered_results[:limit]
     
     # Add image URLs for frontend display
     for result in filtered_results:
+        # Add image URL
         if result.get('image_path'):
             result['image_url'] = f"/api2/detected-img/{result['stream_id']}/{os.path.basename(result['image_path'])}"
+        
+        # Ensure all fields are present (for backward compatibility with older entries)
+        if 'notification_case' not in result:
+            # Determine notification case based on classification and match status
+            is_stray = result.get('classification') == 'stray'
+            has_match = bool(result.get('match'))
+            
+            # Set notification case and type if not already present
+            if is_stray and has_match:
+                result['notification_case'] = 'stray_registered'
+                result['notification_type'] = 'owner_notification'
+            elif is_stray and not has_match:
+                result['notification_case'] = 'stray_unregistered'
+                result['notification_type'] = 'pound_notification'
+            elif not is_stray and has_match:
+                result['notification_case'] = 'not_stray_registered'
+                result['notification_type'] = 'owner_notification'
+            elif not is_stray and not has_match:
+                result['notification_case'] = 'not_stray_unregistered'
+                result['notification_type'] = 'pound_notification'
     
     return jsonify({
         "count": len(filtered_results),
@@ -1912,8 +2026,10 @@ def get_notifications():
                                 n.get('animal_info', {}).get('notification_case') == notification_case]
     
     if stream_id:
+        # Check both the direct stream_id and the one in animal_info
         filtered_notifications = [n for n in filtered_notifications if 
-                                n.get('animal_info', {}).get('stream_id') == stream_id]
+                               (n.get('stream_id') == stream_id or 
+                                n.get('animal_info', {}).get('stream_id') == stream_id)]
     
     if animal_type:
         filtered_notifications = [n for n in filtered_notifications if 
@@ -1921,6 +2037,11 @@ def get_notifications():
     
     # Limit results
     limited_notifications = filtered_notifications[:limit]
+    
+    # Add display-friendly stream_id to each notification if not already present
+    for notification in limited_notifications:
+        if 'stream_id' not in notification:
+            notification['stream_id'] = notification.get('animal_info', {}).get('stream_id', 'unknown')
     
     return jsonify({
         "count": len(limited_notifications),
@@ -1963,17 +2084,19 @@ def get_notification_stats():
         # Get animal info
         animal_info = notification.get('animal_info', {})
         
+        # Get stream_id either from the notification directly or from animal_info
+        stream_id = notification.get('stream_id') or animal_info.get('stream_id', 'unknown')
+        
         # Count by case
         case = animal_info.get('notification_case')
         if case in by_case:
             by_case[case] += 1
         
         # Count by stream
-        stream = animal_info.get('stream_id')
-        if stream:
-            if stream not in by_stream:
-                by_stream[stream] = 0
-            by_stream[stream] += 1
+        if stream_id:
+            if stream_id not in by_stream:
+                by_stream[stream_id] = 0
+            by_stream[stream_id] += 1
         
         # Count by animal type
         atype = animal_info.get('animal_type')
@@ -1985,7 +2108,8 @@ def get_notification_stats():
         "by_type": by_type,
         "by_case": by_case,
         "by_stream": by_stream,
-        "by_animal_type": by_animal_type
+        "by_animal_type": by_animal_type,
+        "recent_streams": list(by_stream.keys())[:5]  # Include 5 most recent streams for quick reference
     })
 
 @app.route('/api2/notifications/<notification_id>', methods=['GET'])
@@ -2012,6 +2136,54 @@ def check_database():
         "status": "ok" if count > 0 else "error"
     })
 
+@app.route('/api2/test-notification', methods=['GET'])
+def test_notification():
+    """
+    Test endpoint to create a notification for debugging purposes
+    """
+    stream_id = request.args.get('stream_id', 'test-stream')
+    animal_type = request.args.get('animal_type', 'dog')
+    notify_type = request.args.get('notify_type', 'owner')  # 'owner' or 'pound'
+    
+    # Create dummy animal info
+    animal_info = {
+        "stream_id": stream_id,
+        "animal_type": animal_type,
+        "animal_id": "test1",
+        "classification": "not_stray" if notify_type == "owner" else "stray",
+        "prediction_score": 0.2 if notify_type == "owner" else 0.8,
+        "is_stray": notify_type != "owner",
+        "match": "test_owner.jpg" if notify_type == "owner" else None,
+        "match_score": 0.75 if notify_type == "owner" else 0,
+        "match_method": "test" if notify_type == "owner" else "none",
+        "timestamp": datetime.now().isoformat(),
+        "detection_id": f"{stream_id}_{animal_type}test1_{int(time.time())}",
+        "notification_case": "not_stray_registered" if notify_type == "owner" else "stray_unregistered"
+    }
+    
+    notification = None
+    
+    # Create a notification
+    if notify_type == "owner":
+        # Create owner notification
+        notification = notify_owner("test_owner.jpg", None, animal_info)
+    else:
+        # Create pound notification
+        tmp_path = os.path.join("venv", "tmp", f"test_{animal_type}_{stream_id}_{int(time.time())}.jpg")
+        os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
+        
+        # Create a blank image if needed for testing
+        test_img = np.ones((100, 100, 3), dtype=np.uint8) * 255
+        cv2.imwrite(tmp_path, test_img)
+        
+        notification = notify_pound(tmp_path, animal_info)
+    
+    return jsonify({
+        "status": "success",
+        "message": f"Created test {notify_type} notification for {stream_id}",
+        "notification": notification
+    })
+
 if __name__ == '__main__':
     # Initialize the pet database
     print("Initializing pet database...")
@@ -2026,6 +2198,8 @@ if __name__ == '__main__':
         }
         threading.Thread(target=monitor_stream, args=(rtsp_url, stream_id), daemon=True).start()
 
-    threading.Thread(target=stream_static_video, args=('static-demo', STATIC_VIDEO_PATH), daemon=True).start()
+    for stream_id, video_path in STATIC_VIDEO_SOURCES.items():
+        print(f"Launching static stream: {stream_id} -> {video_path}")
+        threading.Thread(target=stream_static_video, args=(stream_id, video_path), daemon=True).start()
 
     app.run(host='0.0.0.0', port=5000, debug=True)

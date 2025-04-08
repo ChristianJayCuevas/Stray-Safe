@@ -53,7 +53,15 @@ class RegisteredUserController extends Controller
             'referral_code' => $request->referral_code,
         ]);
 
-        $referralCode->update(['is_used' => true]);
+        // Increment usage count and deactivate if max uses reached
+        $referralCode->usage_count = $referralCode->usage_count + 1;
+        
+        // Deactivate if max uses reached and max uses is not unlimited (0)
+        if ($referralCode->max_uses > 0 && $referralCode->usage_count >= $referralCode->max_uses) {
+            $referralCode->is_active = false;
+        }
+        
+        $referralCode->save();
 
         event(new Registered($user));
 

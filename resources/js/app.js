@@ -7,8 +7,8 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 
-// Import Quasar and Notify plugin
-import { Quasar, Notify } from 'quasar'; 
+// Import Quasar and plugins
+import { Quasar, Notify, Dialog } from 'quasar'; 
 import '@quasar/extras/material-icons/material-icons.css';
 import '@quasar/extras/fontawesome-v6/fontawesome-v6.css';
 
@@ -35,7 +35,8 @@ createInertiaApp({
             .use(ZiggyVue)
             .use(Quasar, {
                 plugins: {
-                    Notify, // Ensure Notify is registered here
+                    Notify,
+                    Dialog, // Add Dialog plugin
                 },
             })
             .use(VueVideoPlayer)

@@ -141,6 +141,9 @@ const handleLogout = () => {
     persistent: true
   }).onOk(() => {
     router.post(route('logout'));
+  }).onCancel(() => {
+    // User cancelled the action
+    console.log('Logout cancelled');
   });
 };
 

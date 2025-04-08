@@ -123,7 +123,42 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/referral-codes', [App\Http\Controllers\Admin\ReferralCodeController::class, 'store'])
             ->name('referral-codes.store')
             ->middleware(PermissionMiddleware::class . ':manage_referral_codes');
+            
+        Route::put('/referral-codes/{id}', [App\Http\Controllers\Admin\ReferralCodeController::class, 'update'])
+            ->name('referral-codes.update')
+            ->middleware(PermissionMiddleware::class . ':manage_referral_codes');
+            
+        Route::patch('/referral-codes/{id}/toggle-status', [App\Http\Controllers\Admin\ReferralCodeController::class, 'toggleStatus'])
+            ->name('referral-codes.toggle-status')
+            ->middleware(PermissionMiddleware::class . ':manage_referral_codes');
+            
+        Route::delete('/referral-codes/{id}', [App\Http\Controllers\Admin\ReferralCodeController::class, 'destroy'])
+            ->name('referral-codes.destroy')
+            ->middleware(PermissionMiddleware::class . ':manage_referral_codes');
     });
+});
+
+// Temporary test route for map pin creation
+Route::get('/test-map-pin', function () {
+    $pin = \App\Models\MapPin::create([
+        'latitude' => 14.5995,
+        'longitude' => 120.9842,
+        'animal_type' => 'Camera',
+        'stray_status' => 'Active',
+        'is_camera' => true,
+        'camera_id' => 'test-camera-1',
+        'camera_name' => 'Test Conical Camera',
+        'hls_url' => 'https://straysafe.me/hls/test-camera.m3u8',
+        'conical_view' => true,
+        'viewing_direction' => 45,
+        'viewing_angle' => 60,
+        'perception_range' => 30,
+        'location' => 'Test Location',
+        'rtmp_key' => 'test-camera-1',
+        'original_id' => 'test-camera-1'
+    ]);
+    
+    return response()->json($pin);
 });
 
 require __DIR__.'/auth.php';

@@ -11,17 +11,26 @@ class ReferralCode extends Model
 
     protected $fillable = [
         'code',
-        'is_used',
+        'description',
+        'is_active',
+        'max_uses',
+        'usage_count',
         'expires_at'
     ];
 
     protected $casts = [
-        'is_used' => 'boolean',
+        'is_active' => 'boolean',
+        'max_uses' => 'integer',
+        'usage_count' => 'integer',
         'expires_at' => 'datetime'
     ];
 
     public function isValid()
     {
-        return !$this->is_used && (!$this->expires_at || $this->expires_at->isFuture());
+        $isActive = $this->is_active;
+        $notExpired = !$this->expires_at || $this->expires_at->isFuture();
+        $usesAvailable = $this->max_uses === 0 || $this->usage_count < $this->max_uses;
+        
+        return $isActive && $notExpired && $usesAvailable;
     }
 } 

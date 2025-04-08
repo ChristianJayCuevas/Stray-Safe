@@ -174,15 +174,39 @@ class MapPinController extends Controller
     public function destroy($id)
     {
         try {
-            $pin = MapPin::findOrFail($id);
+            Log::info('Pin deletion request received', ['id' => $id]);
+            
+            $pin = MapPin::find($id);
+            
+            if (!$pin) {
+                Log::warning('Pin not found for deletion', ['id' => $id]);
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Pin not found'
+                ], 404);
+            }
+            
+            // If the pin is a camera pin, check if we should use the camera pin controller
+            if ($pin->is_camera) {
+                Log::info('Pin is a camera pin, redirecting to camera pin controller', ['id' => $id]);
+                return app(CameraPinController::class)->destroy($id);
+            }
+            
+            // Delete the pin
             $pin->delete();
             
+            Log::info('Pin deleted successfully', ['id' => $id]);
             return response()->json([
                 'success' => true, 
                 'message' => 'Pin deleted successfully'
             ], 200);
         } catch (\Exception $e) {
-            Log::error("Failed to delete pin: " . $e->getMessage());
+            Log::error('Failed to delete pin', [
+                'id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false, 
                 'message' => 'Failed to delete pin: ' . $e->getMessage()

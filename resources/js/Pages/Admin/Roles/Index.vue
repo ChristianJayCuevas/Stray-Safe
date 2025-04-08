@@ -14,22 +14,19 @@
             </div>
 
             <!-- Two Column Layout -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                 <!-- Create New Role -->
                 <div>
                     <q-card flat bordered class="stat-card h-full">
-                        <q-card-section class="q-py-sm bg-accent">
-                            <h2 class="text-xl font-bold text-white">Create New Role</h2>
-                        </q-card-section>
-                        
-                        <q-card-section>
-                            <q-form @submit.prevent="createRole" class="q-gutter-md">
+                        <q-card-section class="q-pa-md full-width">
+                            <q-form @submit.prevent="createRole" class="q-gutter-sm">
                                 <q-input
                                     filled
                                     v-model="newRole.name"
                                     label="Role Name"
                                     required
                                     stack-label
+                                    dense
                                 />
                                 
                                 <q-input
@@ -39,10 +36,11 @@
                                     stack-label
                                     type="textarea"
                                     rows="2"
+                                    dense
                                 />
                                 
                                 <div>
-                                    <div class="text-subtitle1 q-mb-sm">Select Permissions</div>
+                                    <div class="text-sm q-mb-sm">Select Permissions</div>
                                     <div class="permission-grid bg-opacity-10 rounded-md p-2">
                                         <q-checkbox
                                             v-for="permission in permissions"
@@ -71,24 +69,20 @@
                 <!-- User Role Assignment -->
                 <div>
                     <q-card flat bordered class="stat-card h-full">
-                        <q-card-section class="q-py-sm bg-accent">
-                            <h2 class="text-xl font-bold text-white">User Role Assignment</h2>
-                        </q-card-section>
-                        
-                        <q-card-section>
+                        <q-card-section class="q-pa-md full-width">
                             <div class="user-role-list">
                                 <div 
                                     v-for="user in users" 
                                     :key="user.id" 
                                     class="user-role-item q-mb-md"
                                 >
-                                    <div class="flex items-center gap-3 mb-2">
-                                        <q-avatar color="primary" text-color="white">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <q-avatar color="primary" text-color="white" size="32px">
                                             {{ user.name.charAt(0) }}
                                         </q-avatar>
                                         <div>
-                                            <div class="text-weight-bold">{{ user.name }}</div>
-                                            <div class="text-caption">{{ user.email }}</div>
+                                            <div class="text-sm font-bold">{{ user.name }}</div>
+                                            <div class="text-xs text-secondary">{{ user.email }}</div>
                                         </div>
                                     </div>
                                     
@@ -121,11 +115,7 @@
             
             <!-- Existing Roles -->
             <q-card flat bordered class="stat-card">
-                <q-card-section class="q-py-sm bg-accent">
-                    <h2 class="text-xl font-bold text-white">Existing Roles</h2>
-                </q-card-section>
-                
-                <q-card-section>
+                <q-card-section class="q-pa-md full-width">
                     <div class="roles-grid">
                         <q-card 
                             v-for="role in roles" 
@@ -134,30 +124,30 @@
                             bordered 
                             class="role-card h-full"
                         >
-                            <q-card-section class="q-pb-xs">
+                            <q-card-section class="q-pa-md full-width">
                                 <div class="flex justify-between items-center">
-                                    <h3 class="text-lg font-bold">{{ role.name }}</h3>
+                                    <h3 class="text-base font-bold">{{ role.name }}</h3>
                                     <div>
                                         <q-btn flat round size="sm" icon="edit" class="edit-btn" @click="editRole(role)" />
                                         <q-btn flat round size="sm" icon="delete" class="delete-btn" @click="deleteRole(role)" />
                                     </div>
                                 </div>
-                                <p class="role-description q-mt-sm">{{ role.description }}</p>
-                            </q-card-section>
-                            
-                            <q-separator />
-                            
-                            <q-card-section>
-                                <div class="text-weight-medium q-mb-xs">Permissions</div>
-                                <div class="permission-chips">
-                                    <q-chip
-                                        v-for="permission in role.permissions"
-                                        :key="permission.id"
-                                        :label="permission.name"
-                                        dense
-                                        size="sm"
-                                        class="permission-chip"
-                                    />
+                                <p class="role-description text-xs q-mt-md">{{ role.description }}</p>
+                                
+                                <q-separator class="q-my-md" />
+                                
+                                <div>
+                                    <div class="text-sm q-mb-sm">Permissions</div>
+                                    <div class="permission-chips">
+                                        <q-chip
+                                            v-for="permission in role.permissions"
+                                            :key="permission.id"
+                                            :label="permission.name"
+                                            dense
+                                            size="sm"
+                                            class="permission-chip"
+                                        />
+                                    </div>
                                 </div>
                             </q-card-section>
                         </q-card>
@@ -235,42 +225,47 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Grid layouts for each section */
+/* Grid layouts */
 .roles-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 16px;
+    gap: 20px;
+    width: 100%;
 }
 
 .permission-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 8px;
-}
-
-.permission-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    padding: 0.75rem;
+    background-color: rgba(79, 102, 66, 0.05);
+    border-radius: 6px;
 }
 
 /* Card styling */
 .role-card {
-    transition: transform 0.2s;
-    background-color: var(--card-bg, #d4d8bd);
+    background-color: var(--card-bg, #ffffff);
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+    height: 100%;
+    width: 100%;
 }
 
 .role-card:hover {
-    transform: translateY(-2px);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
 }
 
 .dark-mode .role-card {
     background-color: var(--dark-card-bg, #1e293b);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-/* Card header style */
-.bg-accent {
-    background-color: var(--accent-color, #4f6642);
+/* Full width utilities */
+.full-width {
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 /* Permission chip styling */
@@ -278,9 +273,26 @@ onMounted(() => {
     background-color: var(--accent-color, #4f6642) !important;
     color: white !important;
     font-size: 0.75rem;
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+
+.permission-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0.25rem 0;
 }
 
 /* Icon and button styling */
+.edit-btn, .delete-btn {
+    transition: transform 0.2s;
+}
+
+.edit-btn:hover, .delete-btn:hover {
+    transform: scale(1.1);
+}
+
 .edit-btn {
     color: var(--accent-color, #4f6642);
 }
@@ -293,9 +305,10 @@ onMounted(() => {
 .role-description {
     color: var(--text-secondary, #64748b);
     font-size: 0.875rem;
+    line-height: 1.5;
 }
 
-/* Form field colors - ensure visibility in both modes */
+/* Form field colors */
 :deep(.q-field__label) {
     color: var(--text-secondary, #64748b) !important;
 }
@@ -308,10 +321,51 @@ onMounted(() => {
     color: var(--text-primary, #e2e8f0) !important;
 }
 
+/* Checkbox styling */
+:deep(.q-checkbox) {
+    margin: 4px 0;
+}
+
+:deep(.q-checkbox__label) {
+    font-size: 0.875rem;
+}
+
+/* Select styling */
+:deep(.q-select) {
+    margin-bottom: 1rem;
+}
+
+/* Avatar styling */
+:deep(.q-avatar) {
+    font-size: 0.875rem;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Modal styling */
+:deep(.q-dialog__inner) {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+:deep(.q-card) {
+    border-radius: 12px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .roles-grid {
         grid-template-columns: 1fr;
+        padding: 0.5rem;
+    }
+    
+    .permission-grid {
+        grid-template-columns: 1fr;
+        padding: 0.75rem;
+    }
+    
+    .header-title h1 {
+        font-size: 1.75rem;
     }
     
     .user-role-item .flex {
