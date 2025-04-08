@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, inject, watch } from 'vue';
+import { ref, onMounted, inject, watch, onUnmounted } from 'vue';
 import { QCard, QCardSection, QTable, QImg, QInput, QSelect, QIcon, QBtn, QDate } from 'quasar';
 import { Head } from '@inertiajs/vue3';
 import VueApexCharts from 'vue3-apexcharts';
@@ -13,11 +13,11 @@ const isDarkMode = inject('isDarkMode', ref(false));
 
 const authUser = ref({ name: 'User', isNewUser: true }); // Assuming isNewUser flag to check if it's the user's first visit
 const strayAnimalsData = ref({
-    totalSightings: 120,
-    strayDogs: 70,
-    strayCats: 40,
-    registeredDogs: 35,
-    registeredCats: 25,
+    totalSightings: 0,
+    strayDogs: 0,
+    strayCats: 0,
+    registeredDogs: 0,
+    registeredCats: 0,
 });
 
 // Date selection
@@ -52,44 +52,75 @@ async function fetchDataForDate(date) {
     }
 }
 
-// Fetch the recent sightings from the backend
-async function fetchRecentSightings() {
+// Fetch statistics from the server
+async function fetchStats() {
     try {
-        const response = await axios.get('https://straysafe.me/api/recent-sightings');
-        recentSightings.value = response.data;
+        const response = await axios.get('/api/pins/stats');
+        if (response.data) {
+            strayAnimalsData.value = {
+                totalSightings: response.data.totalSightings,
+                strayDogs: response.data.dogSightings,
+                strayCats: response.data.catSightings,
+                registeredDogs: 0, // These will need a separate API endpoint if you want to track registered animals
+                registeredCats: 0,
+            };
+            
+            // Update pie chart data
+            pieChartSeries.value = [
+                strayAnimalsData.value.strayDogs,
+                strayAnimalsData.value.strayCats,
+                strayAnimalsData.value.registeredDogs,
+                strayAnimalsData.value.registeredCats
+            ];
+        }
     } catch (error) {
-        console.error('Error fetching recent sightings:', error);
+        console.error('Failed to fetch statistics:', error);
     }
 }
 
 // Fetch data on component mount
 onMounted(() => {
     fetchRecentSightings();
-    filterDataByDate(); // Initial data load based on default date
+    fetchStats();
+    filterDataByDate();
     
-    // if (authUser.value.isNewUser) {
-    //     Swal.fire({
-    //         title: 'Welcome to StraySafe!',
-    //         text: 'Please select your barangay or create your own map.',
-    //         icon: 'info',
-    //         showCancelButton: true,
-    //         confirmButtonText: 'Select Barangay',
-    //         cancelButtonText: 'Create Own Map',
-    //         allowOutsideClick: false,  
-    //         allowEscapeKey: false,  
-    //     }).then((result) => {
-    //         if (result.isConfirmed) {
-             
-    //             console.log('User selected barangay');
-      
-    //         } else if (result.dismiss === Swal.DismissReason.cancel) {
-
-    //             console.log('User wants to create their own map');
-  
-    //         }
-    //     });
-    // }
+    // Set up intervals for periodic updates
+    const statsInterval = setInterval(fetchStats, 60000);
+    const sightingsInterval = setInterval(fetchRecentSightings, 30000);
+    
+    // Clean up intervals on unmount
+    onUnmounted(() => {
+        clearInterval(statsInterval);
+        clearInterval(sightingsInterval);
+    });
 });
+
+// Update the fetchRecentSightings function to use real data
+async function fetchRecentSightings() {
+    try {
+        const response = await axios.get('https://straysafe.me/api2/detected');
+        if (response.data && response.data.detected_animals) {
+            recentSightings.value = response.data.detected_animals.map(animal => {
+                // Convert the image URL from detected-img to debug-img
+                const imageUrl = animal.image_url ? 
+                    animal.image_url.replace('detected-img', 'debug-img') : 
+                    'https://placehold.co/600x400/4f6642/FFFFFF/png?text=No+Image';
+
+                return {
+                    id: animal.id,
+                    type: animal.animal_type,
+                    location: `Camera ${animal.stream_id}`,
+                    timestamp: new Date(animal.timestamp).toLocaleString(),
+                    image: imageUrl,
+                    classification: animal.classification || 'Unknown',
+                    confidence: animal.confidence || 0
+                };
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching recent sightings:', error);
+    }
+}
 
 // Line chart for detected animals over time
 const lineChartOptions = ref({
@@ -284,15 +315,49 @@ function generateHeatmapData(count, min, max) {
                 <q-card-section>
                     <div class="text-xl font-bold mb-4">Recent Stray Animal Sightings</div>
                     
-                    <!-- Placeholder for Recent Sightings Feed -->
+                    <!-- Recent Sightings Feed -->
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <!-- This would be populated with actual data from your backend -->
-                        <q-card v-for="i in 6" :key="i" class="theme-card sighting-card" flat :dark="isDarkMode">
-                            <q-img src="https://placehold.co/600x400/4f6642/FFFFFF/png?text=Stray+Animal" height="200px" />
+                        <q-card 
+                            v-for="sighting in recentSightings" 
+                            :key="sighting.id" 
+                            class="theme-card sighting-card" 
+                            flat 
+                            :dark="isDarkMode"
+                        >
+                            <q-img 
+                                :src="sighting.image" 
+                                height="200px"
+                                :alt="sighting.type"
+                            >
+                                <div class="absolute-bottom text-subtitle2 text-center bg-black bg-opacity-50">
+                                    Confidence: {{ Math.round(sighting.confidence * 100) }}%
+                                </div>
+                            </q-img>
                             <q-card-section>
-                                <div class="text-lg font-bold mb-1">Stray Dog Spotted</div>
-                                <div class="text-sm mb-2">Location: Sample Street, Barangay {{ i }}</div>
-                                <div class="text-xs text-gray-500">Reported: {{ new Date().toLocaleDateString() }}</div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="text-lg font-bold">{{ sighting.type }}</div>
+                                    <q-badge 
+                                        :color="sighting.classification === 'stray' ? 'negative' : 'positive'"
+                                    >
+                                        {{ sighting.classification }}
+                                    </q-badge>
+                                </div>
+                                <div class="text-sm mb-2">{{ sighting.location }}</div>
+                                <div class="text-xs text-gray-500">{{ sighting.timestamp }}</div>
+                            </q-card-section>
+                        </q-card>
+                        
+                        <!-- Placeholder card when no sightings -->
+                        <q-card 
+                            v-if="recentSightings.length === 0" 
+                            class="theme-card sighting-card" 
+                            flat 
+                            :dark="isDarkMode"
+                        >
+                            <q-card-section class="text-center">
+                                <q-icon name="pets" size="48px" color="grey-6" />
+                                <div class="text-h6 q-mt-md">No Recent Detections</div>
+                                <div class="text-subtitle2">Waiting for new animal detections...</div>
                             </q-card-section>
                         </q-card>
                     </div>

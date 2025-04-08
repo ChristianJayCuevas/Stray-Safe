@@ -213,4 +213,24 @@ class MapPinController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get statistics about pins and cameras.
+     */
+    public function getStats()
+    {
+        try {
+            $stats = [
+                'totalSightings' => MapPin::where('is_camera', false)->count(),
+                'dogSightings' => MapPin::where('animal_type', 'dog')->where('is_camera', false)->count(),
+                'catSightings' => MapPin::where('animal_type', 'cat')->where('is_camera', false)->count(),
+                'activeCCTVs' => MapPin::where('is_camera', true)->where('stray_status', 'Active')->count()
+            ];
+
+            return response()->json($stats, 200);
+        } catch (\Exception $e) {
+            Log::error("Failed to fetch statistics: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to fetch statistics'], 500);
+        }
+    }
 }

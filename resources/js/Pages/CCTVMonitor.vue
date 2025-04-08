@@ -449,6 +449,63 @@ function handleSnapshot(snapshotData) {
 function closeSnapshotNotification() {
   snapshotNotification.value.show = false;
 }
+
+// Recent Detections Section
+const selectedAnimalType = ref('All');
+const timeFilter = ref('24h');
+const loadingSnapshots = ref(false);
+const snapshotsError = ref(null);
+const filteredSnapshots = ref([]);
+const snapshotsPagination = ref({
+  page: 1,
+  rowsPerPage: 10,
+  totalPages: 1
+});
+
+// Function to filter snapshots based on selected animal type and time filter
+function filterSnapshots() {
+  loadingSnapshots.value = true;
+  snapshotsError.value = null;
+  filteredSnapshots.value = recentSnapshots.value.filter(snapshot => {
+    const isFiltered = selectedAnimalType.value === 'All' || snapshot.animalType === selectedAnimalType.value;
+    const isWithinTime = timeFilter.value === '24h' ||
+      (timeFilter.value === '7d' && new Date(snapshot.timestamp).getTime() > new Date().getTime() - 7 * 24 * 60 * 60 * 1000) ||
+      (timeFilter.value === '30d' && new Date(snapshot.timestamp).getTime() > new Date().getTime() - 30 * 24 * 60 * 60 * 1000);
+    return isFiltered && isWithinTime;
+  });
+  snapshotsPagination.value.totalPages = Math.ceil(filteredSnapshots.value.length / snapshotsPagination.value.rowsPerPage);
+  loadingSnapshots.value = false;
+}
+
+// Function to format timestamp
+function formatTimestamp(timestamp) {
+  const date = new Date(timestamp);
+  return date.toLocaleString();
+}
+
+// Function to get animal type class
+function getAnimalTypeClass(animalType) {
+  switch (animalType) {
+    case 'Dog':
+      return 'text-green-500';
+    case 'Cat':
+      return 'text-blue-500';
+    case 'Other':
+      return 'text-gray-500';
+    default:
+      return '';
+  }
+}
+
+// Function to download snapshot
+function downloadSnapshot(snapshot) {
+  // Implementation of downloadSnapshot function
+}
+
+// Function to share snapshot
+function shareSnapshot(snapshot) {
+  // Implementation of shareSnapshot function
+}
 </script>
 
 <template>
@@ -611,17 +668,103 @@ function closeSnapshotNotification() {
       <!-- Recent Detections Section -->
       <div class="page-header mb-6">
         <h2 class="text-2xl font-bold">Recent Detections</h2>
+        <div class="header-actions">
+          <div class="filter-controls">
+            <q-select
+              v-model="selectedAnimalType"
+              :options="['All', 'Dog', 'Cat', 'Other']"
+              label="Filter by type"
+              dense
+              outlined
+              class="mr-2"
+              style="min-width: 150px"
+            />
+            <q-btn-group outline>
+              <q-btn
+                :color="timeFilter === '24h' ? 'primary' : 'grey'"
+                label="24h"
+                @click="timeFilter = '24h'"
+              />
+              <q-btn
+                :color="timeFilter === '7d' ? 'primary' : 'grey'"
+                label="7d"
+                @click="timeFilter = '7d'"
+              />
+              <q-btn
+                :color="timeFilter === '30d' ? 'primary' : 'grey'"
+                label="30d"
+                @click="timeFilter = '30d'"
+              />
+            </q-btn-group>
+          </div>
+          <q-btn class="secondary-btn ml-4" icon="refresh" label="Refresh" @click="fetchRecentSnapshots" />
+        </div>
       </div>
 
-      <div class="detection-grid">
-        <div v-for="(snapshot, index) in recentSnapshots" :key="index" class="detection-card">
-          <img :src="snapshot.imageUrl" class="detection-image" alt="Detection" />
+      <!-- Loading State -->
+      <div v-if="loadingSnapshots" class="loading-container">
+        <q-spinner color="primary" size="3em" />
+        <p class="mt-2">Loading recent detections...</p>
+      </div>
+
+      <!-- Error State -->
+      <div v-else-if="snapshotsError" class="error-container">
+        <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
+        <p class="mb-2">{{ snapshotsError }}</p>
+        <q-btn class="secondary-btn" icon="refresh" label="Try Again" @click="fetchRecentSnapshots" />
+      </div>
+
+      <!-- Empty State -->
+      <div v-else-if="filteredSnapshots.length === 0" class="empty-container">
+        <i class="fas fa-camera text-gray-400 text-3xl mb-2"></i>
+        <p class="mb-2">No detections found for the selected filters.</p>
+        <p class="text-sm text-gray-500">Try adjusting your filters or checking back later.</p>
+      </div>
+
+      <!-- Detection Grid -->
+      <div v-else class="detection-grid">
+        <div v-for="snapshot in paginatedSnapshots" :key="snapshot.id" class="detection-card">
+          <div class="detection-image-container">
+            <img :src="snapshot.imageUrl" class="detection-image" :alt="snapshot.animalType" />
+            <div class="detection-badge" :class="getAnimalTypeClass(snapshot.animalType)">
+              {{ snapshot.animalType }}
+            </div>
+          </div>
           <div class="detection-info">
-            <div class="detection-type">{{ snapshot.animalType }}</div>
-            <div class="detection-time">{{ snapshot.timestamp }}</div>
-            <div class="detection-location">{{ snapshot.location }}</div>
+            <div class="detection-time">
+              <i class="fas fa-clock mr-1"></i>
+              {{ formatTimestamp(snapshot.timestamp) }}
+            </div>
+            <div class="detection-location">
+              <i class="fas fa-map-marker-alt mr-1"></i>
+              {{ snapshot.location }}
+            </div>
+            <div class="detection-camera">
+              <i class="fas fa-video mr-1"></i>
+              {{ snapshot.cameraName || 'Unknown Camera' }}
+            </div>
+          </div>
+          <div class="detection-actions">
+            <q-btn flat round size="sm" icon="download" @click.stop="downloadSnapshot(snapshot)">
+              <q-tooltip>Download Snapshot</q-tooltip>
+            </q-btn>
+            <q-btn flat round size="sm" icon="share" @click.stop="shareSnapshot(snapshot)">
+              <q-tooltip>Share</q-tooltip>
+            </q-btn>
           </div>
         </div>
+      </div>
+
+      <!-- Snapshots Pagination -->
+      <div v-if="filteredSnapshots.length > snapshotsPerPage" class="flex justify-center mt-6 mb-6">
+        <q-pagination
+          v-model="snapshotsPagination.page"
+          :max="Math.ceil(filteredSnapshots.length / snapshotsPerPage)"
+          direction-links
+          boundary-links
+          color="primary"
+          active-color="primary"
+        />
       </div>
     </div>
   </AuthenticatedLayout>
@@ -739,3 +882,108 @@ function closeSnapshotNotification() {
     </q-card>
   </q-dialog>
 </template>
+
+<style scoped>
+.detection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+.detection-card {
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.detection-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.detection-image-container {
+  position: relative;
+  width: 100%;
+  padding-top: 75%; /* 4:3 aspect ratio */
+  overflow: hidden;
+}
+
+.detection-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.detection-badge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.detection-info {
+  padding: 1rem;
+}
+
+.detection-info > div {
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  color: #4b5563;
+  font-size: 0.875rem;
+}
+
+.detection-info > div:last-child {
+  margin-bottom: 0;
+}
+
+.detection-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.loading-container,
+.error-container,
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  text-align: center;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .header-actions {
+    margin-top: 0;
+    justify-content: flex-end;
+  }
+}
+</style>

@@ -24,7 +24,7 @@ Route::middleware('auth:sanctum')->group(function() {
 Route::get('/recent-sightings', [MapPinController::class, 'recentSightings']);
 Route::get('/snapshots', [MapPinController::class, 'getSnapshots']);
 Route::get('/snapshots/recent', [MapPinController::class, 'getRecentSnapshots']);
-
+Route::get('/pins/stats', [MapPinController::class, 'getStats']);
 
 Route::get('/registered-animals', [RegisteredAnimalController::class, 'index']);
 Route::post('/registered-animals', [RegisteredAnimalController::class, 'store']);

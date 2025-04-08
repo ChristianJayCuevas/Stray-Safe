@@ -11,10 +11,10 @@ const isDarkMode = inject('isDarkMode', ref(false));
 
 // Statistics data
 const mapStats = ref({
-    totalSightings: 87,
-    dogSightings: 52,
-    catSightings: 35,
-    activeCCTVs: 12
+    totalSightings: 0,
+    dogSightings: 0,
+    catSightings: 0,
+    activeCCTVs: 0
 });
 
 // Tracked detections to prevent duplicates
@@ -468,10 +468,32 @@ function pauseMonitoring() {
   isMonitoring.value = false;
 }
 
+// Function to fetch and update statistics
+async function fetchStats() {
+    try {
+        const response = await axios.get('/api/pins/stats');
+        if (response.data) {
+            mapStats.value = response.data;
+        }
+    } catch (error) {
+        console.error('Failed to fetch statistics:', error);
+    }
+}
+
 // Start and stop monitoring on component mount/unmount
 onMounted(() => {
-  // Start the detection monitor
-  monitorDetections();
+    // Start the detection monitor
+    monitorDetections();
+    // Fetch initial statistics
+    fetchStats();
+    
+    // Set up interval to refresh stats every minute
+    const statsInterval = setInterval(fetchStats, 60000);
+    
+    // Clean up interval on unmount
+    onUnmounted(() => {
+        clearInterval(statsInterval);
+    });
 });
 
 onUnmounted(() => {
