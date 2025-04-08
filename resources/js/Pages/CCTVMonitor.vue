@@ -462,20 +462,55 @@ const snapshotsPagination = ref({
   totalPages: 1
 });
 
-// Function to filter snapshots based on selected animal type and time filter
+// Add this computed property after the other computed properties
+const paginatedSnapshots = computed(() => {
+  const start = (snapshotsPagination.value.page - 1) * snapshotsPagination.value.rowsPerPage;
+  const end = start + snapshotsPagination.value.rowsPerPage;
+  return filteredSnapshots.value.slice(start, end);
+});
+
+// Update the filterSnapshots function to properly handle pagination
 function filterSnapshots() {
   loadingSnapshots.value = true;
   snapshotsError.value = null;
-  filteredSnapshots.value = recentSnapshots.value.filter(snapshot => {
-    const isFiltered = selectedAnimalType.value === 'All' || snapshot.animalType === selectedAnimalType.value;
-    const isWithinTime = timeFilter.value === '24h' ||
-      (timeFilter.value === '7d' && new Date(snapshot.timestamp).getTime() > new Date().getTime() - 7 * 24 * 60 * 60 * 1000) ||
-      (timeFilter.value === '30d' && new Date(snapshot.timestamp).getTime() > new Date().getTime() - 30 * 24 * 60 * 60 * 1000);
-    return isFiltered && isWithinTime;
-  });
-  snapshotsPagination.value.totalPages = Math.ceil(filteredSnapshots.value.length / snapshotsPagination.value.rowsPerPage);
-  loadingSnapshots.value = false;
+  
+  try {
+    const filtered = recentSnapshots.value.filter(snapshot => {
+      // Animal type filter
+      const typeMatch = selectedAnimalType.value === 'All' || 
+                       snapshot.animalType === selectedAnimalType.value;
+      
+      // Time filter
+      const snapshotDate = new Date(snapshot.timestamp);
+      const now = new Date();
+      let timeMatch = true;
+      
+      if (timeFilter.value === '24h') {
+        timeMatch = (now - snapshotDate) <= 24 * 60 * 60 * 1000;
+      } else if (timeFilter.value === '7d') {
+        timeMatch = (now - snapshotDate) <= 7 * 24 * 60 * 60 * 1000;
+      } else if (timeFilter.value === '30d') {
+        timeMatch = (now - snapshotDate) <= 30 * 24 * 60 * 60 * 1000;
+      }
+      
+      return typeMatch && timeMatch;
+    });
+    
+    filteredSnapshots.value = filtered;
+    snapshotsPagination.value.totalPages = Math.ceil(filtered.length / snapshotsPagination.value.rowsPerPage);
+    snapshotsPagination.value.page = 1; // Reset to first page when filter changes
+  } catch (error) {
+    console.error('Error filtering snapshots:', error);
+    snapshotsError.value = 'Error filtering snapshots';
+  } finally {
+    loadingSnapshots.value = false;
+  }
 }
+
+// Add watchers for filter changes
+watch([selectedAnimalType, timeFilter], () => {
+  filterSnapshots();
+});
 
 // Function to format timestamp
 function formatTimestamp(timestamp) {
@@ -739,10 +774,6 @@ function shareSnapshot(snapshot) {
               <i class="fas fa-map-marker-alt mr-1"></i>
               {{ snapshot.location }}
             </div>
-            <div class="detection-camera">
-              <i class="fas fa-video mr-1"></i>
-              {{ snapshot.cameraName || 'Unknown Camera' }}
-            </div>
           </div>
           <div class="detection-actions">
             <q-btn flat round size="sm" icon="download" @click.stop="downloadSnapshot(snapshot)">
@@ -756,10 +787,10 @@ function shareSnapshot(snapshot) {
       </div>
 
       <!-- Snapshots Pagination -->
-      <div v-if="filteredSnapshots.length > snapshotsPerPage" class="flex justify-center mt-6 mb-6">
+      <div v-if="filteredSnapshots.length > snapshotsPagination.rowsPerPage" class="flex justify-center mt-6 mb-6">
         <q-pagination
           v-model="snapshotsPagination.page"
-          :max="Math.ceil(filteredSnapshots.length / snapshotsPerPage)"
+          :max="snapshotsPagination.totalPages"
           direction-links
           boundary-links
           color="primary"

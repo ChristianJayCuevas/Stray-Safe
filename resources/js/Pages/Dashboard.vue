@@ -328,11 +328,7 @@ function generateHeatmapData(count, min, max) {
                                 :src="sighting.image" 
                                 height="200px"
                                 :alt="sighting.type"
-                            >
-                                <div class="absolute-bottom text-subtitle2 text-center bg-black bg-opacity-50">
-                                    Confidence: {{ Math.round(sighting.confidence * 100) }}%
-                                </div>
-                            </q-img>
+                            />
                             <q-card-section>
                                 <div class="flex items-center justify-between mb-2">
                                     <div class="text-lg font-bold">{{ sighting.type }}</div>
