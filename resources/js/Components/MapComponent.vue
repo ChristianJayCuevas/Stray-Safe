@@ -78,6 +78,22 @@ const animalPinForm = ref({
   image_url: ''
 });
 
+// Add these variables to the setup script section, near the other map-related refs
+const currentZoom = ref(0);
+const minPinZoomLevel = ref(11); // Minimum zoom level to show pins
+const showAreaLabels = ref(true);
+const areaEditMode = ref(false);
+const areaBeingEdited = ref(null);
+const areaNameEdit = ref('');
+
+// Watch for changes in the isDarkMode state
+watch(isDarkMode, () => {
+  // Update area labels with the new theme
+  updateAreaLabels();
+
+  // If we need to restyle other elements based on dark mode, do it here
+});
+
 // Toggle the user areas panel
 function toggleUserAreasPanel() {
   isUserAreasPanelExpanded.value = !isUserAreasPanelExpanded.value;
@@ -347,14 +363,33 @@ async function initializeMap() {
 
     // Wait for map to load
     map.value.on('load', async () => {
-      console.log('Map loaded successfully!');
+      console.log('Map loaded event triggered, applying loading delay...');
+
+      // Fetch initial pins and add all cones before displaying the map
+      await fetchPins();
+
+      // Add artificial delay to ensure cones are loaded and visible
+      console.log('Adding delay to ensure all cones are loaded...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Ensure all camera cones are added to the map
+      console.log('Forcing cone rendering...');
+      if (map.value && map.value.isStyleLoaded()) {
+        // Re-add all cones to ensure they're loaded
+        addAllCameraCones();
+
+        // Add another small delay to ensure cones are rendered
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      console.log('Map fully loaded and cones rendered successfully!');
+
       // Clear timeout since map loaded successfully
       if (mapLoadTimeout.value) {
         clearTimeout(mapLoadTimeout.value);
         mapLoadTimeout.value = null;
       }
-      // Fetch initial pins
-      await fetchPins();
+
       // Fetch user areas if not provided via props
       if (!props.userAreas || props.userAreas.length === 0) {
         await fetchUserAreas();
@@ -362,6 +397,15 @@ async function initializeMap() {
         userAreas.value = props.userAreas;
         displayUserAreas();
       }
+
+      // Set initial zoom level
+      currentZoom.value = map.value.getZoom();
+
+      // Add zoom change listener
+      map.value.on('zoom', handleMapZoom);
+
+      // Initialize area labels
+      updateAreaLabels();
 
       // Emit map-ready event to parent
       emit('map-ready');
@@ -542,6 +586,9 @@ function displayUserAreas() {
     type: 'FeatureCollection',
     features: featuresToAdd
   });
+
+  // Update area labels after areas are added
+  updateAreaLabels();
 }
 
 // Enable drawing mode
@@ -800,71 +847,108 @@ async function processPins(pins) {
 
   console.log(`Loaded ${pinsList.value.length} pins into pinsList`);
 
-  // Wait for map to be fully styled and ready to receive layers
+  // Ensure the map style is loaded before adding cones
   if (!map.value.isStyleLoaded()) {
-    return new Promise((resolve) => {
-      map.value.once('style.load', () => {
-        // Add all camera cones after style loads
-        addAllCameraCones();
-        resolve();
-      });
+    console.log('Map style not yet loaded, waiting...');
+    map.value.once('styledata', () => {
+      console.log('Map style loaded, re-adding cones.');
+      addAllCameraCones();
     });
-  } else {
-    // Add all camera cones immediately if style is already loaded
-    addAllCameraCones();
+    return;
   }
+
+  // Add cones immediately if style is already loaded
+  console.log('Map style already loaded, adding cones.');
+  pinsList.value.forEach(pinData => {
+    if (pinData.isCamera && pinData.perceptionRange && pinData.conicalView) {
+      console.log(`Adding cone for camera ${pinData.id}`);
+      addConicalPerceptionRange(
+        pinData.coneData ? pinData.coneData.center : pinData.coordinates,
+        pinData.perceptionRange,
+        pinData.viewingDirection,
+        pinData.viewingAngle,
+        pinData.id
+      );
+    }
+  });
 }
 
 // Function to add all camera cones for loaded pins
-function addAllCameraCones() {
+async function addAllCameraCones() {
   console.log('Adding cones for all camera pins...');
-  // Loop through pinsList and add cones for all camera pins
-  pinsList.value.forEach(pinData => {
-    if (pinData.isCamera && pinData.perceptionRange) {
-      if (pinData.conicalView === true &&
-          pinData.viewingDirection !== undefined &&
-          pinData.viewingAngle !== undefined) {
-          console.log(`Adding conical view for camera ${pinData.id}`);
 
-        try {
-          // If we have cone data from the server, use it
-          if (pinData.coneData && pinData.coneData.center) {
-            console.log('Using stored cone data for camera', pinData.id, ':', pinData.coneData);
-            addConicalPerceptionRange(
-              pinData.coneData.center,
-              pinData.coneData.radius,
-              pinData.coneData.direction,
-              pinData.coneData.angle,
-              pinData.id
-            );
-          } else {
-            // Calculate the cone center based on camera position and direction
-            const radiusInDegrees = pinData.perceptionRange * 0.000009;
-            const directionRad = (pinData.viewingDirection * Math.PI) / 180;
-            const centerLng = pinData.lng + (radiusInDegrees * Math.sin(directionRad));
-            const centerLat = pinData.lat + (radiusInDegrees * Math.cos(directionRad));
+  if (!map.value) {
+    console.error('Map is not initialized, cannot add cones.');
+    return;
+  }
 
-            console.log('Calculating new cone data for camera', pinData.id, ':', {
-              center: [centerLng, centerLat],
-              radius: pinData.perceptionRange,
-              direction: pinData.viewingDirection,
-              angle: pinData.viewingAngle
-            });
+  // Make sure the map style is loaded
+  if (!map.value.isStyleLoaded()) {
+    console.log('Map style not yet loaded, waiting...');
+    await new Promise(resolve => {
+      map.value.once('styledata', () => {
+        console.log('Map style loaded, proceeding to add cones.');
+        resolve();
+      });
+    });
+  }
 
-            addConicalPerceptionRange(
-              [centerLng, centerLat],
-              pinData.perceptionRange,
-              pinData.viewingDirection,
-              pinData.viewingAngle,
-              pinData.id
-            );
-          }
-        } catch (error) {
-          console.error(`Error adding cone for camera ${pinData.id}:`, error);
-        }
+  // Count how many cones we're going to add
+  const cameraPins = pinsList.value.filter(pin =>
+    pin.isCamera && pin.perceptionRange && pin.conicalView === true &&
+    pin.viewingDirection !== undefined && pin.viewingAngle !== undefined
+  );
+
+  console.log(`Found ${cameraPins.length} camera pins with cones to add`);
+
+  // Add cones for each camera with a small delay between each
+  for (const pinData of cameraPins) {
+    console.log(`Adding cone for camera ${pinData.id}`);
+
+    try {
+      // If we have cone data from the server, use it
+      if (pinData.coneData && pinData.coneData.center) {
+        console.log('Using stored cone data for camera', pinData.id, ':', pinData.coneData);
+        await addConicalPerceptionRange(
+          pinData.coneData.center,
+          pinData.coneData.radius,
+          pinData.coneData.direction,
+          pinData.coneData.angle,
+          pinData.id
+        );
+      } else {
+        // Calculate the cone center based on camera position and direction
+        const centerCoords = calculateConeCenter(
+          pinData.lng,
+          pinData.lat,
+          pinData.perceptionRange,
+          pinData.viewingDirection
+        );
+
+        console.log('Calculating new cone data for camera', pinData.id, ':', {
+          center: centerCoords,
+          radius: pinData.perceptionRange,
+          direction: pinData.viewingDirection,
+          angle: pinData.viewingAngle
+        });
+
+        await addConicalPerceptionRange(
+          centerCoords,
+          pinData.perceptionRange,
+          pinData.viewingDirection,
+          pinData.viewingAngle,
+          pinData.id
+        );
       }
+
+      // Add a small delay between adding cones to avoid race conditions
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      console.error(`Error adding cone for camera ${pinData.id}:`, error);
     }
-  });
+  }
+
+  console.log('Finished adding all camera cones.');
 }
 
 // Fetch pins from the server and add them to the map
@@ -1017,7 +1101,14 @@ function createMarker(pinData) {
     popup.on('open', () => {
       const deleteBtn = popup.getElement().querySelector(`.delete-pin-btn[data-pin-id="${pinId}"]`);
       if (deleteBtn) {
-        deleteBtn.addEventListener('click', async (e) => {
+        // Remove existing event listeners to prevent duplicates
+        deleteBtn.replaceWith(deleteBtn.cloneNode(true));
+
+        // Get the fresh button reference after replacement
+        const freshDeleteBtn = popup.getElement().querySelector(`.delete-pin-btn[data-pin-id="${pinId}"]`);
+
+        // Add the event listener to the fresh button
+        freshDeleteBtn.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
 
@@ -1632,14 +1723,17 @@ defineExpose({
 });
 
 // Function to add a conical perception range to the map for a camera
-function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle, cameraId) {
-  const coneId = `cone-${cameraId}`;
+async function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle, cameraId) {
+  const uniqueId = `cone-${cameraId}-${Date.now()}`;
+  const coneId = `cone-layer-${cameraId}`;
   const sourceId = `cone-source-${cameraId}`;
+  const arrowLayerId = `cone-arrow-layer-${cameraId}`;
+  const arrowSourceId = `cone-arrow-source-${cameraId}`;
 
   try {
     if (!map.value) {
       console.error('Map not initialized, cannot add conical perception range');
-      return;
+      return null;
     }
 
     console.log(`Adding conical perception for camera ${cameraId}`, {
@@ -1652,26 +1746,69 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
     // Wait for map style to load if needed
     if (!map.value.isStyleLoaded()) {
       console.log('Map style not yet loaded, waiting...');
-      map.value.once('style.load', () => {
-        addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle, cameraId);
+      await new Promise(resolve => {
+        map.value.once('styledata', () => {
+          console.log('Map style loaded, proceeding with cone addition.');
+          resolve();
+        });
       });
-      return;
     }
 
-    // Remove any existing layers and sources for this camera
-    if (map.value.getLayer(coneId)) {
-      map.value.removeLayer(coneId);
-    }
-    if (map.value.getSource(sourceId)) {
-      map.value.removeSource(sourceId);
+    // Log existing layers and sources before removal
+    console.log(`Before removal - Checking if layer ${coneId} exists:`, map.value.getLayer(coneId) ? 'Yes' : 'No');
+    console.log(`Before removal - Checking if source ${sourceId} exists:`, map.value.getSource(sourceId) ? 'Yes' : 'No');
+
+    // Remove any existing layers BEFORE removing sources
+    try {
+      // Always remove layers first, in correct order
+      if (map.value.getLayer(arrowLayerId)) {
+        console.log(`Removing existing arrow layer: ${arrowLayerId}`);
+        map.value.removeLayer(arrowLayerId);
+      }
+
+      if (map.value.getLayer(`${coneId}-line`)) {
+        console.log(`Removing existing line layer: ${coneId}-line`);
+        map.value.removeLayer(`${coneId}-line`);
+      }
+
+      if (map.value.getLayer(coneId)) {
+        console.log(`Removing existing layer: ${coneId}`);
+        map.value.removeLayer(coneId);
+      }
+
+      // Now safe to remove sources
+      if (map.value.getSource(arrowSourceId)) {
+        console.log(`Removing existing arrow source: ${arrowSourceId}`);
+        map.value.removeSource(arrowSourceId);
+      }
+
+      if (map.value.getSource(sourceId)) {
+        console.log(`Removing existing source: ${sourceId}`);
+        map.value.removeSource(sourceId);
+      }
+    } catch (removalError) {
+      console.error('Error removing existing layers/sources:', removalError);
+      // Continue execution - we'll try to add new layers anyway
     }
 
-    const radiusInDegrees = rangeInMeters * 0.000009;
+    // Use our standardized calculation method for consistent results
+    // Fixed conversion factor for converting meters to degrees (approximately at the equator)
+    const METERS_TO_DEGREES = 0.000009;
+    const radiusInDegrees = rangeInMeters * METERS_TO_DEGREES;
+
     const [lng, lat] = Array.isArray(coordinates) ? coordinates : [coordinates.lng, coordinates.lat];
+
+    // Add debug logs for coordinate calculation
+    console.log(`Calculating cone center for camera ${cameraId}:`);
+    console.log(`Initial coordinates: [${lng}, ${lat}]`);
+    console.log(`Range in meters: ${rangeInMeters}, Direction: ${direction}°, Angle: ${angle}°`);
+    console.log(`Radius in degrees (consistent): ${radiusInDegrees}`);
+
+    // Make sure all cone calculations use the same conversion factor
     const directionRad = (direction * Math.PI) / 180;
     const halfAngleRad = (angle / 2 * Math.PI) / 180;
 
-    // Generate cone points
+    // Generate cone points using consistent calculation
     const conePoints = [[lng, lat]];
     const numPoints = 30;
     const startAngle = directionRad - halfAngleRad;
@@ -1702,40 +1839,66 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
     };
 
     // Add the source
-    map.value.addSource(sourceId, {
-      type: 'geojson',
-      data: conePolygon
-    });
+    try {
+      console.log(`Adding source: ${sourceId}`);
+      map.value.addSource(sourceId, {
+        type: 'geojson',
+        data: conePolygon
+      });
+      console.log(`Source ${sourceId} added successfully`);
+    } catch (sourceError) {
+      console.error(`Error adding source ${sourceId}:`, sourceError);
+      return null;
+    }
 
-    // Add the layer
-    map.value.addLayer({
-      id: coneId,
-      type: 'fill',
-      source: sourceId,
-      layout: {},
-      paint: {
-        'fill-color': '#4285F4',
-        'fill-opacity': 0.35,
-        'fill-outline-color': '#4285F4',
-        'fill-translate': [0, 0] // Ensure no translation
+    // Add the fill layer
+    try {
+      console.log(`Adding main layer: ${coneId}`);
+      map.value.addLayer({
+        id: coneId,
+        type: 'fill',
+        source: sourceId,
+        layout: {},
+        paint: {
+          'fill-color': isDarkMode.value ? '#38a3a5' : '#4f6642',
+          'fill-opacity': 0.35,
+          'fill-outline-color': isDarkMode.value ? '#2C7A7B' : '#3b4e31'
+        }
+      });
+      console.log(`Layer ${coneId} added successfully`);
+    } catch (layerError) {
+      console.error(`Error adding layer ${coneId}:`, layerError);
+      if (map.value.getSource(sourceId)) {
+        try {
+          map.value.removeSource(sourceId);
+        } catch (cleanupError) {
+          console.error(`Error cleaning up source ${sourceId}:`, cleanupError);
+        }
       }
-    });
+      return false;
+    }
 
     // Add a line layer to make the cone edge more visible
-    map.value.addLayer({
-      id: `${coneId}-line`,
-      type: 'line',
-      source: sourceId,
-      layout: {
-        'line-cap': 'round',
-        'line-join': 'round'
-      },
-      paint: {
-        'line-color': '#1a73e8',
-        'line-width': 2,
-        'line-opacity': 0.8
-      }
-    });
+    try {
+      console.log(`Adding line layer: ${coneId}-line`);
+      map.value.addLayer({
+        id: `${coneId}-line`,
+        type: 'line',
+        source: sourceId,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round'
+        },
+        paint: {
+          'line-color': isDarkMode.value ? '#2C7A7B' : '#3b4e31',
+          'line-width': 2,
+          'line-opacity': 0.8
+        }
+      });
+      console.log(`Line layer ${coneId}-line added successfully`);
+    } catch (lineLayerError) {
+      console.error(`Error adding line layer ${coneId}-line:`, lineLayerError);
+    }
 
     // Add a directional arrow at the tip of the cone
     const arrowPoints = [
@@ -1746,31 +1909,55 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
       ]
     ];
 
-    map.value.addSource(`${sourceId}-arrow`, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: arrowPoints
+    // Add the arrow source
+    try {
+      console.log(`Adding arrow source: ${arrowSourceId}`);
+      map.value.addSource(arrowSourceId, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: arrowPoints
+          }
         }
-      }
-    });
+      });
+      console.log(`Arrow source ${arrowSourceId} added successfully`);
+    } catch (arrowSourceError) {
+      console.error(`Error adding arrow source ${arrowSourceId}:`, arrowSourceError);
+    }
 
-    map.value.addLayer({
-      id: `${coneId}-arrow`,
-      type: 'line',
-      source: `${sourceId}-arrow`,
-      layout: {
-        'line-cap': 'round',
-        'line-join': 'round'
-      },
-      paint: {
-        'line-color': '#1a73e8',
-        'line-width': 2,
-        'line-dasharray': [2, 1]
-      }
-    });
+    // Add the arrow layer
+    try {
+      console.log(`Adding arrow layer: ${arrowLayerId}`);
+      map.value.addLayer({
+        id: arrowLayerId,
+        type: 'line',
+        source: arrowSourceId,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round'
+        },
+        paint: {
+          'line-color': isDarkMode.value ? '#38a3a5' : '#4f6642',
+          'line-width': 2,
+          'line-dasharray': [2, 1]
+        }
+      });
+      console.log(`Arrow layer ${arrowLayerId} added successfully`);
+    } catch (arrowLayerError) {
+      console.error(`Error adding arrow layer ${arrowLayerId}:`, arrowLayerError);
+    }
+
+    // Verify which layers were actually added
+    setTimeout(() => {
+      const existingLayers = map.value.getStyle().layers || [];
+      const layerIds = existingLayers.map(layer => layer.id);
+      console.log(`Verification: Map has ${existingLayers.length} layers`);
+      console.log(`Verification: Layer ${coneId} exists:`, layerIds.includes(coneId) ? 'Yes' : 'No');
+      console.log(`Verification: Layer ${coneId}-line exists:`, layerIds.includes(`${coneId}-line`) ? 'Yes' : 'No');
+      console.log(`Verification: Layer ${arrowLayerId} exists:`, layerIds.includes(arrowLayerId) ? 'Yes' : 'No');
+    }, 50);
 
     // Store the cone definition
     coneMap.value[cameraId] = {
@@ -1780,14 +1967,33 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
       angle,
       polygon: conePolygon.geometry.coordinates[0],
       sourceId,
-      layerId: coneId
+      layerId: coneId,
+      arrowSourceId,
+      arrowLayerId
     };
+
+    // Verify that layers and sources were added successfully
+    setTimeout(() => {
+      try {
+        const existingLayers = map.value.getStyle().layers || [];
+        const layerIds = existingLayers.map(layer => layer.id);
+        console.log(`Final verification for camera ${cameraId}:`);
+        console.log(`- Layer ${coneId} exists:`, layerIds.includes(coneId) ? 'Yes' : 'No');
+        console.log(`- Layer ${coneId}-line exists:`, layerIds.includes(`${coneId}-line`) ? 'Yes' : 'No');
+        console.log(`- Layer ${arrowLayerId} exists:`, layerIds.includes(arrowLayerId) ? 'Yes' : 'No');
+        console.log(`- Source ${sourceId} exists:`, map.value.getSource(sourceId) ? 'Yes' : 'No');
+        console.log(`- Source ${arrowSourceId} exists:`, map.value.getSource(arrowSourceId) ? 'Yes' : 'No');
+      } catch (verifyError) {
+        console.error('Error during verification:', verifyError);
+      }
+    }, 100);
 
     return {
       coneId,
       sourceId,
       cameraId,
       coordinates,
+      center: [lng, lat],
       radius: rangeInMeters,
       direction,
       angle
@@ -1928,49 +2134,149 @@ function removeCone(cameraId) {
   if (!map.value) return;
 
   try {
-    // Get the cone ID and source ID
-    const coneId = `cone-${cameraId}`;
+    console.log(`Removing cone for camera ID: ${cameraId}`);
+
+    // Get the cone IDs using the new naming pattern
+    const coneId = `cone-layer-${cameraId}`;
     const sourceId = `cone-source-${cameraId}`;
+    const arrowLayerId = `cone-arrow-layer-${cameraId}`;
+    const arrowSourceId = `cone-arrow-source-${cameraId}`;
 
-    // Remove layers first if they exist
-    if (map.value.getLayer(coneId)) {
-      map.value.removeLayer(coneId);
-      console.log(`Removed cone layer: ${coneId}`);
+    // Log existing layers before removal
+    console.log(`Checking if layer ${coneId} exists:`, map.value.getLayer(coneId) ? 'Yes' : 'No');
+    console.log(`Checking if layer ${coneId}-line exists:`, map.value.getLayer(`${coneId}-line`) ? 'Yes' : 'No');
+    console.log(`Checking if layer ${arrowLayerId} exists:`, map.value.getLayer(arrowLayerId) ? 'Yes' : 'No');
+
+    // Always remove layers first, in correct order
+    if (map.value.getLayer(arrowLayerId)) {
+      console.log(`Removing arrow layer: ${arrowLayerId}`);
+      map.value.removeLayer(arrowLayerId);
     }
+
+    // Also check for the old naming pattern for backward compatibility
+    if (map.value.getLayer(`cone-${cameraId}-arrow`)) {
+      console.log(`Removing old arrow layer: cone-${cameraId}-arrow`);
+      map.value.removeLayer(`cone-${cameraId}-arrow`);
+    }
+
     if (map.value.getLayer(`${coneId}-line`)) {
+      console.log(`Removing line layer: ${coneId}-line`);
       map.value.removeLayer(`${coneId}-line`);
-      console.log(`Removed cone line layer: ${coneId}-line`);
-    }
-    if (map.value.getLayer(`${coneId}-arrow`)) {
-      map.value.removeLayer(`${coneId}-arrow`);
-      console.log(`Removed cone arrow layer: ${coneId}-arrow`);
     }
 
-    // Then remove sources if they exist
-    if (map.value.getSource(sourceId)) {
-      map.value.removeSource(sourceId);
-      console.log(`Removed cone source: ${sourceId}`);
+    if (map.value.getLayer(coneId)) {
+      console.log(`Removing main layer: ${coneId}`);
+      map.value.removeLayer(coneId);
     }
+
+    // Also check for the old naming pattern for backward compatibility
+    if (map.value.getLayer(`cone-${cameraId}`)) {
+      console.log(`Removing old main layer: cone-${cameraId}`);
+      map.value.removeLayer(`cone-${cameraId}`);
+    }
+
+    // Now it's safe to remove sources
+    if (map.value.getSource(arrowSourceId)) {
+      console.log(`Removing arrow source: ${arrowSourceId}`);
+      map.value.removeSource(arrowSourceId);
+    }
+
+    // Also check for the old naming pattern for backward compatibility
     if (map.value.getSource(`${sourceId}-arrow`)) {
+      console.log(`Removing old arrow source: ${sourceId}-arrow`);
       map.value.removeSource(`${sourceId}-arrow`);
-      console.log(`Removed cone arrow source: ${sourceId}-arrow`);
+    }
+
+    if (map.value.getSource(sourceId)) {
+      console.log(`Removing main source: ${sourceId}`);
+      map.value.removeSource(sourceId);
     }
 
     // Remove from cone map
     if (coneMap.value[cameraId]) {
       delete coneMap.value[cameraId];
-      console.log(`Removed cone from internal store for camera ID: ${cameraId}`);
+      console.log(`Removed cone data from internal store for camera ID: ${cameraId}`);
     }
+
+    // Verify removal
+    setTimeout(() => {
+      const existingLayers = map.value.getStyle().layers || [];
+      const layerIds = existingLayers.map(layer => layer.id);
+      console.log(`Verification after removal - Layer ${coneId} exists:`, layerIds.includes(coneId) ? 'Yes' : 'No');
+      console.log(`Verification after removal - Source ${sourceId} exists:`, map.value.getSource(sourceId) ? 'Yes' : 'No');
+    }, 50);
+
+    return true;
   } catch (error) {
     console.error(`Error removing cone for camera ${cameraId}:`, error);
+    return false;
   }
 }
 
 // Get random point within a cone
 function getRandomPointInCone(cone) {
-  // Implementation omitted for brevity
-  // This would generate a random point within the given cone
-  return cone.center;
+  if (!cone || !cone.center) {
+    console.error('Invalid cone data, cannot generate random point');
+    return [0, 0];
+  }
+
+  try {
+    // Extract cone properties
+    const center = cone.center;
+    const radius = parseFloat(cone.radius || 30);
+    const direction = parseFloat(cone.direction || 0);
+    const angle = parseFloat(cone.angle || 60);
+
+    // Convert to degrees for calculations
+    const radiusInDegrees = radius * 0.000009; // 1m is approx 0.000009 degrees
+    const directionRad = (direction * Math.PI) / 180;
+    const halfAngleRad = (angle / 2 * Math.PI) / 180;
+
+    // Generate a normal random angle biased toward the center of the viewing cone
+    const normalRandom = () => {
+      // Box-Muller transform for normal distribution
+      const u1 = Math.random();
+      const u2 = Math.random();
+      const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      // Scale to portion of viewing angle and center on viewing direction
+      return directionRad + (z * (halfAngleRad / 2.5));
+    };
+
+    // Get angle biased toward center of cone
+    let randomAngle = normalRandom();
+
+    // Ensure angle stays within cone boundaries
+    const startAngle = directionRad - halfAngleRad;
+    const endAngle = directionRad + halfAngleRad;
+    if (randomAngle < startAngle) randomAngle = startAngle + (Math.random() * halfAngleRad * 0.2);
+    if (randomAngle > endAngle) randomAngle = endAngle - (Math.random() * halfAngleRad * 0.2);
+
+    // Calculate distance from center (denser in middle range)
+    const minDistance = 0.2; // 20% of max range
+    const maxDistance = 0.8; // 80% of max range
+    const distanceFactor = minDistance + Math.pow(Math.random(), 0.7) * (maxDistance - minDistance);
+
+    // Calculate offsets using trig
+    const offsetX = radiusInDegrees * distanceFactor * Math.sin(randomAngle);
+    const offsetY = radiusInDegrees * distanceFactor * Math.cos(randomAngle);
+
+    // Add a little jitter for natural appearance
+    const jitter = radiusInDegrees * 0.03;
+    const jitterX = jitter * (Math.random() * 2 - 1);
+    const jitterY = jitter * (Math.random() * 2 - 1);
+
+    // Apply offsets to camera position
+    const result = [
+      center[0] + offsetX + jitterX,
+      center[1] + offsetY + jitterY
+    ];
+
+    console.log(`Generated random point in cone: [${result[0]}, ${result[1]}] from center [${center[0]}, ${center[1]}]`);
+    return result;
+  } catch (error) {
+    console.error('Error generating random point in cone:', error);
+    return cone.center || [0, 0]; // Fallback to center or origin
+  }
 }
 
 // Navigate to a specific location on the map
@@ -2127,13 +2433,16 @@ function addStandaloneCone(centerCoordinates, radius, direction, angle, id) {
       return false;
     }
 
-    const coneId = `cone-${uniqueId}`;
+    const coneId = `cone-layer-${uniqueId}`;
     const sourceId = `cone-source-${uniqueId}`;
+    const arrowLayerId = `cone-arrow-layer-${uniqueId}`;
+    const arrowSourceId = `cone-arrow-source-${uniqueId}`;
 
     // Wait for map style to load if needed
     if (!map.value.isStyleLoaded()) {
       console.log('Map style not yet loaded, waiting...');
-      map.value.once('style.load', () => {
+      map.value.once('styledata', () => {
+        console.log('Map style loaded, re-adding standalone cone.');
         addStandaloneCone(centerCoordinates, radius, direction, angle, uniqueId);
       });
       return false;
@@ -2142,16 +2451,34 @@ function addStandaloneCone(centerCoordinates, radius, direction, angle, id) {
     // Remove existing cone with this ID if it exists without affecting other cones
     if (coneMap.value[uniqueId]) {
       try {
-        // Remove layers if they exist
-        if (map.value.getLayer(coneId)) map.value.removeLayer(coneId);
-        if (map.value.getLayer(`${coneId}-line`)) map.value.removeLayer(`${coneId}-line`);
-        if (map.value.getLayer(`${coneId}-arrow`)) map.value.removeLayer(`${coneId}-arrow`);
+        console.log(`Removing existing standalone cone with ID ${uniqueId}`);
 
-        // Remove sources if they exist
-        if (map.value.getSource(sourceId)) map.value.removeSource(sourceId);
-        if (map.value.getSource(`${sourceId}-arrow`)) map.value.removeSource(`${sourceId}-arrow`);
+        // Always remove layers first, in correct order
+        if (map.value.getLayer(arrowLayerId)) {
+          console.log(`Removing arrow layer: ${arrowLayerId}`);
+          map.value.removeLayer(arrowLayerId);
+        }
 
-        console.log(`Removed existing cone with ID ${uniqueId}`);
+        if (map.value.getLayer(`${coneId}-line`)) {
+          console.log(`Removing line layer: ${coneId}-line`);
+          map.value.removeLayer(`${coneId}-line`);
+        }
+
+        if (map.value.getLayer(coneId)) {
+          console.log(`Removing main layer: ${coneId}`);
+          map.value.removeLayer(coneId);
+        }
+
+        // Now it's safe to remove sources
+        if (map.value.getSource(arrowSourceId)) {
+          console.log(`Removing arrow source: ${arrowSourceId}`);
+          map.value.removeSource(arrowSourceId);
+        }
+
+        if (map.value.getSource(sourceId)) {
+          console.log(`Removing main source: ${sourceId}`);
+          map.value.removeSource(sourceId);
+        }
       } catch (removeError) {
         console.warn(`Error removing existing cone ${uniqueId}:`, removeError);
         // Continue with creating the new cone even if removal fails
@@ -2281,6 +2608,8 @@ function addStandaloneCone(centerCoordinates, radius, direction, angle, id) {
       polygon: conePolygon.geometry.coordinates[0],
       sourceId,
       layerId: coneId,
+      arrowSourceId,
+      arrowLayerId,
       isStandalone: true
     };
 
@@ -2395,6 +2724,234 @@ function submitAnimalPin() {
       alert('Failed to add pin. Please try again.');
     });
 }
+
+// Add this function to handle zoom events
+function handleMapZoom() {
+  if (!map.value) return;
+
+  try {
+    // Get current zoom level
+    currentZoom.value = map.value.getZoom();
+    console.log('Current map zoom:', currentZoom.value);
+
+    // Hide/show pin elements based on zoom level
+    const pinElements = document.querySelectorAll('.mapboxgl-marker');
+    pinElements.forEach(pin => {
+      if (currentZoom.value < minPinZoomLevel.value) {
+        pin.style.display = 'none';
+      } else {
+        pin.style.display = 'block';
+      }
+    });
+
+    // Update area labels visibility and size based on zoom
+    updateAreaLabels();
+  } catch (error) {
+    console.error('Error handling map zoom:', error);
+  }
+}
+
+// Function to update area labels based on zoom level
+function updateAreaLabels() {
+  if (!map.value || !draw.value) return;
+
+  try {
+    // Remove existing area labels
+    const existingLabels = document.querySelectorAll('.area-label');
+    existingLabels.forEach(label => label.remove());
+
+    // Get all areas from the draw control
+    const features = draw.value.getAll().features;
+
+    // Create labels for each area
+    features.forEach(feature => {
+      if (feature.geometry.type === 'Polygon') {
+        // Get area properties
+        const properties = feature.properties || {};
+        const areaName = properties.name || 'Unnamed Area';
+
+        // Calculate centroid of the polygon
+        const coordinates = feature.geometry.coordinates[0];
+        if (!coordinates || coordinates.length === 0) return;
+
+        let sumX = 0, sumY = 0;
+        coordinates.forEach(coord => {
+          sumX += coord[0];
+          sumY += coord[1];
+        });
+
+        const centroid = [sumX / coordinates.length, sumY / coordinates.length];
+
+        // Create a point for this label
+        const point = map.value.project(centroid);
+
+        // Create label element
+        const label = document.createElement('div');
+        label.className = 'area-label';
+        if (isDarkMode.value) {
+          label.classList.add('dark-mode');
+        }
+        label.textContent = areaName;
+
+        // Style based on zoom level
+        const fontSize = Math.max(14, Math.min(24, currentZoom.value * 1.2));
+        label.style.fontSize = `${fontSize}px`;
+
+        // Position the label
+        label.style.position = 'absolute';
+        label.style.left = `${point.x}px`;
+        label.style.top = `${point.y}px`;
+
+        // Add to map container
+        map.value.getContainer().appendChild(label);
+
+        // Update position when map moves
+        const updatePosition = () => {
+          const point = map.value.project(centroid);
+          label.style.left = `${point.x}px`;
+          label.style.top = `${point.y}px`;
+        };
+
+        map.value.on('move', updatePosition);
+      }
+    });
+  } catch (error) {
+    console.error('Error updating area labels:', error);
+  }
+}
+
+// Add this function to start area name editing
+function editAreaName(area) {
+  console.log('Editing area name:', area);
+  areaBeingEdited.value = area;
+
+  // Get the current name from properties or directly from area
+  let currentName = '';
+  try {
+    const properties = typeof area.properties === 'string' ?
+      JSON.parse(area.properties || '{}') :
+      area.properties || {};
+
+    currentName = properties.name || area.name || '';
+  } catch (error) {
+    console.error('Error parsing area properties:', error);
+    currentName = area.name || '';
+  }
+
+  areaNameEdit.value = currentName;
+  areaEditMode.value = true;
+}
+
+// Add this function to save area name
+function saveAreaName() {
+  if (!areaBeingEdited.value) return;
+
+  try {
+    console.log('Saving area name:', areaNameEdit.value);
+
+    // Create a copy of the area properties
+    let properties = {};
+    try {
+      properties = typeof areaBeingEdited.value.properties === 'string' ?
+        JSON.parse(areaBeingEdited.value.properties || '{}') :
+        {...(areaBeingEdited.value.properties || {})};
+    } catch (error) {
+      console.error('Error parsing area properties:', error);
+      properties = {};
+    }
+
+    // Update the name property
+    properties.name = areaNameEdit.value;
+
+    // Get the feature_id
+    const featureId = areaBeingEdited.value.feature_id;
+
+    if (featureId && draw.value) {
+      // Get the feature from draw
+      const feature = draw.value.get(featureId);
+
+      if (feature) {
+        // Update the properties
+        feature.properties = feature.properties || {};
+        feature.properties.name = areaNameEdit.value;
+
+        // Update in the draw plugin
+        draw.value.add(feature);
+
+        // Save to the database
+        saveUserArea(feature, true);
+      } else {
+        console.warn(`Feature with ID ${featureId} not found in draw`);
+
+        // Update the area directly
+        if (typeof areaBeingEdited.value.properties === 'string') {
+          areaBeingEdited.value.properties = JSON.stringify(properties);
+        } else {
+          areaBeingEdited.value.properties = properties;
+        }
+
+        // Find the area in the userAreas array and update it
+        const areaIndex = userAreas.value.findIndex(a => a.feature_id === featureId);
+        if (areaIndex >= 0) {
+          if (typeof userAreas.value[areaIndex].properties === 'string') {
+            userAreas.value[areaIndex].properties = JSON.stringify(properties);
+          } else {
+            userAreas.value[areaIndex].properties = properties;
+          }
+
+          // Also update the name field directly
+          userAreas.value[areaIndex].name = areaNameEdit.value;
+
+          // Save to the database
+          axios.put(`/api/user-areas/${featureId}`, {
+            name: areaNameEdit.value,
+            properties: JSON.stringify(properties),
+            feature_id: featureId,
+            geometry: areaBeingEdited.value.geometry
+          })
+          .then(response => {
+            console.log('Area name updated via API:', response.data);
+          })
+          .catch(error => {
+            console.error('Error updating area name via API:', error);
+          });
+        }
+      }
+
+      // Update area labels
+      updateAreaLabels();
+    }
+
+    // Exit edit mode
+    areaEditMode.value = false;
+    areaBeingEdited.value = null;
+
+    console.log('Area name updated successfully');
+  } catch (error) {
+    console.error('Error saving area name:', error);
+    alert('Failed to update area name. Please try again.');
+  }
+}
+
+// Calculate new cone data using consistent method
+// We'll standardize the calculation for cone center based on camera position and view parameters
+const calculateConeCenter = (cameraLng, cameraLat, perceptionRange, viewingDirection) => {
+  // Convert direction to radians
+  const directionRad = (viewingDirection * Math.PI) / 180;
+
+  // Fixed conversion factor from meters to degrees (approximately at the equator)
+  // We'll use a fixed factor to ensure consistency
+  const METERS_TO_DEGREES = 0.000009;
+
+  // Calculate radius in degrees - this will be the same for all cameras with same perception range
+  const radiusInDegrees = perceptionRange * METERS_TO_DEGREES;
+
+  // Calculate cone center position using consistent trigonometry
+  const centerLng = cameraLng + (radiusInDegrees * Math.sin(directionRad));
+  const centerLat = cameraLat + (radiusInDegrees * Math.cos(directionRad));
+
+  return [centerLng, centerLat];
+};
 </script>
 
 <template>
@@ -2414,10 +2971,10 @@ function submitAnimalPin() {
       <!-- Map Legend -->
       <div class="map-legend" :class="{ 'dark-mode': isDarkMode }">
         <h4 class="legend-title">Map Legend</h4>
-        <div class="legend-item">
+        <!-- <div class="legend-item">
           <div class="legend-color barangay-color"></div>
           <div class="legend-label">{{mapName}}</div>
-        </div>
+        </div> -->
         <div class="legend-item">
           <div class="legend-icon camera-icon"></div>
           <div class="legend-label">CCTV Camera</div>
@@ -2432,7 +2989,7 @@ function submitAnimalPin() {
         </div>
         <div class="legend-item">
           <div class="legend-color user-area-color"></div>
-          <div class="legend-label">User Defined Area</div>
+          <div class="legend-label">Target Area</div>
         </div>
       </div>
 
@@ -2485,6 +3042,11 @@ function submitAnimalPin() {
               <div class="area-info">
                 <div class="area-name">{{ area.name || 'Unnamed Area' }}</div>
                 <div class="area-description">{{ area.description || 'No description' }}</div>
+              </div>
+              <div class="area-actions">
+                <button @click.stop="editAreaName(area)" class="edit-area-btn" title="Edit area name">
+                  <i class="fas fa-edit"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -2586,10 +3148,10 @@ function submitAnimalPin() {
       </button>
 
       <!-- Add Animal Pin Button -->
-      <button @click="enableAnimalPinPlacement" class="add-animal-pin-btn" :class="{ 'active': isAddingAnimalPin }">
+      <!-- <button @click="enableAnimalPinPlacement" class="add-animal-pin-btn" :class="{ 'active': isAddingAnimalPin }">
         <i class="fas fa-plus"></i>
         <span>Add Animal</span>
-      </button>
+      </button> -->
 
       <!-- Cancel Animal Pin Button (shown when in placement mode) -->
       <button v-if="isAddingAnimalPin" @click="cancelAnimalPinPlacement" class="cancel-animal-pin-btn">
@@ -2659,6 +3221,7 @@ function submitAnimalPin() {
       </button>
     </div>
   </div>
+
 </template>
 
 <style>
@@ -3243,12 +3806,38 @@ function submitAnimalPin() {
   border-color: #4285f4;
 }
 
-/* User Map panel styles */
+/* Area label styles */
+.area-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 255, 255, 0.8);
+  color: #333;
+  padding: 5px 10px;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  pointer-events: none;
+  font-weight: bold;
+  text-align: center;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.area-label.dark-mode {
+  background-color: rgba(33, 33, 33, 0.8);
+  color: #f0f0f0;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 .user-map-panel {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  top: 70px;
+  right: 20px;
+  transform: none;
   background-color: rgba(255, 255, 255, 0.95);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
@@ -3806,6 +4395,368 @@ function submitAnimalPin() {
   gap: 10px;
   justify-content: flex-end;
   margin-top: 20px;
+}
+
+/* Area edit button styles */
+.area-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 5px;
+}
+
+.edit-area-btn {
+  background-color: transparent;
+  color: #4285f4;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.edit-area-btn:hover {
+  background-color: rgba(66, 133, 244, 0.1);
+  transform: scale(1.1);
+}
+
+.dark-mode .edit-area-btn {
+  color: #8ab4f8;
+}
+
+.dark-mode .edit-area-btn:hover {
+  background-color: rgba(138, 180, 248, 0.1);
+}
+
+/* Area edit dialog styles */
+.area-edit-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 350px;
+  max-width: 95vw;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.dark-mode .area-edit-dialog {
+  background-color: #2a2a2a;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.area-edit-dialog .dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.dark-mode .area-edit-dialog .dialog-header {
+  background-color: #333;
+  border-bottom: 1px solid #444;
+}
+
+.area-edit-dialog .dialog-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.dark-mode .area-edit-dialog .dialog-header h3 {
+  color: #f0f0f0;
+}
+
+.area-edit-dialog .close-btn {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.dark-mode .area-edit-dialog .close-btn {
+  color: #aaa;
+}
+
+.area-edit-dialog .dialog-body {
+  padding: 20px;
+}
+
+.area-edit-dialog .form-group {
+  margin-bottom: 20px;
+}
+
+.area-edit-dialog label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.dark-mode .area-edit-dialog label {
+  color: #e0e0e0;
+}
+
+.area-edit-dialog input[type="text"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: white;
+  color: #333;
+}
+
+.dark-mode .area-edit-dialog input[type="text"] {
+  background-color: #333;
+  border-color: #555;
+  color: #f0f0f0;
+}
+
+.area-edit-dialog .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.area-edit-dialog .cancel-btn {
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  color: #333;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.area-edit-dialog .save-btn {
+  background-color: #4285f4;
+  border: 1px solid #3367d6;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.area-edit-dialog .cancel-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.area-edit-dialog .save-btn:hover {
+  background-color: #3367d6;
+}
+
+.dark-mode .area-edit-dialog .cancel-btn {
+  background-color: #333;
+  border-color: #444;
+  color: #f0f0f0;
+}
+
+.dark-mode .area-edit-dialog .cancel-btn:hover {
+  background-color: #444;
+}
+
+/* Area label styles */
+.area-label {
+  font-size: 12px;
+  font-weight: bold;
+  color: #333;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 4px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dark-mode .area-label {
+  color: #f0f0f0;
+  background-color: rgba(33, 33, 33, 0.8);
+}
+
+/* Edit button styles */
+.edit-button {
+  background-color: transparent;
+  color: #4285f4;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.edit-button:hover {
+  background-color: rgba(66, 133, 244, 0.1);
+  transform: scale(1.1);
+}
+
+.dark-mode .edit-button {
+  color: #8ab4f8;
+}
+
+.dark-mode .edit-button:hover {
+  background-color: rgba(138, 180, 248, 0.1);
+}
+
+/* Edit dialog styles */
+.edit-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 350px;
+  max-width: 95vw;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.dark-mode .edit-dialog {
+  background-color: #2a2a2a;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.edit-dialog .dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.dark-mode .edit-dialog .dialog-header {
+  background-color: #333;
+  border-bottom: 1px solid #444;
+}
+
+.edit-dialog .dialog-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.dark-mode .edit-dialog .dialog-header h3 {
+  color: #f0f0f0;
+}
+
+.edit-dialog .close-btn {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.dark-mode .edit-dialog .close-btn {
+  color: #aaa;
+}
+
+.edit-dialog .dialog-body {
+  padding: 20px;
+}
+
+.edit-dialog .form-group {
+  margin-bottom: 20px;
+}
+
+.edit-dialog label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.dark-mode .edit-dialog label {
+  color: #e0e0e0;
+}
+
+.edit-dialog input[type="text"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: white;
+  color: #333;
+}
+
+.dark-mode .edit-dialog input[type="text"] {
+  background-color: #333;
+  border-color: #555;
+  color: #f0f0f0;
+}
+
+.edit-dialog .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.edit-dialog .cancel-btn {
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  color: #333;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.edit-dialog .save-btn {
+  background-color: #4285f4;
+  border: 1px solid #3367d6;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.edit-dialog .cancel-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.edit-dialog .save-btn:hover {
+  background-color: #3367d6;
+}
+
+.dark-mode .edit-dialog .cancel-btn {
+  background-color: #333;
+  border-color: #444;
+  color: #f0f0f0;
+}
+
+.dark-mode .edit-dialog .cancel-btn:hover {
+  background-color: #444;
 }
 </style>
 
