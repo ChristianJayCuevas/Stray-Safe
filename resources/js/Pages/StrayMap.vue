@@ -43,6 +43,14 @@ const addPinSuccess = ref('');
 const perceptionRange = ref(30); // Default perception range in meters
 const drawingAreaMode = ref(false); // State for area drawing mode
 
+// Visual cone configuration
+const showConeDialog = ref(false);
+const coneDirectionDegrees = ref(0);
+const coneAngleDegrees = ref(60);
+const isDirectionalCamera = ref(true);
+const selectedCameraInfo = ref(null);
+const cameraPlacementCoordinates = ref(null);
+
 // Detection monitoring variables
 const previousDetections = ref({});
 const detectionMonitorInterval = ref(null);
@@ -170,84 +178,32 @@ function startPinPlacement() {
 
     console.log('Found camera info:', cameraInfo);
 
-    // Ask user if this is a directional camera
-    const isDirectional = confirm('Is this a directional camera (with a specific viewing angle)?\nClick OK for directional, Cancel for 360-degree view.');
-
-    let viewingDirection = 0;
-    let viewingAngle = 60; // Default viewing angle for directional cameras
-
-    if (isDirectional) {
-        // Ask for viewing direction (0-360 degrees)
-        const directionPrompt = prompt('Enter the viewing direction in degrees (0-360):\n0° = North, 90° = East, 180° = South, 270° = West', '0');
-        if (directionPrompt === null) {
-            // User cancelled
-            viewingDirection = 0;
-        } else {
-            viewingDirection = parseInt(directionPrompt) || 0;
-            // Ensure value is between 0-360
-            viewingDirection = Math.max(0, Math.min(360, viewingDirection));
-        }
-
-        // Ask for viewing angle
-        const anglePrompt = prompt('Enter the camera\'s field of view angle in degrees (10-180):', '60');
-        if (anglePrompt === null) {
-            // User cancelled
-            viewingAngle = 60;
-        } else {
-            viewingAngle = parseInt(anglePrompt) || 60;
-            // Ensure value is between 10-180
-            viewingAngle = Math.max(10, Math.min(180, viewingAngle));
-        }
-    }
-
-    // Add conical view properties to camera info
-    const enhancedCameraInfo = {
+    // Store camera info for later use
+    selectedCameraInfo.value = {
         ...cameraInfo,
         perceptionRange: perceptionRange.value,
-        viewingDirection: viewingDirection,
-        viewingAngle: viewingAngle,
-        conicalView: isDirectional,
-        rtmp_key: cameraInfo.rtmp_key || cameraInfo.id, // Use the RTMP key from the API if available
-        original_id: cameraInfo.id, // Store original ID for reference
+        rtmp_key: cameraInfo.rtmp_key || cameraInfo.id,
+        original_id: cameraInfo.id
     };
-
-    console.log('Enhanced camera info with viewing parameters:', enhancedCameraInfo);
 
     placingPinMode.value = true;
     showCameraDialog.value = false;
 
     // Display clear instructions to the user
-    alert(`Click on the map to place the camera pin${isDirectional ? ` with a viewing direction of ${viewingDirection}° and field of view of ${viewingAngle}°` : ''}.\nYou can click the Cancel button to exit placement mode.`);
+    alert("Click on the map to place the camera pin. After placement, you'll be able to visually set the camera's viewing direction and angle.");
 
     // Enable pin placement mode in the map component
     if (mapRef.value) {
         try {
             mapRef.value.enablePinPlacementMode((coordinates) => {
                 console.log('User clicked map at coordinates:', coordinates);
-                // When user clicks on map, add the camera pin with the selected camera
-                addCameraPin(coordinates, enhancedCameraInfo)
-                    .then(response => {
-                        console.log('Camera pin add response:', response);
 
-                        // Check if response exists and has data
-                        if (response && response.data && response.data.success) {
-                            console.log('Camera pin added successfully:', response.data);
-                            alert('Camera pin placed successfully!');
-                        } else {
-                            console.error('Pin was added visually but failed to save to server:', response?.error || 'Unknown error');
-                            alert('Pin was placed on map but could not be saved to the server. The pin will be visible until you refresh the page.');
-                        }
-                        // Reset placement mode regardless of success/failure
-                        placingPinMode.value = false;
-                        mapRef.value.disablePinPlacementMode();
-                    })
-                    .catch(error => {
-                        console.error('Error adding camera pin:', error);
-                        alert('Failed to place camera pin. Please try again.');
-                        // Reset placement mode on error
-                        placingPinMode.value = false;
-                        mapRef.value.disablePinPlacementMode();
-                    });
+                // Store coordinates for later camera cone placement
+                cameraPlacementCoordinates.value = coordinates;
+
+                // Show cone configuration dialog
+                placingPinMode.value = false;
+                showConeDialog.value = true;
             });
         } catch (error) {
             console.error('Failed to enable pin placement mode:', error);
@@ -261,19 +217,57 @@ function startPinPlacement() {
     }
 }
 
-// Cancel the pin placement mode
-function cancelPinPlacement() {
-    console.log('Cancelling pin placement mode');
-    placingPinMode.value = false;
-
-    // Disable pin placement mode in the map component
-    if (mapRef.value) {
-        try {
-            mapRef.value.disablePinPlacementMode();
-        } catch (error) {
-            console.error('Error disabling pin placement mode:', error);
-        }
+// Complete camera placement after cone configuration
+function completeCameraPlacement() {
+    if (!selectedCameraInfo.value || !cameraPlacementCoordinates.value) {
+        alert('Missing camera information. Please try again.');
+        showConeDialog.value = false;
+        return;
     }
+
+    // Create the enhanced camera info with cone settings
+    const enhancedCameraInfo = {
+        ...selectedCameraInfo.value,
+        viewingDirection: coneDirectionDegrees.value,
+        viewingAngle: coneAngleDegrees.value,
+        conicalView: isDirectionalCamera.value
+    };
+
+    console.log('Enhanced camera info with viewing parameters:', enhancedCameraInfo);
+
+    // Add the camera pin with cone
+    addCameraPin(cameraPlacementCoordinates.value, enhancedCameraInfo)
+        .then(response => {
+            console.log('Camera pin add response:', response);
+
+            // Check if response exists and has data
+            if (response && response.data && response.data.success) {
+                console.log('Camera pin added successfully:', response.data);
+                alert('Camera pin placed successfully!');
+            } else {
+                console.error('Pin was added visually but failed to save to server:', response?.error || 'Unknown error');
+                alert('Pin was placed on map but could not be saved to the server. The pin will be visible until you refresh the page.');
+            }
+
+            // Close cone dialog
+            showConeDialog.value = false;
+
+            // Reset values
+            selectedCameraInfo.value = null;
+            cameraPlacementCoordinates.value = null;
+        })
+        .catch(error => {
+            console.error('Error adding camera pin:', error);
+            alert('Failed to place camera pin. Please try again.');
+            showConeDialog.value = false;
+        });
+}
+
+// Cancel cone configuration
+function cancelConeConfiguration() {
+    showConeDialog.value = false;
+    selectedCameraInfo.value = null;
+    cameraPlacementCoordinates.value = null;
 }
 
 // Function to add a camera pin to the map
@@ -1107,6 +1101,102 @@ onUnmounted(() => {
                 </q-card>
             </q-dialog>
 
+            <!-- Camera Cone Configuration Dialog -->
+            <q-dialog v-model="showConeDialog" persistent>
+                <q-card class="cone-config-dialog">
+                    <q-card-section class="row items-center q-pb-none">
+                        <div class="text-h6">Configure Camera View</div>
+                        <q-space />
+                        <q-btn icon="close" flat round dense @click="cancelConeConfiguration" />
+                    </q-card-section>
+
+                    <q-card-section>
+                        <p>Set up how your camera views the surrounding area.</p>
+
+                        <div class="q-mt-md">
+                            <q-toggle
+                                v-model="isDirectionalCamera"
+                                label="This is a directional camera (faces a specific direction)"
+                            />
+                        </div>
+
+                        <div v-if="isDirectionalCamera" class="q-mt-md">
+                            <!-- Visual direction picker -->
+                            <div class="direction-picker-container">
+                                <div class="direction-picker" :style="`--rotation: ${coneDirectionDegrees}deg`">
+                                    <div class="direction-circle">
+                                        <div class="direction-marker">N</div>
+                                        <div class="direction-marker east">E</div>
+                                        <div class="direction-marker south">S</div>
+                                        <div class="direction-marker west">W</div>
+                                        <div class="direction-pointer"></div>
+                                        <div class="direction-cone" :style="`--angle: ${coneAngleDegrees}deg`"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Direction control -->
+                            <div class="q-mt-md">
+                                <div class="text-subtitle2 q-mb-sm">Camera Direction: {{ coneDirectionDegrees }}°</div>
+                                <div class="flex items-center">
+                                    <span class="q-mr-sm">0° (N)</span>
+                                    <q-slider
+                                        v-model="coneDirectionDegrees"
+                                        :min="0"
+                                        :max="359"
+                                        :step="1"
+                                        label
+                                        :label-value="`${coneDirectionDegrees}°`"
+                                        class="col"
+                                        color="primary"
+                                    />
+                                    <span class="q-ml-sm">359°</span>
+                                </div>
+                            </div>
+
+                            <!-- Angle control -->
+                            <div class="q-mt-md">
+                                <div class="text-subtitle2 q-mb-sm">View Angle: {{ coneAngleDegrees }}°</div>
+                                <div class="flex items-center">
+                                    <span class="q-mr-sm">10°</span>
+                                    <q-slider
+                                        v-model="coneAngleDegrees"
+                                        :min="10"
+                                        :max="180"
+                                        :step="5"
+                                        label
+                                        :label-value="`${coneAngleDegrees}°`"
+                                        class="col"
+                                        color="primary"
+                                    />
+                                    <span class="q-ml-sm">180°</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-else class="q-mt-md text-center">
+                            <div class="direction-picker-container">
+                                <div class="direction-picker 360-view">
+                                    <div class="direction-circle">
+                                        <div class="direction-marker">N</div>
+                                        <div class="direction-marker east">E</div>
+                                        <div class="direction-marker south">S</div>
+                                        <div class="direction-marker west">W</div>
+                                        <div class="direction-360-view"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="q-mt-sm">360° view selected. Camera will monitor in all directions.</p>
+                        </div>
+                    </q-card-section>
+
+                    <q-card-actions align="right">
+                        <q-btn flat label="Cancel" color="negative" @click="cancelConeConfiguration" />
+                        <q-btn flat label="Add Camera" color="positive" @click="completeCameraPlacement" />
+                    </q-card-actions>
+                </q-card>
+            </q-dialog>
+
             <!-- Placement mode indicator -->
             <div v-if="placingPinMode" class="placement-mode-indicator">
                 <div class="indicator-content">
@@ -1326,5 +1416,124 @@ onUnmounted(() => {
 
 .dark-mode .regenerate-btn:hover {
     color: #90caf9;
+}
+
+.cone-config-dialog {
+    width: 500px;
+    max-width: 90vw;
+}
+
+.direction-picker-container {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.direction-picker {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    --rotation: 0deg;
+}
+
+.direction-circle {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid #ccc;
+    position: relative;
+    background-color: #f5f5f5;
+}
+
+.direction-marker {
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: bold;
+}
+
+.direction-marker.east {
+    top: 50%;
+    left: auto;
+    right: 5px;
+    transform: translateY(-50%);
+}
+
+.direction-marker.south {
+    top: auto;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.direction-marker.west {
+    top: 50%;
+    left: 5px;
+    transform: translateY(-50%);
+}
+
+.direction-pointer {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    height: 2px;
+    width: 50%;
+    background-color: #4f6642;
+    transform-origin: left center;
+    transform: rotate(var(--rotation));
+}
+
+.direction-pointer::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: -4px;
+    width: 0;
+    height: 0;
+    border-left: 10px solid #4f6642;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+}
+
+.direction-cone {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100px;
+    height: 100px;
+    --angle: 60deg;
+    background-color: rgba(79, 102, 66, 0.3);
+    clip-path: polygon(0 0, calc(50% + 50% * tan(calc(var(--angle) / 2 * 1deg))) 100%, calc(50% - 50% * tan(calc(var(--angle) / 2 * 1deg))) 100%);
+    transform-origin: center top;
+    transform: translateX(-50%) rotate(calc(var(--rotation) - 90deg));
+}
+
+.direction-360-view {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background-color: rgba(79, 102, 66, 0.3);
+    transform: translate(-50%, -50%);
+}
+
+.dark-mode .direction-circle {
+    background-color: #333;
+    border-color: #555;
+}
+
+.dark-mode .direction-marker {
+    color: #fff;
+}
+
+.dark-mode .direction-cone {
+    background-color: rgba(56, 163, 165, 0.3);
+}
+
+.dark-mode .direction-360-view {
+    background-color: rgba(56, 163, 165, 0.3);
 }
 </style>

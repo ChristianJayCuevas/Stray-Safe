@@ -14,8 +14,13 @@ class MapPin extends Model
         'perception_range' => 'float',
         'viewing_direction' => 'float',
         'viewing_angle' => 'float',
+        'cone_coordinates' => 'array',
+        'cone_center' => 'array',
+        'cone_radius' => 'float',
+        'cone_direction' => 'float',
+        'cone_angle' => 'float',
     ];
-    
+
     protected $fillable = [
         'animal_type',
         'stray_status',
@@ -33,6 +38,12 @@ class MapPin extends Model
         'original_id',
         'location',
         'rtmp_key',
+        'user_map_id',
+        'cone_coordinates',
+        'cone_center',
+        'cone_radius',
+        'cone_direction',
+        'cone_angle',
     ];
 
     /**

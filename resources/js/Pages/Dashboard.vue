@@ -312,7 +312,30 @@ const heatmapOptions = ref({
     dataLabels: {
         enabled: false
     },
-    colors: ["#008FFB"],
+    colors: ["#FF5B5B"], // Red base color for heatmap
+    colorScale: {
+        ranges: [{
+            from: 0,
+            to: 10,
+            color: '#FFCDD2', // Light red
+            name: 'low',
+        }, {
+            from: 11,
+            to: 20,
+            color: '#FF8A80', // Medium light red
+            name: 'medium',
+        }, {
+            from: 21,
+            to: 30,
+            color: '#FF5252', // Medium red
+            name: 'high',
+        }, {
+            from: 31,
+            to: 40,
+            color: '#FF1744', // Strong red
+            name: 'extreme',
+        }],
+    },
     title: {
         text: 'Stray Animal Sightings Heatmap',
         align: 'left',
@@ -366,6 +389,26 @@ function generateHeatmapData(count, min, max) {
         });
     }
     return data;
+}
+
+// Function to manually refresh dashboard data
+function refreshDashboard() {
+    fetchRecentSightings();
+    fetchStats();
+    filterDataByDate();
+
+    // Show notification that data is refreshing
+    if ('Notify' in window) {
+        Notify.create({
+            message: 'Dashboard data is refreshing...',
+            color: 'info',
+            icon: 'refresh',
+            position: 'top-right',
+            timeout: 2000
+        });
+    } else {
+        console.log('Dashboard data refreshing...');
+    }
 }
 
 // Function to update chart themes
@@ -456,6 +499,30 @@ function updateChartThemes(darkMode) {
                     colors: darkMode ? '#fff' : '#333',
                 }
             }
+        },
+        // Keep the colorScale consistent in both dark and light mode
+        colorScale: {
+            ranges: [{
+                from: 0,
+                to: 10,
+                color: '#FFCDD2', // Light red
+                name: 'low',
+            }, {
+                from: 11,
+                to: 20,
+                color: '#FF8A80', // Medium light red
+                name: 'medium',
+            }, {
+                from: 21,
+                to: 30,
+                color: '#FF5252', // Medium red
+                name: 'high',
+            }, {
+                from: 31,
+                to: 40,
+                color: '#FF1744', // Strong red
+                name: 'extreme',
+            }],
         }
     };
 }
@@ -500,6 +567,16 @@ watch(isDarkMode, (newValue) => {
                                 />
                             </q-card>
                         </div>
+
+                        <!-- Refresh Button -->
+                        <q-btn
+                            class="secondary-btn refresh-btn"
+                            icon="refresh"
+                            @click="refreshDashboard"
+                        >
+                            Refresh
+                            <q-tooltip>Refresh dashboard data</q-tooltip>
+                        </q-btn>
                     </div>
                 </div>
             </div>

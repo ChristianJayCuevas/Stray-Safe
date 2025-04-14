@@ -67,6 +67,17 @@ const newMapName = ref('');
 const newMapDescription = ref('');
 const isProcessingMapOperation = ref(false);
 
+// Manual animal pin state
+const isAddingAnimalPin = ref(false);
+const animalPinType = ref('dog'); // Default to dog
+const animalPinDialogOpen = ref(false);
+const animalPinForm = ref({
+  animal_type: 'dog',
+  description: 'Stray dog sighting',
+  status: 'active',
+  image_url: ''
+});
+
 // Toggle the user areas panel
 function toggleUserAreasPanel() {
   isUserAreasPanelExpanded.value = !isUserAreasPanelExpanded.value;
@@ -76,20 +87,26 @@ function toggleUserAreasPanel() {
 function focusOnArea(featureId) {
   // If we're already focused on this area, return
   if (focusedAreaId.value === featureId) return;
-  
+
   // If we have an active restore function, call it to restore all areas
   if (activeAreaRestore.value) {
     activeAreaRestore.value();
     activeAreaRestore.value = null;
   }
-  
+
   // Focus on the new area
   const result = focusOnUserArea(featureId);
-  
-  if (result && result.success) {
+
+  if (result) {
     focusedAreaId.value = featureId;
     isFocusedOnArea.value = true;
-    activeAreaRestore.value = result.restore;
+
+    // Store a function to restore all areas when needed
+    activeAreaRestore.value = () => {
+      // Show all areas
+      showAllUserAreas();
+      return true;
+    };
   }
 }
 
@@ -100,11 +117,11 @@ function showAllAreas() {
     activeAreaRestore.value();
     activeAreaRestore.value = null;
   }
-  
+
   // Reset the state
   focusedAreaId.value = null;
   isFocusedOnArea.value = false;
-  
+
   // Make sure all areas are shown
   displayUserAreas();
 }
@@ -168,7 +185,7 @@ onMounted(() => {
 async function initializeMap() {
   try {
     console.log('Starting map initialization...', { container: mapContainer.value, isDarkMode: isDarkMode.value });
-    
+
     if (!mapContainer.value) {
       console.error('Map container element not found!');
       mapLoadError.value = true;
@@ -197,7 +214,7 @@ async function initializeMap() {
       zoom: 12,
       attributionControl: false,
     });
-    
+
     map.value = new mapboxgl.Map({
       container: mapContainer.value,
       style: isDarkMode.value ? 'mapbox://styles/mapbox/dark-v10' : 'mapbox://styles/1-ayanon/cm2rp9idm00as01qwcq9ihoyr',
@@ -215,7 +232,7 @@ async function initializeMap() {
     // Add scale control
     map.value.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
     console.log('Scale control added');
-    
+
     // Initialize and add the draw control
     draw.value = new MapboxDraw({
       displayControlsDefault: false,
@@ -314,7 +331,7 @@ async function initializeMap() {
         }
       ]
     });
-    
+
     map.value.addControl(draw.value, 'top-left');
     console.log('Draw control added');
 
@@ -345,11 +362,11 @@ async function initializeMap() {
         userAreas.value = props.userAreas;
         displayUserAreas();
       }
-      
+
       // Emit map-ready event to parent
       emit('map-ready');
     });
-    
+
     // Add error handling for map load
     map.value.on('error', (e) => {
       console.error('Mapbox error:', e);
@@ -358,7 +375,7 @@ async function initializeMap() {
         mapContainer.value.classList.add('error');
       }
     });
-    
+
   } catch (error) {
     console.error('Error initializing map:', error);
     mapLoadError.value = true;
@@ -374,7 +391,7 @@ onUnmounted(() => {
     clearTimeout(mapLoadTimeout.value);
     mapLoadTimeout.value = null;
   }
-  
+
   if (map.value) {
     map.value.remove();
     map.value = null;
@@ -385,7 +402,7 @@ onUnmounted(() => {
 function handleDrawCreate(e) {
   const features = e.features;
   console.log('Created features:', features);
-  
+
   // Emit the draw-complete event to the parent
   if (features && features.length > 0) {
     emit('draw-complete', features[0]);
@@ -414,7 +431,7 @@ function handleDrawDelete(e) {
 async function saveUserArea(feature, isUpdate = false) {
   try {
     console.log(`${isUpdate ? 'Updating' : 'Saving'} user area:`, feature);
-    
+
     // Format data for API
     const areaData = {
       feature_id: feature.id,
@@ -424,9 +441,9 @@ async function saveUserArea(feature, isUpdate = false) {
       properties: JSON.stringify(feature.properties || {}),
       user_map_id: props.userMapId // Add the user_map_id from props
     };
-    
+
     console.log('Area data to send:', areaData);
-    
+
     // Make API request
     let response;
     if (isUpdate) {
@@ -434,9 +451,9 @@ async function saveUserArea(feature, isUpdate = false) {
     } else {
       response = await axios.post('/api/user-areas', areaData);
     }
-    
+
     console.log(`Area ${isUpdate ? 'updated' : 'saved'} successfully:`, response.data);
-    
+
     // Update local state
     const areaIndex = userAreas.value.findIndex(area => area.feature_id === feature.id);
     if (areaIndex >= 0) {
@@ -444,7 +461,7 @@ async function saveUserArea(feature, isUpdate = false) {
     } else {
       userAreas.value.push(response.data);
     }
-    
+
     return response.data;
   } catch (error) {
     console.error(`Error ${isUpdate ? 'updating' : 'saving'} user area:`, error);
@@ -457,15 +474,15 @@ async function saveUserArea(feature, isUpdate = false) {
 async function deleteUserArea(featureId) {
   try {
     console.log('Deleting user area:', featureId);
-    
+
     // Make API request
     const response = await axios.delete(`/api/user-areas/${featureId}`);
-    
+
     console.log('Area deleted successfully:', response.data);
-    
+
     // Update local state
     userAreas.value = userAreas.value.filter(area => area.feature_id !== featureId);
-    
+
     return true;
   } catch (error) {
     console.error('Error deleting user area:', error);
@@ -478,25 +495,25 @@ async function deleteUserArea(featureId) {
 async function fetchUserAreas() {
   try {
     console.log('Fetching user areas from database');
-    
+
     // Prepare URL with query params if we have a user map ID
     let url = '/api/user-areas';
     if (props.userMapId) {
       url += `?user_map_id=${props.userMapId}`;
       console.log('Filtering areas by user map ID:', props.userMapId);
     }
-    
+
     // Make API request
     const response = await axios.get(url);
-    
+
     console.log('User areas fetched successfully:', response.data);
-    
+
     // Update local state
     userAreas.value = response.data;
-    
+
     // Add areas to map
     displayUserAreas();
-    
+
     return response.data;
   } catch (error) {
     console.error('Error fetching user areas:', error);
@@ -507,9 +524,9 @@ async function fetchUserAreas() {
 // Display user areas on the map
 function displayUserAreas() {
   if (!map.value || !draw.value) return;
-  
+
   console.log('Displaying user areas on map:', userAreas.value);
-  
+
   // Create features to add to draw
   const featuresToAdd = userAreas.value.map(area => {
     return {
@@ -519,7 +536,7 @@ function displayUserAreas() {
       geometry: JSON.parse(area.geometry)
     };
   });
-  
+
   // Add all features to draw
   draw.value.add({
     type: 'FeatureCollection',
@@ -530,17 +547,17 @@ function displayUserAreas() {
 // Enable drawing mode
 function enableDrawingMode(type = 'polygon', zoom = null) {
   if (!map.value || !draw.value) return false;
-  
+
   console.log(`Enabling ${type} drawing mode${zoom ? ' with zoom level: ' + zoom : ''}`);
-  
+
   // Set zoom level if provided
   if (zoom !== null && typeof zoom === 'number') {
     map.value.setZoom(zoom);
   }
-  
+
   // Change cursor to indicate drawing mode
   map.value.getCanvas().style.cursor = 'crosshair';
-  
+
   // Activate drawing mode based on type
   if (type === 'polygon') {
     draw.value.changeMode('draw_polygon');
@@ -552,45 +569,45 @@ function enableDrawingMode(type = 'polygon', zoom = null) {
     // Default to polygon
     draw.value.changeMode('draw_polygon');
   }
-  
+
   return true;
 }
 
 // Disable drawing mode
 function disableDrawingMode() {
   if (!map.value || !draw.value) return false;
-  
+
   console.log('Disabling drawing mode');
-  
+
   // Reset cursor
   map.value.getCanvas().style.cursor = '';
-  
+
   // Switch to simple_select mode
   draw.value.changeMode('simple_select');
-  
+
   return true;
 }
 
 // Cancel drawing
 function cancelDrawing() {
   if (!map.value || !draw.value) return false;
-  
+
   console.log('Canceling current drawing');
-  
+
   // Delete the current feature being drawn
   draw.value.trash();
-  
+
   // Reset cursor and mode
   map.value.getCanvas().style.cursor = '';
   draw.value.changeMode('simple_select');
-  
+
   return true;
 }
 
 // Set properties for a user area
 function setUserAreaProperties(featureId, properties) {
   if (!map.value || !draw.value) return false;
-  
+
   try {
     // Get the feature
     const feature = draw.value.get(featureId);
@@ -598,18 +615,18 @@ function setUserAreaProperties(featureId, properties) {
       console.warn(`Feature with ID ${featureId} not found`);
       return false;
     }
-    
+
     // Update properties
     Object.keys(properties).forEach(key => {
       feature.properties[key] = properties[key];
     });
-    
+
     // Update the feature
     draw.value.add(feature);
-    
+
     // Save to database
     saveUserArea(feature, true);
-    
+
     return true;
   } catch (error) {
     console.error('Error setting user area properties:', error);
@@ -625,48 +642,48 @@ const placementCallback = ref(null);
 // Function to enable camera pin placement mode
 function enablePinPlacementMode(callback) {
   console.log('Entering pin placement mode...');
-  
+
   if (!map.value) {
     console.error('Map instance not available, cannot enter pin placement mode');
     throw new Error('Map not initialized');
   }
-  
+
   // Set cursor to crosshair to indicate placement mode
   map.value.getCanvas().style.cursor = 'crosshair';
-  
+
   // Store current state
   isPlacingCameraPin.value = true;
   placementCallback.value = callback;
-  
+
   console.log('Pin placement mode enabled, waiting for user click...');
 }
 
 // Disable pin placement mode
 function disablePinPlacementMode() {
   console.log('Exiting pin placement mode...');
-  
+
   if (map.value) {
     // Reset cursor
     map.value.getCanvas().style.cursor = '';
   }
-  
+
   // Reset state
   isPlacingCameraPin.value = false;
   placementCallback.value = null;
-  
+
   console.log('Pin placement mode disabled');
 }
 
 // Handle map click during pin placement mode
 function handleMapClick(e) {
   console.log('Map clicked at coordinates:', e.lngLat, 'Placement mode active:', isPlacingCameraPin.value, 'Callback registered:', !!placementCallback.value);
-  
+
   if (isPlacingCameraPin.value && placementCallback.value) {
     console.log('Pin placement mode is active and callback is registered');
-    
+
     const coordinates = [e.lngLat.lng, e.lngLat.lat];
     console.log('Calling pin placement callback with coordinates:', coordinates);
-    
+
     // Call the callback with the clicked coordinates
     placementCallback.value(coordinates);
   } else if (isPlacingCameraPin.value && !placementCallback.value) {
@@ -677,36 +694,36 @@ function handleMapClick(e) {
 // Function to process each pin and add it to the map
 async function processPins(pins) {
   console.log(`Processing ${pins.length} pins from API...`);
-  
+
   // Clear existing pins and their visualizations
   pinsList.value.forEach(pin => {
     if (pin.marker) {
       pin.marker.remove();
     }
-    
+
     // Remove any associated perception circles or cones
     if (pin.id) {
       removeCone(pin.id);
     }
   });
-  
+
   // Clear pins list
   pinsList.value = [];
-  
-  // Process each pin
+
+  // First, process all pins to create markers and add to pinsList
   pins.forEach(pin => {
     try {
       console.log('Processing pin:', pin);
-      
+
       // Determine if this is a camera pin
-      const isCamera = pin.is_camera === true || 
-                     pin.isCamera === true || 
-                     pin.animal_type === 'Camera' || 
+      const isCamera = pin.is_camera === true ||
+                     pin.isCamera === true ||
+                     pin.animal_type === 'Camera' ||
                      pin.animalType === 'Camera';
-      
+
       // Process conical view data if available
       let conicalView = false;
-      
+
       if (isCamera) {
         // Check all possible ways conical_view might be stored
         if (pin.conical_view !== undefined) {
@@ -714,10 +731,10 @@ async function processPins(pins) {
         } else if (pin.conicalView !== undefined) {
           conicalView = Boolean(pin.conicalView);
         }
-        
+
         console.log(`Camera pin ${pin.id} conical view status:`, conicalView);
       }
-      
+
       // Extract coordinates in a format we can use
       let coordinates;
       if (Array.isArray(pin.coordinates) && pin.coordinates.length >= 2) {
@@ -730,7 +747,7 @@ async function processPins(pins) {
         }
 
       console.log(`Pin coordinates:`, coordinates);
-      
+
       // Create a consistent pin data object
       const pinData = {
         id: pin.id || pin.camera_id || `pin-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -743,20 +760,20 @@ async function processPins(pins) {
         cameraId: pin.camera_id || pin.id,
         cameraName: pin.camera_name || pin.name || 'Camera',
         name: pin.name || pin.camera_name,
-        
+
         // Camera specific properties
         perceptionRange: parseFloat(pin.perception_range || 30),
         viewingDirection: parseFloat(pin.viewing_direction || 0),
         viewingAngle: parseFloat(pin.viewing_angle || 60),
         conicalView: conicalView,
 
-        // Add cone data if available
-        coneData: pin.cone_coordinates ? {
-          coordinates: pin.cone_coordinates,
-          center: pin.cone_center || coordinates, // Use coordinates as fallback for center
-          radius: parseFloat(pin.cone_radius || pin.perception_range || 30),
-          direction: parseFloat(pin.cone_direction || pin.viewing_direction || 0),
-          angle: parseFloat(pin.cone_angle || pin.viewing_angle || 60)
+        // Ensure we have complete cone data from all possible sources
+        coneData: pin.cone_coordinates || pin.coneData ? {
+          coordinates: pin.cone_coordinates || (pin.coneData ? pin.coneData.coordinates : null),
+          center: pin.cone_center || (pin.coneData ? pin.coneData.center : coordinates),
+          radius: parseFloat(pin.cone_radius || (pin.coneData ? pin.coneData.radius : pin.perception_range || 30)),
+          direction: parseFloat(pin.cone_direction || (pin.coneData ? pin.coneData.direction : pin.viewing_direction || 0)),
+          angle: parseFloat(pin.cone_angle || (pin.coneData ? pin.coneData.angle : pin.viewing_angle || 60))
         } : null,
 
         detection_timestamp: pin.detection_timestamp,
@@ -773,50 +790,6 @@ async function processPins(pins) {
         pinData.marker = marker;
         pinsList.value.push(pinData);
         console.log(`Added pin ID ${pin.id} to pinsList`);
-
-        if (isCamera && pinData.perceptionRange) {
-          if (pinData.conicalView === true && 
-              pinData.viewingDirection !== undefined &&
-              pinData.viewingAngle !== undefined) {
-              console.log(`Adding conical view for camera ${pinData.id}`);
-            
-            // Use a short timeout to ensure the map is ready
-            setTimeout(() => {
-              // If we have cone data from the server, use it
-              if (pinData.coneData) {
-                console.log('Using stored cone data:', pinData.coneData);
-                addConicalPerceptionRange(
-                  pinData.coneData.center,
-                  pinData.coneData.radius,
-                  pinData.coneData.direction,
-                  pinData.coneData.angle,
-                  pinData.id
-                );
-              } else {
-                // Calculate the cone center based on camera position and direction
-                const radiusInDegrees = pinData.perceptionRange * 0.000009;
-                const directionRad = (pinData.viewingDirection * Math.PI) / 180;
-                const centerLng = pinData.lng + (radiusInDegrees * Math.sin(directionRad));
-                const centerLat = pinData.lat + (radiusInDegrees * Math.cos(directionRad));
-                
-                console.log('Calculating new cone data:', {
-                  center: [centerLng, centerLat],
-                  radius: pinData.perceptionRange,
-                  direction: pinData.viewingDirection,
-                  angle: pinData.viewingAngle
-                });
-                
-                addConicalPerceptionRange(
-                  [centerLng, centerLat],
-                  pinData.perceptionRange,
-                  pinData.viewingDirection,
-                  pinData.viewingAngle,
-                  pinData.id
-                );
-              }
-            }, 100);
-          }
-        }
       } else {
         console.error(`Failed to create marker for pin ID ${pin.id}`);
       }
@@ -826,6 +799,72 @@ async function processPins(pins) {
   });
 
   console.log(`Loaded ${pinsList.value.length} pins into pinsList`);
+
+  // Wait for map to be fully styled and ready to receive layers
+  if (!map.value.isStyleLoaded()) {
+    return new Promise((resolve) => {
+      map.value.once('style.load', () => {
+        // Add all camera cones after style loads
+        addAllCameraCones();
+        resolve();
+      });
+    });
+  } else {
+    // Add all camera cones immediately if style is already loaded
+    addAllCameraCones();
+  }
+}
+
+// Function to add all camera cones for loaded pins
+function addAllCameraCones() {
+  console.log('Adding cones for all camera pins...');
+  // Loop through pinsList and add cones for all camera pins
+  pinsList.value.forEach(pinData => {
+    if (pinData.isCamera && pinData.perceptionRange) {
+      if (pinData.conicalView === true &&
+          pinData.viewingDirection !== undefined &&
+          pinData.viewingAngle !== undefined) {
+          console.log(`Adding conical view for camera ${pinData.id}`);
+
+        try {
+          // If we have cone data from the server, use it
+          if (pinData.coneData && pinData.coneData.center) {
+            console.log('Using stored cone data for camera', pinData.id, ':', pinData.coneData);
+            addConicalPerceptionRange(
+              pinData.coneData.center,
+              pinData.coneData.radius,
+              pinData.coneData.direction,
+              pinData.coneData.angle,
+              pinData.id
+            );
+          } else {
+            // Calculate the cone center based on camera position and direction
+            const radiusInDegrees = pinData.perceptionRange * 0.000009;
+            const directionRad = (pinData.viewingDirection * Math.PI) / 180;
+            const centerLng = pinData.lng + (radiusInDegrees * Math.sin(directionRad));
+            const centerLat = pinData.lat + (radiusInDegrees * Math.cos(directionRad));
+
+            console.log('Calculating new cone data for camera', pinData.id, ':', {
+              center: [centerLng, centerLat],
+              radius: pinData.perceptionRange,
+              direction: pinData.viewingDirection,
+              angle: pinData.viewingAngle
+            });
+
+            addConicalPerceptionRange(
+              [centerLng, centerLat],
+              pinData.perceptionRange,
+              pinData.viewingDirection,
+              pinData.viewingAngle,
+              pinData.id
+            );
+          }
+        } catch (error) {
+          console.error(`Error adding cone for camera ${pinData.id}:`, error);
+        }
+      }
+    }
+  });
 }
 
 // Fetch pins from the server and add them to the map
@@ -834,12 +873,12 @@ async function fetchPins() {
     console.log('Fetching pins from API...');
     const response = await axios.get('/pins');
     const pins = response.data.data;
-    
+
     console.log(`Received ${pins.length} pins from API`);
-    
+
     // Process the pins
     await processPins(pins);
-    
+
   } catch (error) {
     console.error('Error fetching pins:', error);
   }
@@ -852,13 +891,13 @@ function createMarker(pinData) {
       console.error('Map is not initialized, cannot create marker');
       return null;
     }
-    
+
     // Log input data for debugging
     console.log('Creating marker with data:', pinData);
-    
+
     // Get coordinates in the format mapbox expects [lng, lat]
     let mapboxCoords;
-    
+
     if (Array.isArray(pinData.coordinates) && pinData.coordinates.length >= 2) {
       // Already in [lng, lat] format, but ensure they're numbers
       mapboxCoords = [parseFloat(pinData.coordinates[0]), parseFloat(pinData.coordinates[1])];
@@ -877,18 +916,18 @@ function createMarker(pinData) {
       console.error('Invalid coordinates format for marker:', pinData);
       return null;
     }
-    
+
     // Final check to ensure coordinates are valid
-    if (!mapboxCoords || mapboxCoords.length < 2 || 
+    if (!mapboxCoords || mapboxCoords.length < 2 ||
         isNaN(mapboxCoords[0]) || isNaN(mapboxCoords[1])) {
       console.error('Invalid or missing coordinates after parsing:', mapboxCoords);
       return null;
     }
-    
+
     // Create element based on pin type
     const marker = document.createElement('div');
     marker.className = 'custom-marker';
-    
+
     // Determine pin type - normalize to lowercase for consistent comparison
     let pinType = '';
     if (pinData.type) {
@@ -900,23 +939,23 @@ function createMarker(pinData) {
     } else {
       pinType = 'default';
     }
-    
+
     console.log('Determined pin type:', pinType);
-    
+
     // Check if it's a camera pin
     const isCamera = pinData.isCamera === true || pinType === 'camera';
-    
+
     // Apply specific styles based on type
     if (isCamera) {
       marker.className = 'custom-marker camera-marker';
       marker.innerHTML = '<i class="fas fa-video"></i>';
-      
+
       console.log(`Camera pin settings for ${pinData.id}:`, {
         conicalView: pinData.conicalView,
         viewingDirection: pinData.viewingDirection,
         viewingAngle: pinData.viewingAngle
       });
-      
+
       // Add direction indicator if this is a directional camera
       if (pinData.conicalView === true && pinData.viewingDirection !== undefined) {
         console.log(`Adding direction indicator for camera ${pinData.id} pointing at ${pinData.viewingDirection}°`);
@@ -935,15 +974,15 @@ function createMarker(pinData) {
       marker.style.backgroundColor = '#4f6642'; // Default color
       marker.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
     }
-    
+
     // Create marker instance
     console.log('Creating marker at coordinates:', mapboxCoords);
     const markerInstance = new mapboxgl.Marker(marker).setLngLat(mapboxCoords);
-    
+
     // Create popup content based on pin type
     let popupHTML = '';
     const pinId = pinData.id || pinData.cameraId;
-    
+
     if (isCamera) {
       // Camera pin popup
       popupHTML = `
@@ -969,11 +1008,11 @@ function createMarker(pinData) {
         </div>
       `;
     }
-    
+
     // Create and attach popup
     const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHTML);
     markerInstance.setPopup(popup);
-    
+
     // Add the delete button event listener immediately after popup is created
     popup.on('open', () => {
       const deleteBtn = popup.getElement().querySelector(`.delete-pin-btn[data-pin-id="${pinId}"]`);
@@ -981,7 +1020,7 @@ function createMarker(pinData) {
         deleteBtn.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
-          
+
           if (confirm('Are you sure you want to delete this pin?')) {
             console.log(`Delete button clicked for pin ID: ${pinId}`);
             try {
@@ -1003,11 +1042,11 @@ function createMarker(pinData) {
         console.warn(`Delete button not found for pin ID: ${pinId}`);
       }
     });
-    
+
     // Add marker to map
     markerInstance.addTo(map.value);
     console.log('Marker added to map successfully');
-    
+
     return markerInstance;
   } catch (error) {
     console.error('Error creating marker:', error);
@@ -1019,30 +1058,30 @@ function createMarker(pinData) {
 async function deletePin(pinId, markerInstance) {
   try {
     console.log('Deleting pin with ID:', pinId);
-    
+
     // Remove marker from map if provided
     if (markerInstance) {
       markerInstance.remove();
     }
-    
+
     // Find the pin in the pinsList by ID
-    const pinIndex = pinsList.value.findIndex(pin => 
-      pin.id === pinId || 
+    const pinIndex = pinsList.value.findIndex(pin =>
+      pin.id === pinId ||
       pin.cameraId === pinId ||
       pin.camera_id === pinId
     );
-    
+
     if (pinIndex === -1) {
       console.warn(`Pin with ID ${pinId} not found in pinsList`);
     } else {
       console.log(`Found pin at index ${pinIndex}:`, pinsList.value[pinIndex]);
       const pin = pinsList.value[pinIndex];
-      
+
       // If it's a camera pin, remove its cone and perception range
       if (pin.isCamera || pin.animal_type === 'Camera') {
         // Remove the cone using our dedicated function
         removeCone(pinId);
-        
+
         // Also check for perception circle
         const circleId = `perception-circle-${pinId}`;
         if (map.value.getLayer(circleId)) {
@@ -1053,33 +1092,33 @@ async function deletePin(pinId, markerInstance) {
           map.value.removeSource(circleSourceId);
         }
       }
-      
+
       // Remove the pin's marker if not done already
       if (!markerInstance && pin.marker) {
         pin.marker.remove();
       }
-      
+
       // Remove from local list
       pinsList.value.splice(pinIndex, 1);
       console.log(`Removed pin at index ${pinIndex} from pinsList`);
     }
-    
+
     // Send delete request to server
     try {
       const response = await axios.delete(`/pins/${pinId}`);
-      
+
       if (response.data.success) {
         console.log('Pin deleted successfully on server');
       } else {
         console.warn('Server response indicates pin deletion may have failed:', response.data.message);
       }
-      
+
       return { success: true };
     } catch (apiError) {
       console.error('API Error when deleting pin:', apiError);
       // Pin was removed from UI but server delete failed
-      return { 
-        success: false, 
+      return {
+        success: false,
         message: 'Pin was removed from map but could not be deleted from server',
         error: apiError.message
       };
@@ -1093,13 +1132,13 @@ async function deletePin(pinId, markerInstance) {
 // Allow adding a camera pin to the map - exposed for parent components
 async function addCameraPin(coordinates, cameraInfo) {
   let markerInstance = null;
-  
+
   try {
     if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2 ||
         isNaN(coordinates[0]) || isNaN(coordinates[1])) {
       throw new Error('Invalid coordinates format. Expected [longitude, latitude] array');
     }
-    
+
     console.log('Adding camera pin at coordinates:', coordinates, 'with camera info:', cameraInfo);
 
     // Generate a unique ID for this camera pin
@@ -1109,18 +1148,18 @@ async function addCameraPin(coordinates, cameraInfo) {
     const cameraPosition = coordinates;
     let coneData = null;
 
-    if (cameraInfo.conicalView === true && 
-        cameraInfo.viewingDirection !== undefined && 
+    if (cameraInfo.conicalView === true &&
+        cameraInfo.viewingDirection !== undefined &&
         cameraInfo.viewingAngle !== undefined) {
-      
+
       const perceptionRange = parseFloat(cameraInfo.perceptionRange || 30);
       const radiusInDegrees = perceptionRange * 0.000009;
       const directionRad = (cameraInfo.viewingDirection * Math.PI) / 180;
-      
+
       // Calculate the cone center based on camera position and direction
       const centerLng = coordinates[0] + (radiusInDegrees * Math.sin(directionRad));
       const centerLat = coordinates[1] + (radiusInDegrees * Math.cos(directionRad));
-      
+
       // Create cone data with the calculated center
       coneData = addConicalPerceptionRange(
         [centerLng, centerLat], // Center of the cone
@@ -1149,19 +1188,19 @@ async function addCameraPin(coordinates, cameraInfo) {
       original_id: cameraInfo.original_id || cameraInfo.id || '',
       coneData: coneData // Store the cone data
     };
-    
+
     console.log('Creating camera marker with data:', cameraData);
-    
+
     // First add to pins list so it's available for retrieval
     pinsList.value.push(cameraData);
-    
+
     // Create the marker
     markerInstance = createMarker(cameraData);
     console.log('Marker instance created:', markerInstance);
-    
+
     try {
       console.log('Sending API request to save camera pin...');
-      
+
       // Create payload for the API
       const payload = {
         coordinates: cameraPosition, // Use the exact click position
@@ -1183,31 +1222,31 @@ async function addCameraPin(coordinates, cameraInfo) {
         cone_direction: coneData ? coneData.direction : null,
         cone_angle: coneData ? coneData.angle : null
       };
-      
+
       console.log('Sending formatted payload to API:', payload);
-      
+
       const response = await axios.post('/camera-pin', payload, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         }
       });
-      
+
       if (!response.data) {
         throw new Error('No response data received from server');
       }
-      
+
       console.log("Camera pin API response:", response.data);
-      
+
       // Update the pin in pinsList with any new data from the server
       if (response.data.pin && response.data.pin.id) {
         // Find the pin using temp ID
         const pinIndex = pinsList.value.findIndex(p => p.id === cameraId);
-        
+
         if (pinIndex !== -1) {
           // Store old ID for reference to update visualization IDs
           const oldId = pinsList.value[pinIndex].id;
-          
+
           // Update pin with server data including the new permanent ID and cone data
           pinsList.value[pinIndex] = {
             ...pinsList.value[pinIndex],
@@ -1224,16 +1263,16 @@ async function addCameraPin(coordinates, cameraInfo) {
               angle: parseFloat(response.data.pin.cone_angle || coneData.angle)
             }
           };
-          
+
           console.log("Updated pin in pinsList with server data:", pinsList.value[pinIndex]);
-          
+
           // If ID changed, update the visualization
           if (oldId !== response.data.pin.id) {
             console.log(`Pin ID changed from ${oldId} to ${response.data.pin.id}, updating visualizations`);
-            
+
             // Remove the old visualization
             removeCone(oldId);
-            
+
             // Add new visualization with correct ID
             if (pinsList.value[pinIndex].conicalView) {
               coneData = addConicalPerceptionRange(
@@ -1244,7 +1283,7 @@ async function addCameraPin(coordinates, cameraInfo) {
                 response.data.pin.id
               );
             }
-            
+
             // Update the popup to reflect the new ID
             if (markerInstance && markerInstance.getPopup) {
               try {
@@ -1266,18 +1305,18 @@ async function addCameraPin(coordinates, cameraInfo) {
           }
         }
       }
-      
+
       // Return success with the cone data if available
-      return { 
-        success: true, 
+      return {
+        success: true,
         data: response.data,
-        coneData: coneData 
+        coneData: coneData
       };
     } catch (apiError) {
       console.error('API Error when adding camera pin:', apiError);
       // Keep the pin on the map but indicate the save failed
-      return { 
-        success: false, 
+      return {
+        success: false,
         message: 'Pin added visually but failed to save to server',
         error: apiError.message,
         coneData: coneData // Still return the cone data if it was created
@@ -1285,11 +1324,11 @@ async function addCameraPin(coordinates, cameraInfo) {
     }
   } catch (error) {
     console.error('Error in addCameraPin function:', error);
-    
+
     if (markerInstance) {
       console.log('Keeping marker instance despite error to maintain visual state');
     }
-    
+
     throw error;
   }
 }
@@ -1297,27 +1336,27 @@ async function addCameraPin(coordinates, cameraInfo) {
 // Add an animal pin to the map - exposed for parent components
 async function addAnimalPin(pinData) {
   let markerInstance = null;
-  
+
   try {
     console.log('Adding animal pin with data:', pinData);
-    
+
     // Validate required fields
     if (!pinData || !pinData.animal_type) {
       throw new Error('Invalid pin data. Required fields: animal_type');
     }
-    
+
     // If no coordinates are provided but we have camera info, place within the camera's cone
     if ((!pinData.lat || !pinData.lng) && (pinData.camera_id || pinData.cameraId || pinData.cameraInfo)) {
       // Get camera info either from pinData or from the coneMap
       const cameraInfo = pinData.cameraInfo || null;
       const cameraId = pinData.camera_id || pinData.cameraId;
-      
+
       // Try to find the camera in our cone map
       let cameraFound = false;
-      
+
       if (cameraInfo) {
         console.log(`Using provided camera info for pin placement:`, cameraInfo);
-        
+
         // Extract camera coordinates
         let cameraCoords = null;
         if (cameraInfo.coordinates) {
@@ -1330,33 +1369,33 @@ async function addAnimalPin(pinData) {
             }
           }
         }
-        
+
         if (!cameraCoords) {
           console.warn('Invalid camera coordinates, cannot place pin');
           return null;
         }
-        
+
         // Generate a position within the camera's cone or perception range
         const isConical = cameraInfo.conicalView === true;
         const perceptionRange = parseFloat(cameraInfo.perceptionRange || 30);
-        
+
         // Convert perception range from meters to approximate degrees
         // 1 degree is about 111km at equator, so 1m is roughly 0.000009 degrees
         const baseRadius = perceptionRange * 0.000009;
-        
+
         let offsetLat, offsetLng;
-        
+
         if (isConical && cameraInfo.viewingDirection !== undefined && cameraInfo.viewingAngle !== undefined) {
           // Place within the conical view
           console.log(`Placing animal in conical view (direction: ${cameraInfo.viewingDirection}°, angle: ${cameraInfo.viewingAngle}°)`);
-          
+
           const viewingDirection = parseFloat(cameraInfo.viewingDirection);
           const viewingAngle = parseFloat(cameraInfo.viewingAngle);
-          
+
           // Calculate a position within the cone
           // Use a bell curve distribution for more natural placement
           const halfAngle = viewingAngle / 2;
-          
+
           // Generate a normal random angle biased toward the center of the viewing cone
           const normalRandom = () => {
             // Box-Muller transform for normal distribution
@@ -1366,31 +1405,31 @@ async function addAnimalPin(pinData) {
             // Scale to portion of viewing angle and center on viewing direction
             return viewingDirection + (z * (viewingAngle / 5));
           };
-          
+
           // Get angle biased toward center of cone
           let angle = normalRandom();
-          
+
           // Ensure angle stays within cone boundaries
           const coneStart = viewingDirection - halfAngle;
           const coneEnd = viewingDirection + halfAngle;
           if (angle < coneStart) angle = coneStart + Math.random() * 5;
           if (angle > coneEnd) angle = coneEnd - Math.random() * 5;
-          
+
           // Convert to radians
           const radian = angle * (Math.PI / 180);
-          
+
           // Calculate distance from camera (denser in middle range)
           const minDistance = 0.2; // 20% of max range
           const maxDistance = 0.8; // 80% of max range
-          
+
           // Bias toward middle distances (more animals in sweet spot of camera range)
           // You can adjust these parameters for different distributions
           const distanceFactor = minDistance + Math.pow(Math.random(), 0.7) * (maxDistance - minDistance);
-          
+
           // Calculate offsets using trig
           offsetLng = baseRadius * distanceFactor * Math.sin(radian);
           offsetLat = baseRadius * distanceFactor * Math.cos(radian);
-          
+
           // Add a little jitter for natural appearance
           const jitter = baseRadius * 0.03;
           offsetLat += jitter * (Math.random() * 2 - 1);
@@ -1398,36 +1437,36 @@ async function addAnimalPin(pinData) {
         } else {
           // Fallback to circular distribution around camera
           console.log('Placing animal in circular perception range');
-          
+
           // Random angle
           const angle = Math.random() * 2 * Math.PI;
-          
+
           // Random distance (more animals toward edges)
           const distanceFactor = 0.3 + Math.sqrt(Math.random()) * 0.6;
-          
+
           // Calculate offsets
           offsetLng = baseRadius * distanceFactor * Math.sin(angle);
           offsetLat = baseRadius * distanceFactor * Math.cos(angle);
         }
-        
+
         // Apply offsets to camera position
         pinData.lat = cameraCoords.lat + offsetLat;
         pinData.lng = cameraCoords.lng + offsetLng;
-        
+
         cameraFound = true;
       } else if (cameraId && coneMap.value[cameraId]) {
         // Use stored cone data for this camera
         const cone = coneMap.value[cameraId];
         console.log(`Found cone data for camera ${cameraId}:`, cone);
-        
+
         // Generate a random point within the cone
         const randomPoint = getRandomPointInCone(cone);
         pinData.lng = randomPoint[0];
         pinData.lat = randomPoint[1];
-        
+
         cameraFound = true;
       }
-      
+
       if (!cameraFound) {
         console.warn(`No camera found for ID ${cameraId}, cannot place pin within cone`);
         // Set default coordinates if we couldn't find camera info
@@ -1437,12 +1476,12 @@ async function addAnimalPin(pinData) {
         }
       }
     }
-    
+
     // Ensure coordinates are valid
     if (!pinData.lat || !pinData.lng || isNaN(pinData.lat) || isNaN(pinData.lng)) {
       throw new Error('Invalid coordinates for animal pin');
     }
-    
+
     // Create a new pin object with all necessary properties
     const pin = {
       coordinates: [pinData.lng, pinData.lat],
@@ -1458,18 +1497,18 @@ async function addAnimalPin(pinData) {
       is_automated: pinData.is_automated === true,
       stream_id: pinData.stream_id
     };
-    
+
     // Add to pins list
     pinsList.value.push(pin);
-    
+
     // Create marker on map
     markerInstance = createMarker(pin);
-    
+
     // If this is not from automated detection, try to save to backend
     if (!pinData.is_automated) {
       try {
         console.log('Saving animal pin to backend:', pin);
-        
+
         // Create payload for backend
         const payload = {
           lat: pinData.lat,
@@ -1478,18 +1517,18 @@ async function addAnimalPin(pinData) {
           description: pinData.description,
           image_url: pinData.image_url
         };
-        
+
         // Send to backend
         const response = await axios.post('/pin', payload);
-        
+
         console.log("Animal pin saved to backend:", response.data);
         return { success: true, data: response.data };
       } catch (apiError) {
         console.error('API Error when saving animal pin:', apiError);
-        
+
         // We keep the pin on the map even if backend save fails
-        return { 
-          success: false, 
+        return {
+          success: false,
           message: 'Pin added to map but failed to save to server',
           error: apiError.message
         };
@@ -1500,12 +1539,12 @@ async function addAnimalPin(pinData) {
     }
   } catch (error) {
     console.error('Error in addAnimalPin function:', error);
-    
+
     // Don't remove the marker if it was created
     if (markerInstance) {
       console.log('Keeping animal marker despite error');
     }
-    
+
     throw error;
   }
 }
@@ -1514,16 +1553,16 @@ async function addAnimalPin(pinData) {
 function getCameraPinLocations() {
   try {
     console.log('Getting camera pin locations');
-    
+
     // Filter the pins list to only include camera pins
-    const cameraPins = pinsList.value.filter(pin => 
-      pin.isCamera === true || 
-      pin.animal_type === 'Camera' || 
+    const cameraPins = pinsList.value.filter(pin =>
+      pin.isCamera === true ||
+      pin.animal_type === 'Camera' ||
       pin.animalType === 'Camera'
     );
-    
+
     console.log(`Found ${cameraPins.length} camera pins`);
-    
+
     // Map the pins to a simpler format with just the essential information
     return cameraPins.map(pin => {
       return {
@@ -1560,7 +1599,7 @@ defineExpose({
   },
   getCurrentMapCenter: () => map.value ? map.value.getCenter() : null,
   getCurrentZoom: () => map.value ? map.value.getZoom() : null,
-  
+
   // New user area methods
   enableDrawingMode,
   disableDrawingMode,
@@ -1574,7 +1613,7 @@ defineExpose({
   // Add a method to restore all user areas (useful after focusing on one)
   showAllUserAreas: () => {
     if (!map.value || !draw.value) return false;
-    
+
     try {
       // Redisplay all areas from our local state
       displayUserAreas();
@@ -1583,7 +1622,13 @@ defineExpose({
       console.error('Error restoring all user areas:', error);
       return false;
     }
-  }
+  },
+  addStandaloneCone, // Add the new function to the exposed methods
+  removeAllStandaloneCones, // Add the new function to the exposed methods
+
+  // Manual animal pin methods
+  enableAnimalPinPlacement,
+  cancelAnimalPinPlacement
 });
 
 // Function to add a conical perception range to the map for a camera
@@ -1644,15 +1689,15 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
     // Create GeoJSON feature for the cone
     const conePolygon = {
       type: 'Feature',
-      properties: { 
-        camera_id: cameraId, 
-        range_meters: rangeInMeters, 
-        direction, 
-        angle 
+      properties: {
+        camera_id: cameraId,
+        range_meters: rangeInMeters,
+        direction,
+        angle
       },
-      geometry: { 
-        type: 'Polygon', 
-        coordinates: [conePoints] 
+      geometry: {
+        type: 'Polygon',
+        coordinates: [conePoints]
       }
     };
 
@@ -1755,195 +1800,127 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
 
 // Add a function to focus on a specific user area
 function focusOnUserArea(featureId) {
-  if (!map.value || !draw.value) return false;
-  
+  if (!map.value || !draw.value) {
+    console.error('Map or draw control not initialized, cannot focus on user area');
+    return false;
+  }
+
   try {
-    console.log(`Focusing on user area: ${featureId}`);
-    
-    // Get the feature
-    const feature = draw.value.get(featureId);
-    if (!feature) {
-      console.warn(`Feature with ID ${featureId} not found`);
+    console.log(`Focusing on user area with feature ID: ${featureId}`);
+
+    // Find the area in our userAreas collection
+    const area = userAreas.value.find(area => area.feature_id === featureId);
+
+    if (!area || !area.geometry) {
+      console.error(`User area with feature ID ${featureId} not found or has no geometry`);
       return false;
     }
-    
-    // Extract the geometry
-    const geometry = feature.geometry;
-    if (geometry.type !== 'Polygon') {
-      console.warn(`Feature is not a polygon: ${geometry.type}`);
-      return false;
-    }
-    
-    // Hide other areas temporarily
-    const allFeatures = draw.value.getAll();
-    const otherFeatures = allFeatures.features.filter(f => f.id !== featureId);
-    
-    // Store current features for restoring later
-    const storedFeatures = JSON.parse(JSON.stringify(allFeatures));
-    
-    // Temporarily remove other features
-    draw.value.deleteAll();
-    draw.value.add(feature);
-    
-    // Calculate the bounds of the polygon
-    const coordinates = geometry.coordinates[0];
-    let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
-    
-    coordinates.forEach(coord => {
-      minLng = Math.min(minLng, coord[0]);
-      maxLng = Math.max(maxLng, coord[0]);
-      minLat = Math.min(minLat, coord[1]);
-      maxLat = Math.max(maxLat, coord[1]);
-    });
-    
-    // Add some padding
-    const padding = 0.0005; // Approximately 50 meters
-    minLng -= padding;
-    maxLng += padding;
-    minLat -= padding;
-    maxLat += padding;
-    
-    // Fit the map to these bounds
-    map.value.fitBounds([
-      [minLng, minLat], // Southwest
-      [maxLng, maxLat]  // Northeast
-    ], {
-      padding: 50, // Add padding in pixels
-      maxZoom: 18, // Limit maximum zoom level
-      duration: 1000 // Animation duration in milliseconds
-    });
-    
-    // Return a function to restore all features
-    return {
-      success: true,
-      restore: () => {
-        draw.value.deleteAll();
-        draw.value.add(storedFeatures);
-        return true;
+
+    // Get the coordinates from the area's geometry
+    let coordinates;
+    let bounds;
+
+    // Parse the geometry if it's a string
+    const geometry = typeof area.geometry === 'string' ? JSON.parse(area.geometry) : area.geometry;
+
+    // Handle different geometry types
+    if (geometry.type === 'Polygon') {
+      // For polygons, calculate center and bounds
+      const coords = geometry.coordinates[0]; // First ring of coordinates
+
+      if (!coords || !coords.length) {
+        console.error('Invalid polygon coordinates');
+        return false;
       }
-    };
+
+      // Calculate bounds
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+      for (const coord of coords) {
+        minX = Math.min(minX, coord[0]);
+        minY = Math.min(minY, coord[1]);
+        maxX = Math.max(maxX, coord[0]);
+        maxY = Math.max(maxY, coord[1]);
+      }
+
+      bounds = [[minX, minY], [maxX, maxY]];
+      coordinates = [(minX + maxX) / 2, (minY + maxY) / 2]; // Center point
+    } else if (geometry.type === 'Point') {
+      // For points, use the point coordinates directly
+      coordinates = geometry.coordinates;
+    } else {
+      console.error(`Unsupported geometry type: ${geometry.type}`);
+      return false;
+    }
+
+    // If we have bounds, fit the map to the bounds
+    if (bounds) {
+      map.value.fitBounds(bounds, {
+        padding: 50, // Add some padding around the bounds
+        duration: 1000 // Animation time
+      });
+    } else if (coordinates) {
+      // Otherwise, fly to the coordinates
+      map.value.flyTo({
+        center: coordinates,
+        zoom: 15, // Appropriate zoom level
+        essential: true,
+        duration: 1000
+      });
+    } else {
+      console.error('Could not determine coordinates to focus on');
+      return false;
+    }
+
+    // Highlight this specific area if possible
+    try {
+      // Get all features from the draw control
+      const features = draw.value.getAll().features;
+
+      // Find the matching feature
+      const feature = features.find(f => f.id === featureId);
+
+      if (feature) {
+        // Highlight this feature (implementation depends on your map library)
+        console.log('Found feature to highlight:', feature);
+
+        // If using Mapbox Draw, you might select the feature
+        draw.value.changeMode('simple_select', { featureIds: [featureId] });
+      }
+    } catch (highlightError) {
+      console.warn('Error highlighting feature:', highlightError);
+      // Continue even if highlighting fails
+    }
+
+    return true;
   } catch (error) {
     console.error('Error focusing on user area:', error);
-    return { success: false, error: error.message };
+    return false;
   }
 }
 
-// Generate area color based on user area data
+// Function to generate a unique color for each area based on its ID
 function generateAreaColor(area) {
-  try {
-    // Generate a unique color based on the feature_id
-    // Use a hash function to convert the ID to a number
-    let hash = 0;
-    const id = area.feature_id.toString();
-    for (let i = 0; i < id.length; i++) {
-      hash = ((hash << 5) - hash) + id.charCodeAt(i);
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    
-    // Use the hash to generate HSL color values
-    const hue = Math.abs(hash % 360); // Value between 0-359
-    const saturation = 70 + (Math.abs(hash) % 30); // Value between 70-100%
-    const lightness = 50; // Fixed at 50% for medium brightness
-    
-    // Return the style object with background color and border
-    return {
-      backgroundColor: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.7)`,
-      borderColor: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.9)`
-    };
-  } catch (error) {
-    console.error('Error generating area color:', error);
-    return {
-      backgroundColor: 'rgba(63, 81, 181, 0.7)',
-      borderColor: 'rgba(63, 81, 181, 0.9)'
-    };
-  }
-}
+  if (!area || !area.feature_id) return {};
 
-// Enhanced user areas with additional information
-const enhancedUserAreas = computed(() => {
-  return userAreas.value.map(area => {
-    try {
-      // Parse the geometry
-      const geometry = JSON.parse(area.geometry);
-      
-      // Calculate area size in square meters (approximate)
-      let areaSize = 0;
-      if (geometry.type === 'Polygon' && geometry.coordinates && geometry.coordinates.length > 0) {
-        areaSize = calculatePolygonArea(geometry.coordinates[0]);
-      }
-      
-      // Format area size
-      let formattedSize = '';
-      if (areaSize < 10000) {
-        formattedSize = `${Math.round(areaSize)} m²`;
-      } else {
-        formattedSize = `${(areaSize / 10000).toFixed(2)} ha`;
-      }
-      
-      return {
-        ...area,
-        areaSize,
-        formattedSize
-      };
-    } catch (error) {
-      console.error('Error calculating area size:', error);
-      return {
-        ...area,
-        areaSize: 0,
-        formattedSize: 'Unknown size'
-      };
-    }
-  });
-});
+  // Create a hash from the feature_id
+  let hash = 0;
+  for (let i = 0; i < area.feature_id.length; i++) {
+    hash = area.feature_id.charCodeAt(i) + ((hash << 5) - hash);
+  }
 
-// Calculate polygon area in square meters (approximate)
-function calculatePolygonArea(coordinates) {
-  // Haversine formula to calculate distance between two points
-  function haversineDistance(p1, p2) {
-    const R = 6371000; // Earth radius in meters
-    const dLat = (p2[1] - p1[1]) * Math.PI / 180;
-    const dLon = (p2[0] - p1[0]) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(p1[1] * Math.PI / 180) * Math.cos(p2[1] * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  }
-  
-  // Calculate area using Shoelace formula
-  let area = 0;
-  const numPoints = coordinates.length;
-  
-  if (numPoints < 3) return 0;
-  
-  // Use a reference point (first point in the polygon)
-  const refPoint = coordinates[0];
-  
-  // Create a simplified planar polygon using distances from the reference point
-  const simplifiedCoords = coordinates.map(coord => {
-    const distance = haversineDistance(refPoint, coord);
-    const bearing = Math.atan2(
-      Math.sin((coord[0] - refPoint[0]) * Math.PI / 180) * Math.cos(coord[1] * Math.PI / 180),
-      Math.cos(refPoint[1] * Math.PI / 180) * Math.sin(coord[1] * Math.PI / 180) -
-      Math.sin(refPoint[1] * Math.PI / 180) * Math.cos(coord[1] * Math.PI / 180) * 
-      Math.cos((coord[0] - refPoint[0]) * Math.PI / 180)
-    );
-    
-    return [
-      distance * Math.sin(bearing),
-      distance * Math.cos(bearing)
-    ];
-  });
-  
-  // Apply Shoelace formula on the simplified coordinates
-  for (let i = 0; i < numPoints; i++) {
-    const j = (i + 1) % numPoints;
-    area += simplifiedCoords[i][0] * simplifiedCoords[j][1];
-    area -= simplifiedCoords[j][0] * simplifiedCoords[i][1];
-  }
-  
-  return Math.abs(area) / 2;
+  // Convert the hash to a hue (0-360)
+  const hue = hash % 360;
+
+  // Use a high saturation and lightness for vibrant colors
+  const saturation = 70 + (hash % 20); // 70-90%
+  const lightness = 45 + (hash % 10);  // 45-55%
+
+  // Return as a CSS style object
+  return {
+    backgroundColor: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
+    borderColor: `hsl(${hue}, ${saturation - 10}%, ${lightness - 15}%)`
+  };
 }
 
 // Remove a cone from the map
@@ -1954,7 +1931,7 @@ function removeCone(cameraId) {
     // Get the cone ID and source ID
     const coneId = `cone-${cameraId}`;
     const sourceId = `cone-source-${cameraId}`;
-    
+
     // Remove layers first if they exist
     if (map.value.getLayer(coneId)) {
       map.value.removeLayer(coneId);
@@ -1968,7 +1945,7 @@ function removeCone(cameraId) {
       map.value.removeLayer(`${coneId}-arrow`);
       console.log(`Removed cone arrow layer: ${coneId}-arrow`);
     }
-    
+
     // Then remove sources if they exist
     if (map.value.getSource(sourceId)) {
       map.value.removeSource(sourceId);
@@ -1978,7 +1955,7 @@ function removeCone(cameraId) {
       map.value.removeSource(`${sourceId}-arrow`);
       console.log(`Removed cone arrow source: ${sourceId}-arrow`);
     }
-    
+
     // Remove from cone map
     if (coneMap.value[cameraId]) {
       delete coneMap.value[cameraId];
@@ -2002,10 +1979,10 @@ function navigateToLocation(coordinates, zoom = 16) {
     console.error('Map not initialized, cannot navigate to location');
     return false;
   }
-  
+
   try {
     console.log(`Navigating to coordinates: [${coordinates[0]}, ${coordinates[1]}] with zoom: ${zoom}`);
-    
+
     // Fly to the location with animation
     map.value.flyTo({
       center: coordinates,
@@ -2013,7 +1990,7 @@ function navigateToLocation(coordinates, zoom = 16) {
       essential: true, // This animation is considered essential for the intended user experience
       duration: 1500 // Animation time in milliseconds
     });
-    
+
     return true;
   } catch (error) {
     console.error('Error navigating to location:', error);
@@ -2040,27 +2017,27 @@ async function accessMapByCode() {
     accessCodeError.value = 'Please enter a valid 6-character code';
     return;
   }
-  
+
   accessCodeError.value = '';
   isProcessingMapOperation.value = true;
-  
+
   try {
     console.log('Accessing map by code:', accessCode.value);
-    
+
     // Make API request to fetch the map data
     const response = await axios.post('/user-maps/access-by-code', {
       access_code: accessCode.value
     });
-    
+
     if (response.data.success) {
       console.log('Map accessed successfully:', response.data.map);
-      
+
       // Hide the selector panel
       showMapSelector.value = false;
-      
+
       // Emit event to parent component with map data
       emit('map-accessed', response.data.map);
-      
+
       // If map has default view, navigate to it
       if (response.data.map.default_view) {
         const defaultView = response.data.map.default_view;
@@ -2086,42 +2063,42 @@ async function createNewMap() {
     accessCodeError.value = 'Please enter a name for your map';
     return;
   }
-  
+
   accessCodeError.value = '';
   isProcessingMapOperation.value = true;
-  
+
   try {
     // Get current map center and zoom for default view
     const center = map.value ? map.value.getCenter() : [120.9842, 14.5995]; // Manila coordinates as default
     const zoom = map.value ? map.value.getZoom() : 12; // Default zoom level
-    
+
     // Format center as array
     const centerArray = center && typeof center === 'object' && 'lng' in center && 'lat' in center
       ? [center.lng, center.lat]
       : (Array.isArray(center) ? center : [120.9842, 14.5995]); // Fallback to Manila coordinates
-    
-    console.log('Creating new map:', { 
-      name: newMapName.value, 
+
+    console.log('Creating new map:', {
+      name: newMapName.value,
       description: newMapDescription.value,
       default_view: { center: centerArray, zoom }
     });
-    
+
     // Make API request to create a new map
     const response = await axios.post('/user-maps', {
       name: newMapName.value,
       description: newMapDescription.value,
       default_view: { center: centerArray, zoom }
     });
-    
+
     if (response.data.success) {
       console.log('New map created successfully:', response.data.map);
-      
+
       // Hide the selector panel
       showMapSelector.value = false;
-      
+
       // Emit event to parent component with new map data
       emit('map-created', response.data.map);
-      
+
       // Reset form
       newMapName.value = '';
       newMapDescription.value = '';
@@ -2135,6 +2112,288 @@ async function createNewMap() {
   } finally {
     isProcessingMapOperation.value = false;
   }
+}
+
+// Function to add a conical perception range to the map - camera-independent version
+function addStandaloneCone(centerCoordinates, radius, direction, angle, id) {
+  try {
+    // Generate a unique ID if none provided
+    const uniqueId = id || `standalone-cone-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    console.log(`Creating standalone cone at [${centerCoordinates[0]}, ${centerCoordinates[1]}] with radius ${radius}m, direction ${direction}°, angle ${angle}°, ID: ${uniqueId}`);
+
+    if (!map.value) {
+      console.error('Map not initialized, cannot add standalone cone');
+      return false;
+    }
+
+    const coneId = `cone-${uniqueId}`;
+    const sourceId = `cone-source-${uniqueId}`;
+
+    // Wait for map style to load if needed
+    if (!map.value.isStyleLoaded()) {
+      console.log('Map style not yet loaded, waiting...');
+      map.value.once('style.load', () => {
+        addStandaloneCone(centerCoordinates, radius, direction, angle, uniqueId);
+      });
+      return false;
+    }
+
+    // Remove existing cone with this ID if it exists without affecting other cones
+    if (coneMap.value[uniqueId]) {
+      try {
+        // Remove layers if they exist
+        if (map.value.getLayer(coneId)) map.value.removeLayer(coneId);
+        if (map.value.getLayer(`${coneId}-line`)) map.value.removeLayer(`${coneId}-line`);
+        if (map.value.getLayer(`${coneId}-arrow`)) map.value.removeLayer(`${coneId}-arrow`);
+
+        // Remove sources if they exist
+        if (map.value.getSource(sourceId)) map.value.removeSource(sourceId);
+        if (map.value.getSource(`${sourceId}-arrow`)) map.value.removeSource(`${sourceId}-arrow`);
+
+        console.log(`Removed existing cone with ID ${uniqueId}`);
+      } catch (removeError) {
+        console.warn(`Error removing existing cone ${uniqueId}:`, removeError);
+        // Continue with creating the new cone even if removal fails
+      }
+    }
+
+    // Convert radius from meters to approximate degrees
+    // 1 degree of latitude is approximately 111km at the equator
+    const radiusInDegrees = radius * 0.000009;
+
+    // Destructure the center coordinates
+    const [lng, lat] = centerCoordinates;
+
+    // Convert direction and angle to radians
+    const directionRad = (direction * Math.PI) / 180;
+    const halfAngleRad = (angle / 2 * Math.PI) / 180;
+
+    // Generate cone points
+    const conePoints = [[lng, lat]]; // Start with center point
+    const numPoints = 30; // Number of points along the arc
+    const startAngle = directionRad - halfAngleRad;
+    const endAngle = directionRad + halfAngleRad;
+
+    // Generate the arc points
+    for (let i = 0; i <= numPoints; i++) {
+      const currentAngle = startAngle + (i / numPoints) * (endAngle - startAngle);
+      const x = lng + radiusInDegrees * Math.sin(currentAngle);
+      const y = lat + radiusInDegrees * Math.cos(currentAngle);
+      conePoints.push([x, y]);
+    }
+
+    // Close the polygon by repeating the first point
+    conePoints.push([lng, lat]);
+
+    // Create GeoJSON feature for the cone
+    const conePolygon = {
+      type: 'Feature',
+      properties: {
+        id: uniqueId,
+        type: 'standalone-cone',
+        range_meters: radius,
+        direction,
+        angle
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [conePoints]
+      }
+    };
+
+    // Add the source
+    map.value.addSource(sourceId, {
+      type: 'geojson',
+      data: conePolygon
+    });
+
+    // Add the fill layer
+    map.value.addLayer({
+      id: coneId,
+      type: 'fill',
+      source: sourceId,
+      layout: {},
+      paint: {
+        'fill-color': isDarkMode.value ? '#38a3a5' : '#4f6642',
+        'fill-opacity': 0.35,
+        'fill-outline-color': isDarkMode.value ? '#2C7A7B' : '#3b4e31'
+      }
+    });
+
+    // Add a line layer to make the cone edge more visible
+    map.value.addLayer({
+      id: `${coneId}-line`,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+      paint: {
+        'line-color': isDarkMode.value ? '#2C7A7B' : '#3b4e31',
+        'line-width': 2,
+        'line-opacity': 0.8
+      }
+    });
+
+    // Add a directional arrow at the tip of the cone
+    const arrowPoints = [
+      [lng, lat],
+      [
+        lng + radiusInDegrees * Math.sin(directionRad),
+        lat + radiusInDegrees * Math.cos(directionRad)
+      ]
+    ];
+
+    map.value.addSource(`${sourceId}-arrow`, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: arrowPoints
+        }
+      }
+    });
+
+    map.value.addLayer({
+      id: `${coneId}-arrow`,
+      type: 'line',
+      source: `${sourceId}-arrow`,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+      paint: {
+        'line-color': isDarkMode.value ? '#38a3a5' : '#4f6642',
+        'line-width': 2,
+        'line-dasharray': [2, 1]
+      }
+    });
+
+    // Store the cone definition
+    coneMap.value[uniqueId] = {
+      center: [lng, lat],
+      radius: radius,
+      direction,
+      angle,
+      polygon: conePolygon.geometry.coordinates[0],
+      sourceId,
+      layerId: coneId,
+      isStandalone: true
+    };
+
+    console.log(`Successfully created standalone cone with ID ${uniqueId}`, coneMap.value[uniqueId]);
+    return uniqueId; // Return the ID so it can be tracked and removed later if needed
+  } catch (error) {
+    console.error('Error creating standalone cone:', error);
+    return false;
+  }
+}
+
+// Add a function to remove all standalone cones
+function removeAllStandaloneCones() {
+  try {
+    if (!map.value) return false;
+
+    console.log('Removing all standalone cones');
+
+    // Find all standalone cones in the coneMap
+    const standaloneConeIds = Object.entries(coneMap.value)
+      .filter(([_, cone]) => cone.isStandalone)
+      .map(([id, _]) => id);
+
+    console.log(`Found ${standaloneConeIds.length} standalone cones to remove`);
+
+    // Remove each standalone cone
+    standaloneConeIds.forEach(id => {
+      try {
+        removeCone(id);
+      } catch (error) {
+        console.warn(`Error removing standalone cone ${id}:`, error);
+      }
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error removing all standalone cones:', error);
+    return false;
+  }
+}
+
+// Enable manual pin placement for animals
+function enableAnimalPinPlacement() {
+  if (isAddingAnimalPin.value) return; // Already in pin placement mode
+
+  console.log('Enabling animal pin placement mode');
+  animalPinType.value = animalPinForm.value.animal_type;
+  isAddingAnimalPin.value = true;
+
+  // Focus the map for better UX
+  if (mapContainer.value) {
+    mapContainer.value.focus();
+  }
+
+  // Setup a click handler for the map
+  if (map.value) {
+    // Use a one-time click handler
+    const clickHandler = (e) => {
+      console.log('Map clicked at:', e.lngLat);
+      // Show dialog with form to enter details
+      animalPinForm.value.coordinates = [e.lngLat.lng, e.lngLat.lat];
+      animalPinDialogOpen.value = true;
+      // Remove the handler after click
+      map.value.off('click', clickHandler);
+      isAddingAnimalPin.value = false;
+    };
+
+    map.value.once('click', clickHandler);
+  }
+}
+
+// Cancel animal pin placement
+function cancelAnimalPinPlacement() {
+  isAddingAnimalPin.value = false;
+  // Remove any click handlers
+  if (map.value) {
+    map.value.off('click');
+  }
+}
+
+// Add the animal pin with form data
+function submitAnimalPin() {
+  const formData = {...animalPinForm.value};
+
+  // Create a unique ID
+  formData.id = `manual-${Date.now()}`;
+
+  // Unpack coordinates
+  if (formData.coordinates) {
+    formData.lng = formData.coordinates[0];
+    formData.lat = formData.coordinates[1];
+  }
+
+  console.log('Adding manual animal pin with data:', formData);
+
+  // Add the pin to the map
+  addAnimalPin(formData)
+    .then(result => {
+      console.log('Pin added successfully:', result);
+      // Reset form
+      animalPinForm.value = {
+        animal_type: animalPinType.value,
+        description: `Stray ${animalPinType.value} sighting`,
+        status: 'active',
+        image_url: ''
+      };
+      // Close dialog
+      animalPinDialogOpen.value = false;
+    })
+    .catch(error => {
+      console.error('Error adding pin:', error);
+      alert('Failed to add pin. Please try again.');
+    });
 }
 </script>
 
@@ -2151,7 +2410,7 @@ async function createNewMap() {
           </button>
         </div>
       </div>
-      
+
       <!-- Map Legend -->
       <div class="map-legend" :class="{ 'dark-mode': isDarkMode }">
         <h4 class="legend-title">Map Legend</h4>
@@ -2176,7 +2435,7 @@ async function createNewMap() {
           <div class="legend-label">User Defined Area</div>
         </div>
       </div>
-      
+
       <!-- Drawing Controls -->
       <div class="drawing-controls" :class="{ 'dark-mode': isDarkMode }">
         <button @click="enableDrawingMode('polygon')" class="draw-btn">
@@ -2201,7 +2460,7 @@ async function createNewMap() {
         </button>
         <span class="zoom-label">Access Code: {{ mapAccessCode }}</span>
       </div>
-      
+
       <!-- User Areas Panel -->
       <div v-if="userAreas.length > 0" class="user-areas-panel" :class="{ 'dark-mode': isDarkMode, 'expanded': isUserAreasPanelExpanded }">
         <div class="panel-header" @click="toggleUserAreasPanel">
@@ -2215,9 +2474,9 @@ async function createNewMap() {
             </button>
           </div>
           <div class="area-list">
-            <div 
-              v-for="area in userAreas" 
-              :key="area.feature_id" 
+            <div
+              v-for="area in userAreas"
+              :key="area.feature_id"
               class="area-item"
               :class="{ 'focused': focusedAreaId === area.feature_id }"
               @click="focusOnArea(area.feature_id)"
@@ -2231,7 +2490,7 @@ async function createNewMap() {
           </div>
         </div>
       </div>
-      
+
       <!-- User Map Access Panel -->
       <div v-if="showMapSelector" class="user-map-panel" :class="{ 'dark-mode': isDarkMode }">
         <div class="panel-header">
@@ -2246,16 +2505,16 @@ async function createNewMap() {
               <p>Enter a map access code to view a shared map.</p>
             </div>
             <div class="input-group">
-              <input 
-                type="text" 
-                v-model="accessCode" 
-                placeholder="Enter 6-character code" 
+              <input
+                type="text"
+                v-model="accessCode"
+                placeholder="Enter 6-character code"
                 maxlength="6"
                 class="access-code-input"
                 :class="{ 'error': accessCodeError }"
               />
-              <button 
-                class="access-btn" 
+              <button
+                class="access-btn"
                 @click="accessMapByCode"
                 :disabled="isProcessingMapOperation || accessCode.length !== 6"
               >
@@ -2271,16 +2530,16 @@ async function createNewMap() {
               <button @click="isCreatingMap = true" class="toggle-btn">Create Your Own Map</button>
             </div>
           </div>
-          
+
           <div v-else class="create-map-form">
             <div class="form-description">
               <p>Create a personal map that you can share with others.</p>
             </div>
             <div class="form-group">
               <label for="map-name">Map Name</label>
-              <input 
-                type="text" 
-                id="map-name" 
+              <input
+                type="text"
+                id="map-name"
                 v-model="newMapName"
                 placeholder="Enter a name for your map"
                 class="form-input"
@@ -2288,23 +2547,23 @@ async function createNewMap() {
             </div>
             <div class="form-group">
               <label for="map-description">Description (Optional)</label>
-              <textarea 
-                id="map-description" 
-                v-model="newMapDescription" 
+              <textarea
+                id="map-description"
+                v-model="newMapDescription"
                 placeholder="Describe your map..."
                 class="form-textarea"
               ></textarea>
             </div>
             <div class="form-actions">
-              <button 
-                class="cancel-btn" 
+              <button
+                class="cancel-btn"
                 @click="isCreatingMap = false"
                 :disabled="isProcessingMapOperation"
               >
                 Cancel
               </button>
-              <button 
-                class="create-btn" 
+              <button
+                class="create-btn"
                 @click="createNewMap"
                 :disabled="isProcessingMapOperation || !newMapName"
               >
@@ -2319,15 +2578,27 @@ async function createNewMap() {
           </div>
         </div>
       </div>
-      
+
       <!-- Map Selector Button -->
       <button v-if="!showMapSelector" @click="toggleMapSelector" class="map-selector-btn">
         <i class="fas fa-map-marked-alt"></i>
         <span>Select Map</span>
       </button>
 
+      <!-- Add Animal Pin Button -->
+      <button @click="enableAnimalPinPlacement" class="add-animal-pin-btn" :class="{ 'active': isAddingAnimalPin }">
+        <i class="fas fa-plus"></i>
+        <span>Add Animal</span>
+      </button>
+
+      <!-- Cancel Animal Pin Button (shown when in placement mode) -->
+      <button v-if="isAddingAnimalPin" @click="cancelAnimalPinPlacement" class="cancel-animal-pin-btn">
+        <i class="fas fa-times"></i>
+        <span>Cancel</span>
+      </button>
+
       <!-- Pin in Map Button (Super Admin Only) -->
-      <button 
+      <button
         v-if="props.authUser && props.authUser.role === 'super_admin'"
         @click="enablePinPlacementMode"
         class="pin-in-map-btn"
@@ -2336,8 +2607,49 @@ async function createNewMap() {
         <span>Pin in Map</span>
       </button>
 
+      <!-- Animal Pin Dialog -->
+      <div v-if="animalPinDialogOpen" class="animal-pin-dialog">
+        <div class="dialog-header">
+          <h3>Add Animal Sighting</h3>
+          <button @click="animalPinDialogOpen = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="dialog-body">
+          <form @submit.prevent="submitAnimalPin">
+            <div class="form-group">
+              <label for="animal-type">Animal Type</label>
+              <select id="animal-type" v-model="animalPinForm.animal_type">
+                <option value="dog">Dog</option>
+                <option value="cat">Cat</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="description">Description</label>
+              <textarea id="description" v-model="animalPinForm.description" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="status">Status</label>
+              <select id="status" v-model="animalPinForm.status">
+                <option value="active">Active</option>
+                <option value="resolved">Resolved</option>
+                <option value="in_progress">In Progress</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="image-url">Image URL (Optional)</label>
+              <input type="text" id="image-url" v-model="animalPinForm.image_url" placeholder="https://example.com/image.jpg">
+            </div>
+            <div class="form-actions">
+              <button type="button" @click="animalPinDialogOpen = false" class="cancel-btn">Cancel</button>
+              <button type="submit" class="submit-btn">Add Pin</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- Pin in Map Button (Super Admin Only) -->
-      <button 
+      <button
         v-if="$page.props.auth.user && $page.props.auth.user.role === 'super_admin'"
         @click="enablePinPlacementMode"
         class="pin-in-map-btn"
@@ -2434,7 +2746,6 @@ async function createNewMap() {
   background-color: #1a73e8;
   animation: pulse 2s infinite;
 }
-
 @keyframes pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.7);
@@ -2451,13 +2762,25 @@ async function createNewMap() {
 .mapboxgl-popup-content {
   padding: 12px;
   border-radius: 8px;
+  color: black; /* Ensure all text in popups is black */
 }
 
 .camera-popup h3,
 .pin-popup h3 {
-  color:black;
+  color: black !important; /* Force black color with !important */
   font-size: 16px;
   font-weight: 600;
+}
+
+.camera-popup p,
+.pin-popup p {
+  color: black !important; /* Force black color for paragraph text */
+  margin: 5px 0;
+}
+
+.camera-popup small,
+.pin-popup small {
+  color: #333 !important; /* Slightly lighter but still dark and readable */
 }
 
 .delete-pin-btn {
@@ -3205,4 +3528,284 @@ async function createNewMap() {
 .dark-mode .map-selector-btn:hover {
   background-color: #444;
 }
+
+.add-animal-pin-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 5;
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.add-animal-pin-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.dark-mode .add-animal-pin-btn {
+  background-color: #333;
+  color: white;
+  border-color: #444;
+}
+
+.dark-mode .add-animal-pin-btn:hover {
+  background-color: #444;
+}
+
+.cancel-animal-pin-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 5;
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.cancel-animal-pin-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.dark-mode .cancel-animal-pin-btn {
+  background-color: #333;
+  color: white;
+  border-color: #444;
+}
+
+.dark-mode .cancel-animal-pin-btn:hover {
+  background-color: #444;
+}
+
+.submit-btn {
+  padding: 10px 16px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.submit-btn:hover {
+  background-color: #43a047;
+}
+
+.submit-btn:disabled {
+  background-color: #a5d6a7;
+  cursor: not-allowed;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  font-size: 18px;
+  padding: 4px;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.dark-mode .close-btn {
+  color: #aaa;
+}
+
+.dark-mode .close-btn:hover {
+  color: #fff;
+}
+
+.animal-pin-dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  width: 350px;
+  z-index: 15;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.animal-pin-dialog.dark-mode {
+  background-color: rgba(33, 33, 33, 0.95);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.dialog-header.dark-mode {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dialog-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.dialog-header.dark-mode h3 {
+  color: #f0f0f0;
+}
+
+.dialog-body {
+  padding: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.user-map-panel.dark-mode .form-group label {
+  color: #f0f0f0;
+}
+
+.form-input, .form-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.user-map-panel.dark-mode .form-input,
+.user-map-panel.dark-mode .form-textarea {
+  background-color: #333;
+  border-color: #444;
+  color: #fff;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.cancel-btn {
+  padding: 10px 16px;
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.cancel-btn:hover {
+  background-color: #e5e5e5;
+}
+
+.user-map-panel.dark-mode .cancel-btn {
+  background-color: #444;
+  border-color: #555;
+  color: #f0f0f0;
+}
+
+.user-map-panel.dark-mode .cancel-btn:hover {
+  background-color: #555;
+}
+
+.submit-btn {
+  padding: 10px 16px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.submit-btn:hover {
+  background-color: #43a047;
+}
+
+.submit-btn:disabled {
+  background-color: #a5d6a7;
+  cursor: not-allowed;
+}
+
+.animal-pin-dialog select,
+.animal-pin-dialog input,
+.animal-pin-dialog textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+  margin-bottom: 15px;
+}
+
+.animal-pin-dialog .form-group {
+  margin-bottom: 15px;
+}
+
+.dark-mode .animal-pin-dialog {
+  background-color: #333;
+  color: #f0f0f0;
+}
+
+.dark-mode .animal-pin-dialog select,
+.dark-mode .animal-pin-dialog input,
+.dark-mode .animal-pin-dialog textarea {
+  background-color: #444;
+  border-color: #555;
+  color: #fff;
+}
+
+.dark-mode .animal-pin-dialog label {
+  color: #f0f0f0;
+}
+
+.animal-pin-dialog .form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
 </style>
+
