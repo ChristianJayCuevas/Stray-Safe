@@ -363,6 +363,12 @@ async function initializeMap() {
         displayUserAreas();
       }
 
+      // Re-add cones on style reload to ensure field of view persists
+      map.value.on('styledata', () => {
+        console.log('Map styledata event fired, re-adding camera cones');
+        addAllCameraCones();
+      });
+
       // Emit map-ready event to parent
       emit('map-ready');
     });

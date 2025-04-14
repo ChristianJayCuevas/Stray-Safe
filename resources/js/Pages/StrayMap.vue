@@ -133,6 +133,14 @@ async function fetchCCTVs() {
             videoSrc: ['https://straysafe.me/hls/main-camera.m3u8'],
             rtmp_key: 'main-camera',
             original_id: 'main-camera'
+        },
+        {
+            id: 'dummy-camera',
+            name: 'Dummy Camera',
+            location: 'Test Location',
+            videoSrc: ['https://straysafe.me/hls/dummy-camera.m3u8'],
+            rtmp_key: 'dummy-camera',
+            original_id: 'dummy-camera'
         }];
 
         console.log('Using fallback camera data:', availableCCTVs.value);
@@ -542,6 +550,20 @@ async function setCurrentMap(map) {
                 if (defaultView.center && defaultView.zoom) {
                     mapRef.value.navigateToLocation(defaultView.center, defaultView.zoom);
                 }
+            }
+
+            // Ensure camera pins have viewing parameters and update map pins
+            if (mapRef.value && currentUserMap.value.pins) {
+                const pinsWithViewParams = currentUserMap.value.pins.map(pin => {
+                    return {
+                        ...pin,
+                        viewingDirection: pin.viewingDirection || 0,
+                        viewingAngle: pin.viewingAngle || 60,
+                        conicalView: pin.conicalView !== undefined ? pin.conicalView : true
+                    };
+                });
+                // Update pins on the map component
+                mapRef.value.updatePinsWithViewParams(pinsWithViewParams);
             }
         } else {
             userMapError.value = response.data.message || 'Failed to load map data';
