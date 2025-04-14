@@ -35,13 +35,13 @@ const filter = ref('');
 
 // Column definitions for the maps table
 const columns = [
-  { name: 'id', label: 'ID', field: 'id', sortable: true },
-  { name: 'name', label: 'Map Name', field: 'name', sortable: true },
-  { name: 'owner', label: 'Owner', field: row => row.owner ? row.owner.name : 'Unknown', sortable: true },
-  { name: 'access_code', label: 'Access Code', field: 'access_code' },
-  { name: 'public', label: 'Public', field: 'is_public', sortable: true },
-  { name: 'created_at', label: 'Created', field: 'created_at', sortable: true, format: val => new Date(val).toLocaleString() },
-  { name: 'actions', label: 'Actions', field: 'actions' }
+  { name: 'id', label: 'ID', field: 'id', sortable: true, align: 'left' },
+  { name: 'name', label: 'Map Name', field: 'name', sortable: true, align: 'left' },
+  { name: 'owner', label: 'Owner', field: row => row.owner ? row.owner.name : 'Unknown', sortable: true, align: 'left' },
+  { name: 'access_code', label: 'Access Code', field: 'access_code', align: 'left' },
+  { name: 'public', label: 'Public', field: 'is_public', sortable: true, align: 'left' },
+  { name: 'created_at', label: 'Created', field: 'created_at', sortable: true, format: val => new Date(val).toLocaleString(), align: 'left' },
+  { name: 'actions', label: 'Actions', field: 'actions', align: 'center' }
 ];
 
 // Function to fetch maps from the backend
@@ -235,7 +235,7 @@ onMounted(() => {
         <QCard flat bordered class="q-mb-md">
           <QCardSection>
             <div class="flex items-center justify-between">
-              <h3 class="text-lg font-semibold dark:text-white">User Maps</h3>
+              <h3 class="text-3xl font-bold font-poppins">User Maps</h3>
               <QInput v-model="filter" dense outlined placeholder="Search maps..." class="w-64 dark-search-input">
                 <template v-slot:append>
                   <QIcon name="search" />
@@ -295,12 +295,10 @@ onMounted(() => {
                         {{ props.row.owner ? props.row.owner.name : 'Unknown' }}
                       </QTd>
                       <QTd key="access_code" :props="props">
-                        <div class="flex items-center">
-                          <span class="font-mono mr-2">{{ props.row.access_code }}</span>
-                          <QBtn flat size="sm" icon="content_copy" @click.stop="copyAccessCode(props.row.access_code)" class="text-primary dark:text-blue-400">
-                            <QTooltip>Copy access code</QTooltip>
-                          </QBtn>
-                        </div>
+                          <div class="access-code-container">
+                            <span>{{ props.row.access_code }}</span>
+<QBtn flat size="sm" icon="content_copy" @click.stop="copyAccessCode(props.row.access_code)" class="text-primary dark:text-blue-400" />
+                          </div>
                       </QTd>
                       <QTd key="public" :props="props">
                         <QBadge :color="props.row.is_public ? 'green-8' : 'grey-8'" text-color="white">
@@ -346,11 +344,9 @@ onMounted(() => {
                         {{ props.row.owner ? props.row.owner.name : 'Unknown' }}
                       </QTd>
                       <QTd key="access_code" :props="props">
-                        <div class="flex items-center">
-                          <span class="font-mono mr-2">{{ props.row.access_code }}</span>
-                          <QBtn flat size="sm" icon="content_copy" @click.stop="copyAccessCode(props.row.access_code)" class="text-primary dark:text-blue-400">
-                            <QTooltip>Copy access code</QTooltip>
-                          </QBtn>
+                        <div class="access-code-container">
+                          <span>{{ props.row.access_code }}</span>
+                          <QBtn flat size="sm" icon="content_copy" @click.stop="copyAccessCode(props.row.access_code)" class="text-primary dark:text-blue-400" />
                         </div>
                       </QTd>
                       <QTd key="public" :props="props">
@@ -397,11 +393,9 @@ onMounted(() => {
                         {{ props.row.owner ? props.row.owner.name : 'Unknown' }}
                       </QTd>
                       <QTd key="access_code" :props="props">
-                        <div class="flex items-center">
-                          <span class="font-mono mr-2">{{ props.row.access_code }}</span>
-                          <QBtn flat size="sm" icon="content_copy" @click.stop="copyAccessCode(props.row.access_code)" class="text-primary dark:text-blue-400">
-                            <QTooltip>Copy access code</QTooltip>
-                          </QBtn>
+                        <div class="access-code-container">
+                          <span>{{ props.row.access_code }}</span>
+                          <QBtn flat size="sm" icon="content_copy" @click.stop="copyAccessCode(props.row.access_code)" class="text-primary dark:text-blue-400" />
                         </div>
                       </QTd>
                       <QTd key="public" :props="props">
@@ -455,7 +449,7 @@ onMounted(() => {
               <div class="text-subtitle2 dark:text-gray-300">Access Code</div>
               <div class="flex items-center">
                 <span class="font-mono mr-2 dark:text-white">{{ selectedMap.access_code }}</span>
-                <QBtn flat size="sm" icon="content_copy" @click="copyAccessCode(selectedMap.access_code)" class="text-primary dark:text-blue-400 action-btn" label="Copy" />
+<QBtn flat size="sm" icon="content_copy" @click="copyAccessCode(selectedMap.access_code)" class="text-primary dark:text-blue-400 action-btn" />
                 <QBtn 
                   size="sm" 
                   color="amber-8" 
@@ -539,6 +533,27 @@ onMounted(() => {
   overflow: hidden;
 }
 
+/* Ensure table cells have consistent padding and vertical alignment */
+:deep(.q-table--dark th),
+:deep(.q-table--dark td) {
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+/* Align access code text and copy button vertically center */
+.access-code-container {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-family: monospace;
+}
+
+.access-code-container > span {
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+}
+
 :deep(.q-table--dark) {
   background-color: #2d2d2d;
 }
@@ -562,6 +577,9 @@ onMounted(() => {
   border-radius: 4px !important;
   padding: 0 8px !important;
   min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .action-btn:hover {
@@ -583,6 +601,10 @@ onMounted(() => {
 
 .map-detail-card {
   border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 :deep(.dark) .map-detail-card {
@@ -600,4 +622,20 @@ onMounted(() => {
 :deep(.dark) .q-field__control {
   background: #2d2d2d;
 }
-</style> 
+
+/* Header and filter input alignment */
+.q-card-section > div.flex.items-center.justify-between {
+  align-items: center;
+  gap: 12px;
+}
+
+/* Dialog content spacing */
+.map-detail-card > .q-card-section {
+  padding: 12px 16px;
+}
+
+/* Ensure buttons in action columns have consistent spacing */
+.q-table .action-btn + .action-btn {
+  margin-left: 8px;
+}
+</style>
