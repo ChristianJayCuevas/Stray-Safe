@@ -168,7 +168,7 @@ const fetchStreams = async () => {
       totalCameras: customCards.value.length,
       onlineCameras: customCards.value.length, // All custom cards are considered online
       detectionsToday: Math.floor(Math.random() * 30),
-      storageUsed: '1.2 TB'
+      storageUsed: '1.2 GB'
     };
   } catch (error) {
     console.error('Failed to fetch streams:', error)
@@ -810,10 +810,10 @@ async function sendNotification(snapshot) {
               <i class="fas fa-map-marker-alt mr-1"></i>
               {{ snapshot.location }}
             </div>
-            <div class="text-sm mb-1" v-if="snapshot.owner_id">
+            <!-- <div class="text-sm mb-1" v-if="snapshot.owner_id">
               <i class="fas fa-user mr-1"></i>
               Owner ID: {{ snapshot.owner_id }}
-            </div>
+            </div> -->
             <div class="text-xs text-gray-500">
               <i class="fas fa-clock mr-1"></i>
               {{ formatTimestamp(snapshot.timestamp) }}
