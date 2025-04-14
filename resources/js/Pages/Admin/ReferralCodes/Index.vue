@@ -7,7 +7,7 @@
             <div class="page-header mb-6">
                 <div class="flex justify-between items-center">
                     <div class="header-title">
-                        <h1 class="text-3xl font-bold">Referral Code Management</h1>
+                        <h1 class="text-3xl font-bold font-poppins">Referral Code Management</h1>
                         <p class="text-secondary">Generate and track referral codes</p>
                     </div>
                     <q-btn 

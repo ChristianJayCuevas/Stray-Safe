@@ -217,6 +217,14 @@ const highlightArea = (areaId) => {
 const onMapReady = () => {
   mapReady.value = true;
   console.log('Map is ready to use');
+  // Attempt to fix map size on load by triggering resize or refresh if method exists
+  if (mapComponentRef.value) {
+    if (typeof mapComponentRef.value.resize === 'function') {
+      mapComponentRef.value.resize();
+    } else if (typeof mapComponentRef.value.refresh === 'function') {
+      mapComponentRef.value.refresh();
+    }
+  }
 };
 
 onMounted(() => {
@@ -386,10 +394,12 @@ onMounted(() => {
 <style scoped>
 .map-card {
   min-height: 700px;
+  height: 700px; /* Added fixed height to ensure consistent map container size */
 }
 
 .user-areas-map {
   height: 600px;
   width: 100%;
+  min-height: 600px; /* Added min-height for better consistency */
 }
 </style> 
