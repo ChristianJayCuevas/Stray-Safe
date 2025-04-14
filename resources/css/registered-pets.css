@@ -219,6 +219,8 @@
 
 .dark-mode .theme-card {
     background-color: var(--dark-card-bg, #1e293b) !important;
+    border: 1px solid var(--dark-border-color, #4a5568);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
 /* Table header and cells */
@@ -246,6 +248,111 @@
 
 .theme-card .q-table--dark {
     background-color: transparent !important;
+    color: var(--text-primary) !important;
+}
+
+/* Additional dark mode table styles */
+.dark-mode .pets-table .q-table__container {
+    background-color: var(--dark-card-bg, #1e293b) !important;
+    color: var(--text-primary);
+}
+
+.dark-mode .pets-table .q-table tbody tr {
+    background-color: var(--dark-card-bg, #1e293b) !important;
+}
+
+.dark-mode .pets-table .q-table tbody tr:hover {
+    background-color: var(--card-hover, #2d3748) !important;
+}
+
+.dark-mode .pets-table .q-table th {
+    color: var(--text-primary) !important;
+    font-weight: 600;
+}
+
+.dark-mode .pets-table .q-table td {
+    color: var(--text-primary) !important;
+    border-color: var(--dark-border-color, #4a5568) !important;
+}
+
+.dark-mode .pets-table .q-table__bottom {
+    background-color: var(--dark-card-bg, #1e293b) !important;
+    color: var(--text-primary) !important;
+    border-top: 1px solid var(--dark-border-color, #4a5568);
+}
+
+.dark-mode .pets-table .q-table__control {
+    color: var(--text-primary) !important;
+}
+
+.dark-mode .pets-table .q-table__sort-icon {
+    color: var(--dark-accent-color, #3b82f6) !important;
+}
+
+.dark-mode .pets-table .q-table__grid-content {
+    background-color: var(--dark-card-bg, #1e293b) !important;
+}
+
+/* Pagination controls in dark mode */
+.dark-mode .pets-table .q-btn__content {
+    color: var(--text-primary);
+}
+
+.dark-mode .pets-table .q-table__control .q-btn {
+    color: var(--text-primary);
+}
+
+.dark-mode .pets-table .q-btn.disabled {
+    color: var(--text-secondary) !important;
+    opacity: 0.7;
+}
+
+/* Fix for table in dark mode when selected */
+.dark-mode .pets-table .q-table tbody tr.selected {
+    background-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+.dark-mode .pets-table .q-table--loading {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .pets-table .q-spinner-dots {
+    color: var(--dark-accent-color, #3b82f6) !important;
+}
+
+/* Action buttons in table dark mode fix */
+.dark-mode .pets-table .q-btn.q-btn--flat.q-btn--round {
+    color: var(--dark-accent-color, #3b82f6);
+}
+
+.dark-mode .pets-table .q-btn[color="info"] {
+    color: #38a3a5 !important;
+}
+
+.dark-mode .pets-table .q-btn[color="warning"] {
+    color: #f59e0b !important;
+}
+
+.dark-mode .pets-table .q-btn[color="negative"] {
+    color: var(--dark-danger-color, #f56565) !important;
+}
+
+/* Fix for tooltip in dark mode */
+.dark-mode .q-tooltip {
+    background-color: var(--dark-card-bg, #1e293b) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--dark-border-color, #4a5568);
+}
+
+/* Fix for default q-table select and input in dark mode */
+.dark-mode .q-field__native,
+.dark-mode .q-field__input {
+    color: var(--text-primary) !important;
+}
+
+/* Fix for status badge in dark mode */
+.dark-mode .status-badge {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .pet-avatar {
