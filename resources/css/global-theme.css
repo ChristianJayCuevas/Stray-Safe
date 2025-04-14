@@ -1,6 +1,4 @@
-/* Global Theme Variables */
 :root {
-    /* Light Mode */
     --bg-light: #f8f9fa;
     --bg-secondary-light: #e9ecef;
     --bg-card-light: #ffffff;
@@ -11,7 +9,6 @@
     --accent-dark-light: #3d4e33;
     --shadow-color-light: rgba(0, 0, 0, 0.1);
     
-    /* Dark Mode - Dark Blue Palette */
     --bg-dark: #0f172a;  /* Dark blue */
     --bg-secondary-dark: #1e293b;  /* Slightly lighter blue */
     --bg-card-dark: #1e293b;  /* Card background */
@@ -21,8 +18,7 @@
     --accent-dark: #2563eb;  /* Darker blue accent */
     --accent-light-dark: #60a5fa;  /* Lighter blue accent */
     --shadow-color-dark: rgba(0, 0, 0, 0.5);
-    
-    /* Default to light mode */
+
     --bg-primary: var(--bg-light);
     --bg-secondary: var(--bg-secondary-light);
     --bg-card: var(--bg-card-light);
@@ -34,7 +30,7 @@
     --shadow-color: var(--shadow-color-light);
 }
 
-/* Dark Mode */
+
 .dark-mode {
     --bg-primary: var(--bg-dark);
     --bg-secondary: var(--bg-secondary-dark);
@@ -47,26 +43,22 @@
     --shadow-color: var(--shadow-color-dark);
 }
 
-/* Dark mode body class */
 body.dark-mode {
     background-color: var(--bg-primary);
     color: var(--text-primary);
 }
 
-/* Light mode body class */
 body:not(.dark-mode) {
     background-color: #F5F5DC;
     color: #333333;
 }
 
-/* Button styles */
 .header-actions .q-btn {
     height: 36px;
     min-height: 36px;
     padding: 6px 14px;
 }
 
-/* Card styles for dark mode */
 .dark-mode .q-card {
     background-color: var(--bg-card);
     color: var(--text-primary);
@@ -80,7 +72,6 @@ body:not(.dark-mode) {
     box-shadow: 0 8px 15px var(--shadow-color);
 }
 
-/* Card styles for light mode */
 body:not(.dark-mode) .q-card {
     background-color: var(--bg-card);
     color: var(--text-primary);
@@ -94,7 +85,7 @@ body:not(.dark-mode) .q-card:hover {
     box-shadow: 0 8px 15px var(--shadow-color);
 }
 
-/* Stat Card Styles */
+
 .stat-card {
     display: flex;
     align-items: center;
@@ -146,9 +137,8 @@ body:not(.dark-mode) .q-card:hover {
     color: var(--text-secondary);
 }
 
-/* Sidebar Active States */
 .sidebar-active {
-    background-color: #4f6642 !important; /* Green for light mode */
+    background-color: #4f6642 !important;
     color: white !important;
     border-radius: 8px;
     font-weight: bold;
@@ -157,7 +147,7 @@ body:not(.dark-mode) .q-card:hover {
 }
 
 .sidebar-active-dark {
-    background-color: #3b82f6 !important; /* Blue for dark mode */
+    background-color: #3b82f6 !important; 
     color: white !important;
     border-radius: 8px;
     font-weight: bold;
@@ -165,7 +155,6 @@ body:not(.dark-mode) .q-card:hover {
     transition: all 0.3s ease;
 }
 
-/* Make sure icons in active items are also white */
 .sidebar-active .q-icon,
 .sidebar-active-dark .q-icon {
     color: white !important;

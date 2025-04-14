@@ -5,6 +5,7 @@ import { ref, onMounted, inject, computed, onUnmounted } from 'vue';
 import { QCard, QCardSection, QBtn, QIcon, QBadge, QSeparator, QTooltip, QDialog, QSelect, QSpinner, QSpace } from 'quasar';
 import '../../css/stray-map.css';
 import axios from 'axios';
+import { Head, Link } from '@inertiajs/vue3';
 
 // Get the global dark mode state from the AuthenticatedLayout
 const isDarkMode = inject('isDarkMode', ref(false));
@@ -40,12 +41,28 @@ const addPinError = ref(null);
 const placingPinMode = ref(false);
 const addPinSuccess = ref('');
 const perceptionRange = ref(30); // Default perception range in meters
+const drawingAreaMode = ref(false); // State for area drawing mode
 
 // Detection monitoring variables
 const previousDetections = ref({});
 const detectionMonitorInterval = ref(null);
 const isMonitoring = ref(false);
 const lastApiCheckTime = ref(null);
+
+// User map state
+const currentUserMap = ref(null);
+const userMaps = ref({
+    owned: [],
+    accessible: []
+});
+const userMapError = ref('');
+const isLoadingMaps = ref(false);
+const userMapRole = ref(null); // 'owner', 'editor', 'viewer', or null
+
+// Computed property to determine if user can edit the current map
+const canEditMap = computed(() => {
+    return userMapRole.value === 'owner' || userMapRole.value === 'editor';
+});
 
 function toggleFilters() {
     showFilters.value = !showFilters.value;
@@ -480,8 +497,204 @@ async function fetchStats() {
     }
 }
 
-// Start and stop monitoring on component mount/unmount
-onMounted(() => {
+// Load the user's maps
+async function loadUserMaps() {
+    isLoadingMaps.value = true;
+    userMapError.value = '';
+    
+    try {
+        const response = await axios.get('/user-maps');
+        
+        if (response.data) {
+            userMaps.value.owned = response.data.owned_maps || [];
+            userMaps.value.accessible = response.data.accessible_maps || [];
+            
+            console.log('User maps loaded:', userMaps.value);
+            
+            // If user has a personal map, set it as current
+            if (userMaps.value.owned.length > 0) {
+                await setCurrentMap(userMaps.value.owned[0]);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading user maps:', error);
+        userMapError.value = 'Failed to load your maps. Please try again.';
+    } finally {
+        isLoadingMaps.value = false;
+    }
+}
+
+// Set the current map
+async function setCurrentMap(map) {
+    try {
+        if (!map || !map.id) {
+            currentUserMap.value = null;
+            userMapRole.value = null;
+            return;
+        }
+        
+        // Fetch latest map data including pins
+        const response = await axios.get(`/user-maps/${map.id}`);
+        
+        if (response.data.success) {
+            currentUserMap.value = response.data.map;
+            userMapRole.value = response.data.role;
+            
+            console.log('Current map set:', currentUserMap.value, 'Role:', userMapRole.value);
+            
+            // If map has default view, navigate to it
+            if (currentUserMap.value.default_view && mapRef.value) {
+                const defaultView = currentUserMap.value.default_view;
+                if (defaultView.center && defaultView.zoom) {
+                    mapRef.value.navigateToLocation(defaultView.center, defaultView.zoom);
+                }
+            }
+        } else {
+            userMapError.value = response.data.message || 'Failed to load map data';
+        }
+    } catch (error) {
+        console.error('Error setting current map:', error);
+        userMapError.value = 'Failed to load map data. Please try again.';
+    }
+}
+
+// Handle map created event
+function handleMapCreated(map) {
+    console.log('Map created:', map);
+    // Add to owned maps
+    userMaps.value.owned.push(map);
+    // Set as current map
+    setCurrentMap(map);
+}
+
+// Handle map accessed event
+function handleMapAccessed(map) {
+    console.log('Map accessed:', map);
+    
+    // Check if this map is already in accessible maps
+    const existingMapIndex = userMaps.value.accessible.findIndex(m => m.id === map.id);
+    
+    if (existingMapIndex >= 0) {
+        // Update the existing map data
+        userMaps.value.accessible[existingMapIndex] = map;
+    } else {
+        // Add to accessible maps
+        userMaps.value.accessible.push(map);
+    }
+    
+    // Set as current map
+    setCurrentMap(map);
+}
+
+// Handle map ready event
+function handleMapReady() {
+    console.log('Map is ready');
+    // If we have a current map with default view, navigate to it
+    if (currentUserMap.value?.default_view && mapRef.value) {
+        const defaultView = currentUserMap.value.default_view;
+        if (defaultView.center && defaultView.zoom) {
+            mapRef.value.navigateToLocation(defaultView.center, defaultView.zoom);
+        }
+    }
+}
+
+// Regenerate access code for the current map
+async function regenerateAccessCode() {
+    if (!currentUserMap.value || userMapRole.value !== 'owner') return;
+    
+    try {
+        const response = await axios.post(`/user-maps/${currentUserMap.value.id}/regenerate-code`);
+        
+        if (response.data.success) {
+            // Update the access code in the current map
+            currentUserMap.value.access_code = response.data.access_code;
+            
+            // Show success message
+            alert('Access code regenerated successfully. Share the new code with others who need access to this map.');
+        } else {
+            console.error('Failed to regenerate access code:', response.data.message);
+            alert('Failed to regenerate access code. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error regenerating access code:', error);
+        alert('An error occurred while regenerating the access code. Please try again.');
+    }
+}
+
+// Start area drawing mode
+function startAreaDrawing() {
+  console.log('Starting area drawing mode');
+  
+  if (!mapRef.value) {
+    alert('Map is not ready. Please try again in a moment.');
+    return;
+  }
+  
+  try {
+    // Enable drawing mode on the map component
+    if (mapRef.value.enableDrawingMode('polygon')) {
+      drawingAreaMode.value = true;
+      // Show alert about how to complete/cancel the drawing
+      alert('Click on the map to start drawing. Click points to create your area shape, then click the first point again to complete the shape. Use the Cancel button to exit drawing mode.');
+    } else {
+      console.error('Failed to enable drawing mode');
+      alert('Failed to enter drawing mode. Please try again.');
+    }
+  } catch (error) {
+    console.error('Error enabling drawing mode:', error);
+    alert('An error occurred while trying to draw an area. Please try again.');
+  }
+}
+
+// Cancel area drawing
+function cancelAreaDrawing() {
+  console.log('Cancelling area drawing mode');
+  
+  if (!mapRef.value) {
+    return;
+  }
+  
+  try {
+    // Cancel the current drawing
+    mapRef.value.cancelDrawing();
+    // Disable drawing mode
+    mapRef.value.disableDrawingMode();
+    // Update local state
+    drawingAreaMode.value = false;
+  } catch (error) {
+    console.error('Error cancelling drawing mode:', error);
+  }
+}
+
+// Handle draw-complete event
+function handleDrawComplete(feature) {
+    console.log('Drawing completed, auto-saving area:', feature);
+    // Set a default name based on timestamp
+    const areaName = `Area ${new Date().toLocaleTimeString()}`;
+    
+    // Add properties to the feature
+    feature.properties = feature.properties || {};
+    feature.properties.name = areaName;
+    feature.properties.description = `Area created on ${new Date().toLocaleDateString()}`;
+    
+    // Attempt to save the area
+    try {
+      // The MapComponent will automatically save this to the current map
+      mapRef.value.saveUserArea(feature);
+      // Show success notification
+      alert(`Area "${areaName}" has been saved to your map.`);
+    } catch (error) {
+      console.error('Error saving area:', error);
+      alert('Failed to save the area. Please try again.');
+    }
+    
+    // Reset drawing mode state
+    drawingAreaMode.value = false;
+}
+
+// Setup initial state on mount
+onMounted(async () => {
+    await loadUserMaps();
     // Start the detection monitor
     monitorDetections();
     // Fetch initial statistics
@@ -534,10 +747,32 @@ onUnmounted(() => {
                         Refresh
                         <q-tooltip>Refresh map data</q-tooltip>
                     </q-btn>
+                    <!-- Area creation button -->
+                    <q-btn 
+                        v-if="canEditMap && currentUserMap"
+                        class="primary-btn"
+                        @click="startAreaDrawing"
+                        :disable="placingPinMode || drawingAreaMode"
+                    >
+                        <q-icon name="dashboard_customize" class="q-mr-sm" />
+                        Create Area
+                        <q-tooltip>Draw an area on the map</q-tooltip>
+                    </q-btn>
+                    <!-- Cancel area drawing button -->
+                    <q-btn 
+                        v-if="drawingAreaMode"
+                        class="cancel-btn"
+                        color="red"
+                        @click="cancelAreaDrawing"
+                    >
+                        <q-icon name="cancel" class="q-mr-sm" />
+                        Cancel Area Drawing
+                        <q-tooltip>Exit area drawing mode</q-tooltip>
+                    </q-btn>
                     <q-btn 
                         class="primary-btn"
                         @click="openAddCameraDialog"
-                        :disable="placingPinMode"
+                        :disable="placingPinMode || drawingAreaMode"
                     >
                         <q-icon name="add_location" class="q-mr-sm" />
                         Add Camera Pin
@@ -644,6 +879,21 @@ onUnmounted(() => {
             </q-card>
         </div>
         
+        <!-- Drawing Mode Alert -->
+        <div v-if="drawingAreaMode" class="drawing-alert mx-6 mb-4">
+            <q-card class="bg-green-100 dark:bg-green-900">
+                <q-card-section class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <q-icon name="edit" size="md" color="green" class="mr-3" />
+                        <span class="text-green-800 dark:text-green-100">
+                            Click on the map to draw your area. Click the first point again to complete the shape.
+                        </span>
+                    </div>
+                    <q-btn flat round color="green" icon="close" size="sm" @click="cancelAreaDrawing" />
+                </q-card-section>
+            </q-card>
+        </div>
+        
         <!-- Detection Monitor Status -->
         <div class="detection-monitor-status mx-6 mb-4">
             <q-card flat class="theme-card">
@@ -728,7 +978,43 @@ onUnmounted(() => {
         </div>
         
         <!-- Map Container -->
-        <Map ref="mapRef" />
+        <Map 
+            ref="mapRef" 
+            :is-dark-mode="isDarkMode" 
+            @map-ready="handleMapReady"
+            @map-created="handleMapCreated"
+            @map-accessed="handleMapAccessed"
+            @draw-complete="handleDrawComplete"
+            :is-map-owner="userMapRole === 'owner'"
+            :user-map-id="currentUserMap?.id"
+            :map-name="currentUserMap?.name"
+            :map-access-code="currentUserMap?.access_code"
+        />
+        
+        <!-- User Map Info Card -->
+        <!-- <div v-if="currentUserMap" class="map-info-card" :class="{ 'dark-mode': isDarkMode }">
+            <div class="map-info-header">
+                <h3>{{ currentUserMap.name }}</h3>
+                <div class="map-info-badge" :class="userMapRole">{{ userMapRole }}</div>
+            </div>
+            <div v-if="currentUserMap.description" class="map-info-description">
+                {{ currentUserMap.description }}
+            </div>
+            <div class="map-info-access">
+                <div class="access-code-display">
+                    <span class="access-label">Access Code:</span>
+                    <span class="access-value">{{ currentUserMap.access_code }}</span>
+                </div>
+                <button 
+                    v-if="userMapRole === 'owner'" 
+                    @click="regenerateAccessCode"
+                    class="regenerate-btn"
+                    title="Generate a new access code"
+                >
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </div> -->
         
         <!-- Add Camera Dialog -->
         <q-dialog v-model="showCameraDialog" persistent>
@@ -851,6 +1137,10 @@ onUnmounted(() => {
     animation: pulse 2s infinite;
 }
 
+.drawing-alert {
+    animation: pulse 2s infinite;
+}
+
 @keyframes pulse {
     0% {
         opacity: 0.8;
@@ -913,5 +1203,124 @@ onUnmounted(() => {
   border-radius: 4px;
   margin-bottom: 10px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Map Info Card styles */
+.map-info-card {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    min-width: 250px;
+    z-index: 5;
+    font-size: 14px;
+}
+
+.map-info-card.dark-mode {
+    background-color: #333;
+    color: white;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.map-info-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.map-info-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.map-info-badge {
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    text-transform: capitalize;
+}
+
+.map-info-badge.owner {
+    background-color: #4caf50;
+    color: white;
+}
+
+.map-info-badge.editor {
+    background-color: #2196f3;
+    color: white;
+}
+
+.map-info-badge.viewer {
+    background-color: #ff9800;
+    color: white;
+}
+
+.map-info-description {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 12px;
+}
+
+.dark-mode .map-info-description {
+    color: #bbb;
+    border-bottom-color: #444;
+}
+
+.map-info-access {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.access-code-display {
+    font-family: monospace;
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+.access-label {
+    font-size: 12px;
+    color: #666;
+    margin-right: 5px;
+}
+
+.dark-mode .access-label {
+    color: #bbb;
+}
+
+.access-value {
+    font-weight: bold;
+    color: #333;
+}
+
+.dark-mode .access-value {
+    color: #fff;
+}
+
+.regenerate-btn {
+    background: none;
+    border: none;
+    color: #2196f3;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.regenerate-btn:hover {
+    color: #0d8bf2;
+}
+
+.dark-mode .regenerate-btn {
+    color: #64b5f6;
+}
+
+.dark-mode .regenerate-btn:hover {
+    color: #90caf9;
 }
 </style>

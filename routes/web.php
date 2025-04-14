@@ -8,6 +8,7 @@ use App\Http\Controllers\{
     CCTVController,
     CameraPinController,
     RoleController,
+    UserMapController,
 };
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -135,7 +136,39 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/referral-codes/{id}', [App\Http\Controllers\Admin\ReferralCodeController::class, 'destroy'])
             ->name('referral-codes.destroy')
             ->middleware(PermissionMiddleware::class . ':manage_referral_codes');
+            
+        // Map Management
+        Route::get('/maps', function () {
+            return Inertia::render('Admin/Maps/Index');
+        })
+            ->name('maps')
+            ->middleware(PermissionMiddleware::class . ':manage_maps');
+            
+        Route::get('/maps/data', [UserMapController::class, 'adminIndex'])
+            ->name('maps.data')
+            ->middleware(PermissionMiddleware::class . ':manage_maps');
+            
+        // User Areas Management
+        Route::get('/user-areas', function () {
+            return Inertia::render('Admin/UserAreas/Index');
+        })
+            ->name('user-areas')
+            ->middleware(PermissionMiddleware::class . ':manage_maps');
     });
+
+    // User Areas Route
+    Route::get('/user-areas', function () {
+        return Inertia::render('UserAreas');
+    })->name('user.areas');
+
+    // User Maps routes
+    Route::get('/user-maps', [UserMapController::class, 'index'])->name('user-maps.index');
+    Route::post('/user-maps', [UserMapController::class, 'store'])->name('user-maps.store');
+    Route::get('/user-maps/{id}', [UserMapController::class, 'show'])->name('user-maps.show');
+    Route::put('/user-maps/{id}', [UserMapController::class, 'update'])->name('user-maps.update');
+    Route::delete('/user-maps/{id}', [UserMapController::class, 'destroy'])->name('user-maps.destroy');
+    Route::post('/user-maps/access-by-code', [UserMapController::class, 'accessByCode'])->name('user-maps.access-by-code');
+    Route::post('/user-maps/{id}/regenerate-code', [UserMapController::class, 'regenerateAccessCode'])->name('user-maps.regenerate-code');
 });
 
 // Temporary test route for map pin creation

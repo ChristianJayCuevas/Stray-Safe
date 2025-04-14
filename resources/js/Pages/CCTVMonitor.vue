@@ -334,48 +334,44 @@ const systemStats = ref({
   storageUsed: '0 TB'
 });
 
-// Recent detection snapshots
-const recentSnapshots = ref([
-  {
-    imageUrl: 'https://via.placeholder.com/300x200?text=Stray+Dog',
-    timestamp: '2023-06-15 14:30',
-    animalType: 'Dog',
-    location: 'Main Street'
-  },
-  {
-    imageUrl: 'https://via.placeholder.com/300x200?text=Stray+Cat',
-    timestamp: '2023-06-15 13:45',
-    animalType: 'Cat',
-    location: 'Park Avenue'
-  },
-  {
-    imageUrl: 'https://via.placeholder.com/300x200?text=Stray+Dog',
-    timestamp: '2023-06-15 12:20',
-    animalType: 'Dog',
-    location: 'Riverside'
-  }
-]);
+// Recent detection snapshots - Remove mock data
+const recentSnapshots = ref([]);
 
-// Fetch recent detection snapshots
+// Update the fetchRecentSnapshots function to match dashboard implementation
 async function fetchRecentSnapshots() {
-  try {
-    // Try to fetch detection events from the API
-    const response = await axios.get('https://straysafe.me/api2/detection-events');
-    
-    if (response.data && Array.isArray(response.data)) {
-      recentSnapshots.value = response.data.map(event => {
-        return {
-          imageUrl: event.image_url || 'https://via.placeholder.com/300x200?text=Detection',
-          timestamp: event.timestamp || new Date().toLocaleString(),
-          animalType: event.animal_type || 'Unknown',
-          location: event.location || 'Unknown'
-        };
-      });
+    try {
+        loadingSnapshots.value = true;
+        const response = await axios.get('https://straysafe.me/api2/detected');
+        
+        if (response.data && response.data.detected_animals) {
+            recentSnapshots.value = response.data.detected_animals.map(animal => {
+                // Convert the image URL from detected-img to debug-img
+                const imageUrl = animal.image_url ? 
+                    animal.image_url.replace('detected-img', 'debug-img') : 
+                    'https://placehold.co/600x400/4f6642/FFFFFF/png?text=No+Image';
+
+                return {
+                    id: animal.id,
+                    animalType: animal.animal_type,
+                    location: `Camera ${animal.stream_id}`,
+                    timestamp: new Date(animal.timestamp).toLocaleString(),
+                    imageUrl: imageUrl,
+                    classification: animal.classification || 'Unknown',
+                    owner_id: animal.owner_id || null,
+                    notification_sent: animal.notification_sent || false,
+                    notification_status: animal.notification_status || null
+                };
+            });
+            
+            // Initial filtering after fetch
+            filterSnapshots();
+        }
+    } catch (error) {
+        console.error('Error fetching recent snapshots:', error);
+        snapshotsError.value = 'Failed to fetch recent detections';
+    } finally {
+        loadingSnapshots.value = false;
     }
-  } catch (error) {
-    console.error("Failed to fetch recent snapshots:", error);
-    // Keep the default snapshots
-  }
 }
 
 // Change pagination page
@@ -541,6 +537,43 @@ function downloadSnapshot(snapshot) {
 function shareSnapshot(snapshot) {
   // Implementation of shareSnapshot function
 }
+
+// Function to send notification to owner
+/* Temporarily disabled
+async function sendNotification(snapshot) {
+  try {
+    const response = await axios.post('/api/send-notification', {
+      owner_id: snapshot.owner_id,
+      animal_type: snapshot.animalType,
+      location: snapshot.location,
+      detection_id: snapshot.id,
+      image_url: snapshot.imageUrl
+    });
+
+    if (response.data.success) {
+      // Update the snapshot with notification status
+      const index = recentSnapshots.value.findIndex(s => s.id === snapshot.id);
+      if (index !== -1) {
+        recentSnapshots.value[index] = {
+          ...recentSnapshots.value[index],
+          notification_sent: true,
+          notification_status: 'pending'
+        };
+        // Re-run filtering to update the view
+        filterSnapshots();
+      }
+      
+      // Show success message
+      alert('Notification sent to owner successfully');
+    } else {
+      throw new Error(response.data.message || 'Failed to send notification');
+    }
+  } catch (error) {
+    console.error('Error sending notification:', error);
+    alert('Failed to send notification: ' + (error.response?.data?.message || error.message));
+  }
+}
+*/
 </script>
 
 <template>
@@ -766,13 +799,29 @@ function shareSnapshot(snapshot) {
             </div>
           </div>
           <div class="detection-info">
-            <div class="detection-time">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-lg font-bold">{{ snapshot.animalType }}</div>
+              <q-badge :color="snapshot.classification === 'stray' ? 'negative' : 'positive'">
+                {{ snapshot.classification }}
+              </q-badge>
+            </div>
+            <div class="text-sm mb-1">
+              <i class="fas fa-map-marker-alt mr-1"></i>
+              {{ snapshot.location }}
+            </div>
+            <div class="text-sm mb-1" v-if="snapshot.owner_id">
+              <i class="fas fa-user mr-1"></i>
+              Owner ID: {{ snapshot.owner_id }}
+            </div>
+            <div class="text-xs text-gray-500">
               <i class="fas fa-clock mr-1"></i>
               {{ formatTimestamp(snapshot.timestamp) }}
             </div>
-            <div class="detection-location">
-              <i class="fas fa-map-marker-alt mr-1"></i>
-              {{ snapshot.location }}
+            <div class="text-xs mt-2" v-if="snapshot.notification_sent">
+              <q-badge :color="snapshot.notification_status === 'delivered' ? 'positive' : 'warning'" class="full-width">
+                <i class="fas fa-bell mr-1"></i>
+                {{ snapshot.notification_status === 'delivered' ? 'Notification Delivered' : 'Notification Pending' }}
+              </q-badge>
             </div>
           </div>
           <div class="detection-actions">
@@ -782,6 +831,18 @@ function shareSnapshot(snapshot) {
             <q-btn flat round size="sm" icon="share" @click.stop="shareSnapshot(snapshot)">
               <q-tooltip>Share</q-tooltip>
             </q-btn>
+            <!-- Temporarily disabled
+            <q-btn 
+              v-if="snapshot.owner_id && !snapshot.notification_sent"
+              flat 
+              round 
+              size="sm" 
+              icon="notifications" 
+              @click.stop="sendNotification(snapshot)"
+            >
+              <q-tooltip>Send Notification to Owner</q-tooltip>
+            </q-btn>
+            -->
           </div>
         </div>
       </div>
@@ -1016,5 +1077,23 @@ function shareSnapshot(snapshot) {
     margin-top: 0;
     justify-content: flex-end;
   }
+}
+
+.detection-info .q-badge {
+  padding: 4px 8px;
+}
+
+.detection-info .full-width {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.detection-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+  gap: 0.5rem;
 }
 </style>

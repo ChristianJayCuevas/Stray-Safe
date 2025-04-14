@@ -44,3 +44,12 @@ Route::middleware([ValidateStaticToken::class])->group(function () {
     Route::get('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'fetchRegisteredAnimals']);
     Route::post('/mobileregisteredanimals', [MobileRegisteredAnimalController::class, 'storeRegisteredAnimal']);
 });
+
+// User Areas API endpoints
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/user-areas', 'App\Http\Controllers\UserAreaController@index');
+    Route::post('/user-areas', 'App\Http\Controllers\UserAreaController@store');
+    Route::get('/user-areas/{id}', 'App\Http\Controllers\UserAreaController@show');
+    Route::put('/user-areas/{id}', 'App\Http\Controllers\UserAreaController@update');
+    Route::delete('/user-areas/{id}', 'App\Http\Controllers\UserAreaController@destroy');
+});

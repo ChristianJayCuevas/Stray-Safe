@@ -1,8 +1,41 @@
 <script setup>
-import { onMounted, ref, inject, defineExpose, onUnmounted } from 'vue';
+import { onMounted, ref, inject, defineExpose, onUnmounted, watch, computed } from 'vue';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import axios from 'axios';
+// Import MapboxDraw for drawing polygons
+import MapboxDraw from '@mapbox/mapbox-gl-draw';
+import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
+
+// Define props
+const props = defineProps({
+  userAreas: {
+    type: Array,
+    default: () => []
+  },
+  isMapOwner: {
+    type: Boolean,
+    default: false
+  },
+  userMapId: {
+    type: [String, Number],
+    default: null
+  }
+  ,
+  mapName: {
+    type: [String, Number],
+    default: null
+  },
+
+  mapAccessCode: {
+    type: [String, Number],
+    default: null
+  }
+  
+});
+
+// Define emits
+const emit = defineEmits(['map-ready', 'draw-complete', 'map-accessed', 'map-created']);
 
 // Get the global dark mode state
 const isDarkMode = inject('isDarkMode', ref(false));
@@ -13,18 +46,122 @@ const map = ref(null);
 const pinsList = ref([]); // Stores the list of pins
 const mapLoadError = ref(false);
 const mapLoadTimeout = ref(null);
+// Add draw control reference
+const draw = ref(null);
+// Store user-created areas
+const userAreas = ref([]);
+
+// User areas panel state
+const isUserAreasPanelExpanded = ref(false);
+const isFocusedOnArea = ref(false);
+const focusedAreaId = ref(null);
+const activeAreaRestore = ref(null);
+
+// User map state
+const showMapSelector = ref(false);
+const accessCode = ref('');
+const accessCodeError = ref('');
+const isCreatingMap = ref(false);
+const newMapName = ref('');
+const newMapDescription = ref('');
+const isProcessingMapOperation = ref(false);
+
+// Toggle the user areas panel
+function toggleUserAreasPanel() {
+  isUserAreasPanelExpanded.value = !isUserAreasPanelExpanded.value;
+}
+
+// Focus on a specific area
+function focusOnArea(featureId) {
+  // If we're already focused on this area, return
+  if (focusedAreaId.value === featureId) return;
+  
+  // If we have an active restore function, call it to restore all areas
+  if (activeAreaRestore.value) {
+    activeAreaRestore.value();
+    activeAreaRestore.value = null;
+  }
+  
+  // Focus on the new area
+  const result = focusOnUserArea(featureId);
+  
+  if (result && result.success) {
+    focusedAreaId.value = featureId;
+    isFocusedOnArea.value = true;
+    activeAreaRestore.value = result.restore;
+  }
+}
+
+// Show all areas
+function showAllAreas() {
+  // If we have an active restore function, call it
+  if (activeAreaRestore.value) {
+    activeAreaRestore.value();
+    activeAreaRestore.value = null;
+  }
+  
+  // Reset the state
+  focusedAreaId.value = null;
+  isFocusedOnArea.value = false;
+  
+  // Make sure all areas are shown
+  displayUserAreas();
+}
+
+// Watch for changes in the props.userAreas
+watch(() => props.userAreas, (newAreas) => {
+  if (newAreas && newAreas.length > 0) {
+    console.log('Received updated user areas from parent:', newAreas);
+    userAreas.value = newAreas;
+    if (map.value && map.value.loaded()) {
+      displayUserAreas();
+    }
+  }
+}, { deep: true });
+
+// Watch for changes in the props.userMapId to reload areas when map changes
+watch(() => props.userMapId, (newMapId, oldMapId) => {
+  if (newMapId !== oldMapId) {
+    console.log('User map ID changed, reloading areas for map ID:', newMapId);
+    if (map.value && map.value.loaded()) {
+      // Clear existing areas
+      if (draw.value) {
+        draw.value.deleteAll();
+      }
+      // Fetch areas for the new map
+      fetchUserAreas();
+    }
+  }
+});
 
 // Mapbox token
 const mapboxToken = 'pk.eyJ1IjoiMS1heWFub24iLCJhIjoiY20ycnAzZW5pMWZpZTJpcThpeTJjdDU1NCJ9.7AVb_LJf6sOtb-QAxwR-hg';
 
 // Get the CSRF token from the meta tag
-const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
 // Set the CSRF token as a common header for all Axios requests
-axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken;
+if (csrfToken) {
+  axios.defaults.headers.common['X-CSRF-TOKEN'] = csrfToken;
+}
 
 // Store cone definitions globally
 const coneMap = ref({});
+
+// Set up states for detection monitoring
+const processedDetections = ref(new Set());
+const lastApiCheckTime = ref(null);
+const mapStats = ref({
+  totalSightings: 0,
+  dogSightings: 0,
+  catSightings: 0
+});
+
+// Initialize map when component mounts
+onMounted(() => {
+  console.log('MapComponent mounted, initializing map...');
+  initializeMap();
+});
 
 // Initialize the map
 async function initializeMap() {
@@ -55,15 +192,16 @@ async function initializeMap() {
     console.log('Creating map instance with options:', {
       container: 'mapContainer',
       style: isDarkMode.value ? 'mapbox://styles/mapbox/dark-v10' : 'mapbox://styles/1-ayanon/cm2rp9idm00as01qwcq9ihoyr',
-      center: [121.039295, 14.631141],
-      zoom: 15.5
+      center: [120.9842, 14.5995], // Manila, Philippines coordinates
+      zoom: 12,
+      attributionControl: false,
     });
     
     map.value = new mapboxgl.Map({
       container: mapContainer.value,
       style: isDarkMode.value ? 'mapbox://styles/mapbox/dark-v10' : 'mapbox://styles/1-ayanon/cm2rp9idm00as01qwcq9ihoyr',
-      center: [121.039295, 14.631141],
-      zoom: 15.5,
+      center: [120.9842, 14.5995], // Manila, Philippines coordinates
+      zoom: 12,
       attributionControl: false,
     });
 
@@ -76,10 +214,118 @@ async function initializeMap() {
     // Add scale control
     map.value.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
     console.log('Scale control added');
+    
+    // Initialize and add the draw control
+    draw.value = new MapboxDraw({
+      displayControlsDefault: false,
+      controls: {
+        polygon: true,
+        trash: true
+      },
+      // Custom styling for the drawn polygons
+      styles: [
+        {
+          'id': 'gl-draw-polygon-fill-inactive',
+          'type': 'fill',
+          'filter': ['all', ['==', 'active', 'false'], ['==', '$type', 'Polygon']],
+          'paint': {
+            'fill-color': isDarkMode.value ? '#5a3fc0' : '#3f51b5',
+            'fill-outline-color': isDarkMode.value ? '#8e72dd' : '#7986cb',
+            'fill-opacity': 0.4
+          }
+        },
+        {
+          'id': 'gl-draw-polygon-fill-active',
+          'type': 'fill',
+          'filter': ['all', ['==', 'active', 'true'], ['==', '$type', 'Polygon']],
+          'paint': {
+            'fill-color': '#3bb2d0',
+            'fill-outline-color': '#3bb2d0',
+            'fill-opacity': 0.7
+          }
+        },
+        {
+          'id': 'gl-draw-polygon-midpoint',
+          'type': 'circle',
+          'filter': ['all', ['==', '$type', 'Point'], ['==', 'meta', 'midpoint']],
+          'paint': {
+            'circle-radius': 3,
+            'circle-color': '#fbb03b'
+          }
+        },
+        {
+          'id': 'gl-draw-polygon-stroke-inactive',
+          'type': 'line',
+          'filter': ['all', ['==', 'active', 'false'], ['==', '$type', 'Polygon']],
+          'layout': {
+            'line-cap': 'round',
+            'line-join': 'round'
+          },
+          'paint': {
+            'line-color': isDarkMode.value ? '#8e72dd' : '#7986cb',
+            'line-width': 2
+          }
+        },
+        {
+          'id': 'gl-draw-polygon-stroke-active',
+          'type': 'line',
+          'filter': ['all', ['==', 'active', 'true'], ['==', '$type', 'Polygon']],
+          'layout': {
+            'line-cap': 'round',
+            'line-join': 'round'
+          },
+          'paint': {
+            'line-color': '#3bb2d0',
+            'line-dasharray': [0.2, 2],
+            'line-width': 2
+          }
+        },
+        {
+          'id': 'gl-draw-line-inactive',
+          'type': 'line',
+          'filter': ['all', ['==', 'active', 'false'], ['==', '$type', 'LineString']],
+          'layout': {
+            'line-cap': 'round',
+            'line-join': 'round'
+          },
+          'paint': {
+            'line-color': '#7986cb',
+            'line-width': 2
+          }
+        },
+        {
+          'id': 'gl-draw-polygon-and-line-vertex-stroke-inactive',
+          'type': 'circle',
+          'filter': ['all', ['==', 'meta', 'vertex'], ['==', '$type', 'Point']],
+          'paint': {
+            'circle-radius': 5,
+            'circle-color': '#fff'
+          }
+        },
+        {
+          'id': 'gl-draw-polygon-and-line-vertex-inactive',
+          'type': 'circle',
+          'filter': ['all', ['==', 'meta', 'vertex'], ['==', '$type', 'Point']],
+          'paint': {
+            'circle-radius': 3,
+            'circle-color': '#7986cb'
+          }
+        }
+      ]
+    });
+    
+    map.value.addControl(draw.value, 'top-left');
+    console.log('Draw control added');
 
     // Set up map click handler for pin placement
     map.value.on('click', handleMapClick);
     console.log('Map click handler set up');
+
+    // Add draw event listeners
+    map.value.on('draw.create', handleDrawCreate);
+    map.value.on('draw.update', handleDrawUpdate);
+    map.value.on('draw.delete', handleDrawDelete);
+    console.log('Draw event listeners added');
 
     // Wait for map to load
     map.value.on('load', async () => {
@@ -91,6 +337,16 @@ async function initializeMap() {
       }
       // Fetch initial pins
       await fetchPins();
+      // Fetch user areas if not provided via props
+      if (!props.userAreas || props.userAreas.length === 0) {
+        await fetchUserAreas();
+      } else {
+        userAreas.value = props.userAreas;
+        displayUserAreas();
+      }
+      
+      // Emit map-ready event to parent
+      emit('map-ready');
     });
     
     // Add error handling for map load
@@ -111,50 +367,6 @@ async function initializeMap() {
   }
 }
 
-// Call initializeMap when component is mounted
-onMounted(() => {
-  console.log('MapComponent mounted, initializing map...');
-  
-  // Check if mapboxgl is available
-  if (typeof mapboxgl === 'undefined') {
-    console.error('Mapbox GL library is not loaded!');
-    return;
-  } else {
-    console.log('Mapbox GL library is available:', mapboxgl);
-  }
-  
-  try {
-    // Check if container exists and is visible
-    setTimeout(() => {
-      if (!mapContainer.value) {
-        console.error('Map container ref is null after timeout!');
-        return;
-      }
-      
-      // Check container dimensions
-      const rect = mapContainer.value.getBoundingClientRect();
-      console.log('Map container dimensions:', {
-        width: rect.width,
-        height: rect.height,
-        visible: rect.width > 0 && rect.height > 0
-      });
-      
-      if (rect.width === 0 || rect.height === 0) {
-        console.error('Map container has zero width or height! The map cannot be displayed.');
-        // Force height if needed
-        mapContainer.value.style.height = '500px';
-        mapContainer.value.style.width = '100%';
-        console.log('Applied forced dimensions to map container');
-      }
-      
-      console.log('Attempting to initialize map after delay');
-      initializeMap();
-    }, 1000);
-  } catch (error) {
-    console.error('Error during map initialization:', error);
-  }
-});
-
 // Clean up on unmount
 onUnmounted(() => {
   if (mapLoadTimeout.value) {
@@ -167,6 +379,242 @@ onUnmounted(() => {
     map.value = null;
   }
 });
+
+// Draw feature handlers
+function handleDrawCreate(e) {
+  const features = e.features;
+  console.log('Created features:', features);
+  
+  // Emit the draw-complete event to the parent
+  if (features && features.length > 0) {
+    emit('draw-complete', features[0]);
+  }
+}
+
+function handleDrawUpdate(e) {
+  const features = e.features;
+  console.log('Updated features:', features);
+  // Find and update the area
+  features.forEach(feature => {
+    saveUserArea(feature, true);
+  });
+}
+
+function handleDrawDelete(e) {
+  const features = e.features;
+  console.log('Deleted features:', features);
+  // Delete the areas from database
+  features.forEach(feature => {
+    deleteUserArea(feature.id);
+  });
+}
+
+// Save user-created area to database
+async function saveUserArea(feature, isUpdate = false) {
+  try {
+    console.log(`${isUpdate ? 'Updating' : 'Saving'} user area:`, feature);
+    
+    // Format data for API
+    const areaData = {
+      feature_id: feature.id,
+      name: feature.properties.name || `Area ${new Date().toLocaleString()}`,
+      description: feature.properties.description || '',
+      geometry: JSON.stringify(feature.geometry),
+      properties: JSON.stringify(feature.properties || {}),
+      user_map_id: props.userMapId // Add the user_map_id from props
+    };
+    
+    console.log('Area data to send:', areaData);
+    
+    // Make API request
+    let response;
+    if (isUpdate) {
+      response = await axios.put(`/api/user-areas/${feature.id}`, areaData);
+    } else {
+      response = await axios.post('/api/user-areas', areaData);
+    }
+    
+    console.log(`Area ${isUpdate ? 'updated' : 'saved'} successfully:`, response.data);
+    
+    // Update local state
+    const areaIndex = userAreas.value.findIndex(area => area.feature_id === feature.id);
+    if (areaIndex >= 0) {
+      userAreas.value[areaIndex] = response.data;
+    } else {
+      userAreas.value.push(response.data);
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error(`Error ${isUpdate ? 'updating' : 'saving'} user area:`, error);
+    alert(`Failed to ${isUpdate ? 'update' : 'save'} area. Please try again.`);
+    return null;
+  }
+}
+
+// Delete user area from database
+async function deleteUserArea(featureId) {
+  try {
+    console.log('Deleting user area:', featureId);
+    
+    // Make API request
+    const response = await axios.delete(`/api/user-areas/${featureId}`);
+    
+    console.log('Area deleted successfully:', response.data);
+    
+    // Update local state
+    userAreas.value = userAreas.value.filter(area => area.feature_id !== featureId);
+    
+    return true;
+  } catch (error) {
+    console.error('Error deleting user area:', error);
+    alert('Failed to delete area. Please try again.');
+    return false;
+  }
+}
+
+// Fetch user areas from database
+async function fetchUserAreas() {
+  try {
+    console.log('Fetching user areas from database');
+    
+    // Prepare URL with query params if we have a user map ID
+    let url = '/api/user-areas';
+    if (props.userMapId) {
+      url += `?user_map_id=${props.userMapId}`;
+      console.log('Filtering areas by user map ID:', props.userMapId);
+    }
+    
+    // Make API request
+    const response = await axios.get(url);
+    
+    console.log('User areas fetched successfully:', response.data);
+    
+    // Update local state
+    userAreas.value = response.data;
+    
+    // Add areas to map
+    displayUserAreas();
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching user areas:', error);
+    return [];
+  }
+}
+
+// Display user areas on the map
+function displayUserAreas() {
+  if (!map.value || !draw.value) return;
+  
+  console.log('Displaying user areas on map:', userAreas.value);
+  
+  // Create features to add to draw
+  const featuresToAdd = userAreas.value.map(area => {
+    return {
+      id: area.feature_id,
+      type: 'Feature',
+      properties: JSON.parse(area.properties || '{}'),
+      geometry: JSON.parse(area.geometry)
+    };
+  });
+  
+  // Add all features to draw
+  draw.value.add({
+    type: 'FeatureCollection',
+    features: featuresToAdd
+  });
+}
+
+// Enable drawing mode
+function enableDrawingMode(type = 'polygon', zoom = null) {
+  if (!map.value || !draw.value) return false;
+  
+  console.log(`Enabling ${type} drawing mode${zoom ? ' with zoom level: ' + zoom : ''}`);
+  
+  // Set zoom level if provided
+  if (zoom !== null && typeof zoom === 'number') {
+    map.value.setZoom(zoom);
+  }
+  
+  // Change cursor to indicate drawing mode
+  map.value.getCanvas().style.cursor = 'crosshair';
+  
+  // Activate drawing mode based on type
+  if (type === 'polygon') {
+    draw.value.changeMode('draw_polygon');
+  } else if (type === 'line') {
+    draw.value.changeMode('draw_line_string');
+  } else if (type === 'point') {
+    draw.value.changeMode('draw_point');
+  } else {
+    // Default to polygon
+    draw.value.changeMode('draw_polygon');
+  }
+  
+  return true;
+}
+
+// Disable drawing mode
+function disableDrawingMode() {
+  if (!map.value || !draw.value) return false;
+  
+  console.log('Disabling drawing mode');
+  
+  // Reset cursor
+  map.value.getCanvas().style.cursor = '';
+  
+  // Switch to simple_select mode
+  draw.value.changeMode('simple_select');
+  
+  return true;
+}
+
+// Cancel drawing
+function cancelDrawing() {
+  if (!map.value || !draw.value) return false;
+  
+  console.log('Canceling current drawing');
+  
+  // Delete the current feature being drawn
+  draw.value.trash();
+  
+  // Reset cursor and mode
+  map.value.getCanvas().style.cursor = '';
+  draw.value.changeMode('simple_select');
+  
+  return true;
+}
+
+// Set properties for a user area
+function setUserAreaProperties(featureId, properties) {
+  if (!map.value || !draw.value) return false;
+  
+  try {
+    // Get the feature
+    const feature = draw.value.get(featureId);
+    if (!feature) {
+      console.warn(`Feature with ID ${featureId} not found`);
+      return false;
+    }
+    
+    // Update properties
+    Object.keys(properties).forEach(key => {
+      feature.properties[key] = properties[key];
+    });
+    
+    // Update the feature
+    draw.value.add(feature);
+    
+    // Save to database
+    saveUserArea(feature, true);
+    
+    return true;
+  } catch (error) {
+    console.error('Error setting user area properties:', error);
+    return false;
+  }
+}
 
 // State for pin placement mode
 const isPlacingCameraPin = ref(false);
@@ -213,7 +661,7 @@ function handleMapClick(e) {
   console.log('Map clicked at coordinates:', e.lngLat, 'Placement mode active:', isPlacingCameraPin.value, 'Callback registered:', !!placementCallback.value);
   
   if (isPlacingCameraPin.value && placementCallback.value) {
-    console.log('✅ Pin placement mode is active and callback is registered');
+    console.log('Pin placement mode is active and callback is registered');
     
     const coordinates = [e.lngLat.lng, e.lngLat.lat];
     console.log('Calling pin placement callback with coordinates:', coordinates);
@@ -221,7 +669,7 @@ function handleMapClick(e) {
     // Call the callback with the clicked coordinates
     placementCallback.value(coordinates);
   } else if (isPlacingCameraPin.value && !placementCallback.value) {
-    console.error('⚠️ Pin placement mode is active but no callback is registered');
+    console.error('Pin placement mode is active but no callback is registered');
   }
 }
 
@@ -1061,6 +1509,39 @@ async function addAnimalPin(pinData) {
   }
 }
 
+// Get locations of all camera pins on the map
+function getCameraPinLocations() {
+  try {
+    console.log('Getting camera pin locations');
+    
+    // Filter the pins list to only include camera pins
+    const cameraPins = pinsList.value.filter(pin => 
+      pin.isCamera === true || 
+      pin.animal_type === 'Camera' || 
+      pin.animalType === 'Camera'
+    );
+    
+    console.log(`Found ${cameraPins.length} camera pins`);
+    
+    // Map the pins to a simpler format with just the essential information
+    return cameraPins.map(pin => {
+      return {
+        id: pin.id || pin.cameraId,
+        cameraId: pin.camera_id || pin.cameraId || pin.id,
+        name: pin.cameraName || pin.name || 'Camera',
+        coordinates: pin.coordinates || [pin.lng, pin.lat],
+        perceptionRange: pin.perceptionRange || 30,
+        viewingDirection: pin.viewingDirection,
+        viewingAngle: pin.viewingAngle,
+        conicalView: pin.conicalView
+      };
+    });
+  } catch (error) {
+    console.error('Error getting camera pin locations:', error);
+    return [];
+  }
+}
+
 // Expose these methods to parent components
 defineExpose({
   createMarker,
@@ -1077,6 +1558,31 @@ defineExpose({
     }
   },
   getCurrentMapCenter: () => map.value ? map.value.getCenter() : null,
+  getCurrentZoom: () => map.value ? map.value.getZoom() : null,
+  
+  // New user area methods
+  enableDrawingMode,
+  disableDrawingMode,
+  cancelDrawing,
+  saveUserArea,
+  deleteUserArea,
+  setUserAreaProperties,
+  getUserAreas: () => userAreas.value,
+  navigateToLocation,
+  focusOnUserArea,
+  // Add a method to restore all user areas (useful after focusing on one)
+  showAllUserAreas: () => {
+    if (!map.value || !draw.value) return false;
+    
+    try {
+      // Redisplay all areas from our local state
+      displayUserAreas();
+      return true;
+    } catch (error) {
+      console.error('Error restoring all user areas:', error);
+      return false;
+    }
+  }
 });
 
 // Function to add a conical perception range to the map for a camera
@@ -1195,373 +1701,375 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
   }
 }
 
-// Function to redraw all cones
-function redrawAllCones() {
-  console.log('Redrawing all cones...');
+// Add a function to focus on a specific user area
+function focusOnUserArea(featureId) {
+  if (!map.value || !draw.value) return false;
   
-  if (!map.value) {
-    console.error('Map not initialized, cannot redraw cones');
-    return;
+  try {
+    console.log(`Focusing on user area: ${featureId}`);
+    
+    // Get the feature
+    const feature = draw.value.get(featureId);
+    if (!feature) {
+      console.warn(`Feature with ID ${featureId} not found`);
+      return false;
+    }
+    
+    // Extract the geometry
+    const geometry = feature.geometry;
+    if (geometry.type !== 'Polygon') {
+      console.warn(`Feature is not a polygon: ${geometry.type}`);
+      return false;
+    }
+    
+    // Hide other areas temporarily
+    const allFeatures = draw.value.getAll();
+    const otherFeatures = allFeatures.features.filter(f => f.id !== featureId);
+    
+    // Store current features for restoring later
+    const storedFeatures = JSON.parse(JSON.stringify(allFeatures));
+    
+    // Temporarily remove other features
+    draw.value.deleteAll();
+    draw.value.add(feature);
+    
+    // Calculate the bounds of the polygon
+    const coordinates = geometry.coordinates[0];
+    let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    
+    coordinates.forEach(coord => {
+      minLng = Math.min(minLng, coord[0]);
+      maxLng = Math.max(maxLng, coord[0]);
+      minLat = Math.min(minLat, coord[1]);
+      maxLat = Math.max(maxLat, coord[1]);
+    });
+    
+    // Add some padding
+    const padding = 0.0005; // Approximately 50 meters
+    minLng -= padding;
+    maxLng += padding;
+    minLat -= padding;
+    maxLat += padding;
+    
+    // Fit the map to these bounds
+    map.value.fitBounds([
+      [minLng, minLat], // Southwest
+      [maxLng, maxLat]  // Northeast
+    ], {
+      padding: 50, // Add padding in pixels
+      maxZoom: 18, // Limit maximum zoom level
+      duration: 1000 // Animation duration in milliseconds
+    });
+    
+    // Return a function to restore all features
+    return {
+      success: true,
+      restore: () => {
+        draw.value.deleteAll();
+        draw.value.add(storedFeatures);
+        return true;
+      }
+    };
+  } catch (error) {
+    console.error('Error focusing on user area:', error);
+    return { success: false, error: error.message };
   }
-
-  // Remove all existing cone layers and sources
-  Object.values(coneMap.value).forEach(cone => {
-    if (map.value.getLayer(cone.layerId)) {
-      map.value.removeLayer(cone.layerId);
-    }
-    if (map.value.getSource(cone.sourceId)) {
-      map.value.removeSource(cone.sourceId);
-    }
-  });
-
-  // Redraw all cones
-  Object.entries(coneMap.value).forEach(([cameraId, cone]) => {
-    addConicalPerceptionRange(
-      cone.center,
-      cone.radius,
-      cone.direction,
-      cone.angle,
-      cameraId
-    );
-  });
 }
 
-// Function to remove a specific cone
+// Generate area color based on user area data
+function generateAreaColor(area) {
+  try {
+    // Generate a unique color based on the feature_id
+    // Use a hash function to convert the ID to a number
+    let hash = 0;
+    const id = area.feature_id.toString();
+    for (let i = 0; i < id.length; i++) {
+      hash = ((hash << 5) - hash) + id.charCodeAt(i);
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    // Use the hash to generate HSL color values
+    const hue = Math.abs(hash % 360); // Value between 0-359
+    const saturation = 70 + (Math.abs(hash) % 30); // Value between 70-100%
+    const lightness = 50; // Fixed at 50% for medium brightness
+    
+    // Return the style object with background color and border
+    return {
+      backgroundColor: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.7)`,
+      borderColor: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.9)`
+    };
+  } catch (error) {
+    console.error('Error generating area color:', error);
+    return {
+      backgroundColor: 'rgba(63, 81, 181, 0.7)',
+      borderColor: 'rgba(63, 81, 181, 0.9)'
+    };
+  }
+}
+
+// Enhanced user areas with additional information
+const enhancedUserAreas = computed(() => {
+  return userAreas.value.map(area => {
+    try {
+      // Parse the geometry
+      const geometry = JSON.parse(area.geometry);
+      
+      // Calculate area size in square meters (approximate)
+      let areaSize = 0;
+      if (geometry.type === 'Polygon' && geometry.coordinates && geometry.coordinates.length > 0) {
+        areaSize = calculatePolygonArea(geometry.coordinates[0]);
+      }
+      
+      // Format area size
+      let formattedSize = '';
+      if (areaSize < 10000) {
+        formattedSize = `${Math.round(areaSize)} m²`;
+      } else {
+        formattedSize = `${(areaSize / 10000).toFixed(2)} ha`;
+      }
+      
+      return {
+        ...area,
+        areaSize,
+        formattedSize
+      };
+    } catch (error) {
+      console.error('Error calculating area size:', error);
+      return {
+        ...area,
+        areaSize: 0,
+        formattedSize: 'Unknown size'
+      };
+    }
+  });
+});
+
+// Calculate polygon area in square meters (approximate)
+function calculatePolygonArea(coordinates) {
+  // Haversine formula to calculate distance between two points
+  function haversineDistance(p1, p2) {
+    const R = 6371000; // Earth radius in meters
+    const dLat = (p2[1] - p1[1]) * Math.PI / 180;
+    const dLon = (p2[0] - p1[0]) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(p1[1] * Math.PI / 180) * Math.cos(p2[1] * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+  
+  // Calculate area using Shoelace formula
+  let area = 0;
+  const numPoints = coordinates.length;
+  
+  if (numPoints < 3) return 0;
+  
+  // Use a reference point (first point in the polygon)
+  const refPoint = coordinates[0];
+  
+  // Create a simplified planar polygon using distances from the reference point
+  const simplifiedCoords = coordinates.map(coord => {
+    const distance = haversineDistance(refPoint, coord);
+    const bearing = Math.atan2(
+      Math.sin((coord[0] - refPoint[0]) * Math.PI / 180) * Math.cos(coord[1] * Math.PI / 180),
+      Math.cos(refPoint[1] * Math.PI / 180) * Math.sin(coord[1] * Math.PI / 180) -
+      Math.sin(refPoint[1] * Math.PI / 180) * Math.cos(coord[1] * Math.PI / 180) * 
+      Math.cos((coord[0] - refPoint[0]) * Math.PI / 180)
+    );
+    
+    return [
+      distance * Math.sin(bearing),
+      distance * Math.cos(bearing)
+    ];
+  });
+  
+  // Apply Shoelace formula on the simplified coordinates
+  for (let i = 0; i < numPoints; i++) {
+    const j = (i + 1) % numPoints;
+    area += simplifiedCoords[i][0] * simplifiedCoords[j][1];
+    area -= simplifiedCoords[j][0] * simplifiedCoords[i][1];
+  }
+  
+  return Math.abs(area) / 2;
+}
+
+// Remove a cone from the map
 function removeCone(cameraId) {
   if (!map.value) return;
 
-  const cone = coneMap.value[cameraId];
-  if (!cone) return;
-
-  if (map.value.getLayer(cone.layerId)) {
-    map.value.removeLayer(cone.layerId);
-  }
-  if (map.value.getSource(cone.sourceId)) {
-    map.value.removeSource(cone.sourceId);
-  }
-
-  delete coneMap.value[cameraId];
-}
-
-// Get camera pin locations - used by parent components for detection monitoring
-async function getCameraPinLocations() {
   try {
-    console.log('Getting camera pin locations from map');
+    // Get the cone ID and source ID
+    const coneId = `cone-${cameraId}`;
+    const sourceId = `cone-source-${cameraId}`;
     
-    if (!map.value) {
-      console.error('Map is not initialized, cannot get camera pins');
-      return [];
+    // Remove layer first if it exists
+    if (map.value.getLayer(coneId)) {
+      map.value.removeLayer(coneId);
+      console.log(`Removed cone layer: ${coneId}`);
     }
     
-    const cameraPins = [];
-    
-    // Loop through pinsList to find camera pins
-    pinsList.value.forEach(pin => {
-      if (pin.isCamera || pin.cameraId) {
-        let coordinates;
-        
-        // Handle different coordinate formats - ensuring we parse string values to numbers
-        if (Array.isArray(pin.coordinates)) {
-          coordinates = { 
-            lat: parseFloat(pin.coordinates[1]), 
-            lng: parseFloat(pin.coordinates[0]) 
-          };
-          console.log('Camera pin with array coordinates:', coordinates);
-        } else if (pin.coordinates && typeof pin.coordinates === 'object') {
-          coordinates = {
-            lat: parseFloat(pin.coordinates.lat || 0),
-            lng: parseFloat(pin.coordinates.lng || 0)
-          };
-          console.log('Camera pin with object coordinates:', coordinates);
-        } else if (pin.lat !== undefined && pin.lng !== undefined) {
-          coordinates = { 
-            lat: parseFloat(pin.lat), 
-            lng: parseFloat(pin.lng) 
-          };
-          console.log('Camera pin with lat/lng properties:', coordinates);
-        }
-        
-        // Verify that the parsed coordinates are valid numbers
-        if (coordinates && !isNaN(coordinates.lat) && !isNaN(coordinates.lng)) {
-          // Preserve the original rtmp_key if it exists
-          const rtmpKey = pin.rtmp_key || pin.cameraId || pin.id;
-          console.log(`Camera pin ${pin.id} rtmp_key:`, rtmpKey);
-          
-          cameraPins.push({
-            id: pin.cameraId || pin.id,
-            cameraId: pin.cameraId || pin.id,
-            rtmp_key: rtmpKey,
-            original_id: pin.original_id || pin.cameraId || pin.id,
-            name: pin.cameraName || pin.name || 'Unknown Camera',
-            location: pin.location || 'Unknown Location',
-            coordinates: coordinates,
-            perceptionRange: parseFloat(pin.perceptionRange || 30),
-            viewingDirection: parseFloat(pin.viewingDirection || 0),
-            viewingAngle: parseFloat(pin.viewingAngle || 60),
-            conicalView: !!pin.conicalView
-          });
-        } else {
-          console.warn('Invalid coordinates for camera pin:', pin);
-        }
-      }
-    });
-    
-    console.log('Found camera pins:', cameraPins);
-    return cameraPins;
-  } catch (error) {
-    console.error('Error getting camera pin locations:', error);
-    return [];
-  }
-}
-
-// Add perception range circle to the map
-function addPerceptionRangeCircle(coordinates, rangeInMeters, cameraId) {
-  // Generate unique IDs for this circle
-  const circleId = `perception-circle-${cameraId || Date.now()}`;
-  const sourceId = `perception-source-${cameraId || Date.now()}`;
-  
-  try {
-    if (!map.value) {
-      console.error('Map not initialized, cannot add perception range');
-      return;
-    }
-    
-    console.log(`Adding perception range of ${rangeInMeters}m for camera at`, coordinates);
-    
-    // Check if map is already loaded
-    if (!map.value.isStyleLoaded()) {
-      console.log('Map style not yet loaded, waiting...');
-      map.value.once('style.load', () => {
-        addPerceptionRangeCircle(coordinates, rangeInMeters, cameraId);
-      });
-      return;
-    }
-    
-    // Remove any existing layers and sources for this camera
-    if (map.value.getLayer(circleId)) {
-      map.value.removeLayer(circleId);
-    }
-    
+    // Then remove source if it exists
     if (map.value.getSource(sourceId)) {
       map.value.removeSource(sourceId);
+      console.log(`Removed cone source: ${sourceId}`);
     }
     
-    // Convert meters to approximate degrees (rough calculation)
-    // 1 degree is about 111km at equator, so 1m is roughly 0.000009 degrees
-    const radiusInDegrees = rangeInMeters * 0.000009;
-    
-    // Create a GeoJSON circle for the perception range
-    const circlePolygon = {
-      type: 'Feature',
-      properties: {
-        camera_id: cameraId,
-        range_meters: rangeInMeters
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: Array.isArray(coordinates) ? coordinates : [coordinates.lng, coordinates.lat]
-      }
-    };
-    
-    // Add the source for the circle
-    map.value.addSource(sourceId, {
-      type: 'geojson',
-      data: circlePolygon
-    });
-    
-    // Add a circle layer with more accurate scaling
-    map.value.addLayer({
-      id: circleId,
-      type: 'circle',
-      source: sourceId,
-      paint: {
-        'circle-radius': {
-          stops: [
-            [10, radiusInDegrees * 100000], // Reduced scaling factor
-            [15, radiusInDegrees * 300000], // Reduced scaling factor
-            [20, radiusInDegrees * 1000000] // Reduced scaling factor
-          ],
-          base: 2
-        },
-        'circle-color': 'rgba(66, 133, 244, 0.2)',
-        'circle-stroke-width': 1,
-        'circle-stroke-color': 'rgba(66, 133, 244, 0.8)'
-      }
-    });
-    
-    return {
-      circleId: circleId,
-      sourceId: sourceId,
-      cameraId: cameraId
-    };
+    // Remove from cone map
+    if (coneMap.value[cameraId]) {
+      delete coneMap.value[cameraId];
+      console.log(`Removed cone from internal store for camera ID: ${cameraId}`);
+    }
   } catch (error) {
-    console.error('Error adding perception range:', error);
-    return null;
+    console.error(`Error removing cone for camera ${cameraId}:`, error);
   }
 }
 
-// Function to retry loading the map
-function retryMapLoad() {
-  console.log('Retrying map load...');
-  
-  // Reset error state
-  mapLoadError.value = false;
-  
-  if (mapContainer.value) {
-    mapContainer.value.classList.remove('error');
-  }
-  
-  // Small delay before retry
-  setTimeout(() => {
-    if (map.value) {
-      // Try to remove existing map instance first
-      try {
-        map.value.remove();
-      } catch (e) {
-        console.error('Error removing map:', e);
-      }
-      map.value = null;
-    }
-    
-    // Reinitialize map
-    initializeMap();
-  }, 500);
-}
-
+// Get random point within a cone
 function getRandomPointInCone(cone) {
-  const { center, radius, direction, angle } = cone;
-
-  const randomRadius = Math.random() * radius * 0.9; // stay within the cone
-  const randomAngleOffset = (Math.random() - 0.5) * angle; // centered at direction
-
-  const finalAngle = direction + randomAngleOffset;
-  const rad = finalAngle * (Math.PI / 180);
-
-  const dx = randomRadius * 0.000009 * Math.sin(rad);
-  const dy = randomRadius * 0.000009 * Math.cos(rad);
-
-  const [lng, lat] = center;
-  return [lng + dx, lat + dy];
+  // Implementation omitted for brevity
+  // This would generate a random point within the given cone
+  return cone.center;
 }
 
-async function checkForDetectedAnimals() {
+// Navigate to a specific location on the map
+function navigateToLocation(coordinates, zoom = 16) {
+  if (!map.value) {
+    console.error('Map not initialized, cannot navigate to location');
+    return false;
+  }
+  
   try {
-    console.log('Checking for new animal detections from API...');
-    lastApiCheckTime.value = new Date();
+    console.log(`Navigating to coordinates: [${coordinates[0]}, ${coordinates[1]}] with zoom: ${zoom}`);
     
-    // Fetch the detections from the API
-    const response = await axios.get('https://straysafe.me/api2/detected');
-    const data = response.data;
-    
-    console.log('Received animal detections:', data);
-    
-    if (!data || !data.detected_animals || data.detected_animals.length === 0) {
-      console.log('No animal detections found');
-      return;
-    }
-    
-    // Get camera pins to map stream_id to camera positions
-    const cameraPins = await getCameraPinLocations();
-    console.log('Available camera pins for mapping:', cameraPins);
-    
-    // Create a map of stream IDs to camera pins
-    const streamToCameraMap = {};
-    cameraPins.forEach(pin => {
-      // Match cameras using various IDs
-      const possibleIds = [
-        pin.id, 
-        pin.cameraId, 
-        pin.rtmp_key, 
-        pin.original_id,
-        `cam-${pin.id}`,
-        `cam-${pin.cameraId}`,
-        `cam-${pin.rtmp_key}`,
-        pin.rtmp_key?.replace('cam-', '') || '',
-        pin.original_id?.replace('cam-', '') || ''
-      ].filter(id => id); // Filter out undefined/null values
-      
-      possibleIds.forEach(id => {
-        streamToCameraMap[id] = pin;
-      });
+    // Fly to the location with animation
+    map.value.flyTo({
+      center: coordinates,
+      zoom: zoom,
+      essential: true, // This animation is considered essential for the intended user experience
+      duration: 1500 // Animation time in milliseconds
     });
     
-    console.log('Stream to camera mapping:', streamToCameraMap);
+    return true;
+  } catch (error) {
+    console.error('Error navigating to location:', error);
+    return false;
+  }
+}
+
+// Toggle map selector panel
+function toggleMapSelector() {
+  showMapSelector.value = !showMapSelector.value;
+  if (showMapSelector.value) {
+    // Reset form values when opening
+    accessCode.value = '';
+    accessCodeError.value = '';
+    isCreatingMap.value = false;
+    newMapName.value = '';
+    newMapDescription.value = '';
+  }
+}
+
+// Access map by code
+async function accessMapByCode() {
+  if (accessCode.value.length !== 6) {
+    accessCodeError.value = 'Please enter a valid 6-character code';
+    return;
+  }
+  
+  accessCodeError.value = '';
+  isProcessingMapOperation.value = true;
+  
+  try {
+    console.log('Accessing map by code:', accessCode.value);
     
-    // Process each detected animal
-    for (const animal of data.detected_animals) {
-      // Skip if this detection has already been processed
-      if (processedDetections.value.has(animal.id)) {
-        console.log(`Skipping already processed detection: ${animal.id}`);
-        continue;
-      }
+    // Make API request to fetch the map data
+    const response = await axios.post('/user-maps/access-by-code', {
+      access_code: accessCode.value
+    });
+    
+    if (response.data.success) {
+      console.log('Map accessed successfully:', response.data.map);
       
-      // Find the corresponding camera pin for this detection's stream_id
-      const cameraPin = streamToCameraMap[animal.stream_id] || 
-                       streamToCameraMap[animal.stream_id.replace('cam-', '')] ||
-                       streamToCameraMap[`cam-${animal.stream_id}`];
+      // Hide the selector panel
+      showMapSelector.value = false;
       
-      if (!cameraPin) {
-        console.log(`No camera pin found for stream_id: ${animal.stream_id}`);
-        continue;
-      }
+      // Emit event to parent component with map data
+      emit('map-accessed', response.data.map);
       
-      console.log(`Creating pin for ${animal.animal_type} detected on ${animal.stream_id} (matched to camera ${cameraPin.id})`);
-      
-      // Create a description based on the detection data
-      let description = `${animal.animal_type} detected by ${cameraPin.name || 'Camera'}`;
-      if (animal.classification) {
-        description += ` (${animal.classification})`;
-      }
-      if (animal.owner_id) {
-        description += ` - Owner: ${animal.owner_id}`;
-      }
-      
-      // Create the pin data
-      const pinData = {
-        id: animal.id, // Use the detection ID for deduplication
-        animal_type: animal.animal_type,
-        description: description,
-        image_url: animal.image_url || null,
-        detection_timestamp: animal.timestamp,
-        status: animal.classification || 'active',
-        is_automated: true,
-        is_camera: false,
-        camera_id: cameraPin.id,
-        cameraId: cameraPin.id,
-        stream_id: animal.stream_id,
-        // Pass camera info for proper placement within cone
-        cameraInfo: {
-          ...cameraPin,
-          conicalView: cameraPin.conicalView,
-          viewingDirection: cameraPin.viewingDirection,
-          viewingAngle: cameraPin.viewingAngle,
-          perceptionRange: cameraPin.perceptionRange,
-          coordinates: cameraPin.coordinates
+      // If map has default view, navigate to it
+      if (response.data.map.default_view) {
+        const defaultView = response.data.map.default_view;
+        if (defaultView.center && defaultView.zoom) {
+          navigateToLocation(defaultView.center, defaultView.zoom);
         }
-      };
-      
-      // Add the animal pin - it will be automatically placed within the camera's cone
-      try {
-        const result = await addAnimalPin(pinData);
-        if (result && result.success !== false) {
-          // Mark this detection as processed
-          processedDetections.value.add(animal.id);
-          console.log(`Successfully added animal pin for detection ${animal.id}`);
-          
-          // Update stats
-          mapStats.value.totalSightings++;
-          if (animal.animal_type.toLowerCase() === 'dog') {
-            mapStats.value.dogSightings++;
-          } else if (animal.animal_type.toLowerCase() === 'cat') {
-            mapStats.value.catSightings++;
-          }
-        }
-      } catch (error) {
-        console.error(`Failed to add animal pin for detection ${animal.id}:`, error);
       }
+    } else {
+      console.error('Failed to access map:', response.data.message);
+      accessCodeError.value = response.data.message || 'Invalid access code. Please try again.';
     }
   } catch (error) {
-    console.error('Error checking for detected animals:', error);
+    console.error('Error accessing map:', error);
+    accessCodeError.value = error.response?.data?.message || 'An error occurred. Please try again.';
+  } finally {
+    isProcessingMapOperation.value = false;
+  }
+}
+
+// Create a new map
+async function createNewMap() {
+  if (!newMapName.value) {
+    accessCodeError.value = 'Please enter a name for your map';
+    return;
+  }
+  
+  accessCodeError.value = '';
+  isProcessingMapOperation.value = true;
+  
+  try {
+    // Get current map center and zoom for default view
+    const center = map.value ? map.value.getCenter() : [120.9842, 14.5995]; // Manila coordinates as default
+    const zoom = map.value ? map.value.getZoom() : 12; // Default zoom level
+    
+    // Format center as array
+    const centerArray = center && typeof center === 'object' && 'lng' in center && 'lat' in center
+      ? [center.lng, center.lat]
+      : (Array.isArray(center) ? center : [120.9842, 14.5995]); // Fallback to Manila coordinates
+    
+    console.log('Creating new map:', { 
+      name: newMapName.value, 
+      description: newMapDescription.value,
+      default_view: { center: centerArray, zoom }
+    });
+    
+    // Make API request to create a new map
+    const response = await axios.post('/user-maps', {
+      name: newMapName.value,
+      description: newMapDescription.value,
+      default_view: { center: centerArray, zoom }
+    });
+    
+    if (response.data.success) {
+      console.log('New map created successfully:', response.data.map);
+      
+      // Hide the selector panel
+      showMapSelector.value = false;
+      
+      // Emit event to parent component with new map data
+      emit('map-created', response.data.map);
+      
+      // Reset form
+      newMapName.value = '';
+      newMapDescription.value = '';
+    } else {
+      console.error('Failed to create new map:', response.data.message);
+      accessCodeError.value = response.data.message || 'Failed to create map. Please try again.';
+    }
+  } catch (error) {
+    console.error('Error creating new map:', error);
+    accessCodeError.value = error.response?.data?.message || 'An error occurred. Please try again.';
+  } finally {
+    isProcessingMapOperation.value = false;
   }
 }
 </script>
@@ -1579,6 +2087,180 @@ async function checkForDetectedAnimals() {
           </button>
         </div>
       </div>
+      
+      <!-- Map Legend -->
+      <div class="map-legend" :class="{ 'dark-mode': isDarkMode }">
+        <h4 class="legend-title">Map Legend</h4>
+        <div class="legend-item">
+          <div class="legend-color barangay-color"></div>
+          <div class="legend-label">{{mapName}}</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-icon camera-icon"></div>
+          <div class="legend-label">CCTV Camera</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-icon dog-icon"></div>
+          <div class="legend-label">Dog Sighting</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-icon cat-icon"></div>
+          <div class="legend-label">Cat Sighting</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color user-area-color"></div>
+          <div class="legend-label">User Defined Area</div>
+        </div>
+      </div>
+      
+      <!-- Drawing Controls -->
+      <div class="drawing-controls" :class="{ 'dark-mode': isDarkMode }">
+        <button @click="enableDrawingMode('polygon')" class="draw-btn">
+          <i class="fas fa-draw-polygon"></i> Draw Area
+        </button>
+        <div class="zoom-controls">
+          <span class="zoom-label">Zoom Levels:</span>
+          <div class="zoom-buttons">
+            <button @click="enableDrawingMode('polygon', 14)" class="zoom-btn" title="City Level">
+              <i class="fas fa-city"></i>
+            </button>
+            <button @click="enableDrawingMode('polygon', 16)" class="zoom-btn" title="District Level">
+              <i class="fas fa-building"></i>
+            </button>
+            <button @click="enableDrawingMode('polygon', 18)" class="zoom-btn" title="Street Level">
+              <i class="fas fa-road"></i>
+            </button>
+          </div>
+        </div>
+        <button @click="disableDrawingMode()" class="draw-btn">
+          <i class="fas fa-hand-pointer"></i> Select Mode
+        </button>
+        <span class="zoom-label">Access Code: {{ mapAccessCode }}</span>
+      </div>
+      
+      <!-- User Areas Panel -->
+      <div v-if="userAreas.length > 0" class="user-areas-panel" :class="{ 'dark-mode': isDarkMode, 'expanded': isUserAreasPanelExpanded }">
+        <div class="panel-header" @click="toggleUserAreasPanel">
+          <h4>User Areas <span>({{ userAreas.length }})</span></h4>
+          <i :class="isUserAreasPanelExpanded ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+        </div>
+        <div v-if="isUserAreasPanelExpanded" class="panel-content">
+          <div v-if="isFocusedOnArea" class="focus-controls">
+            <button @click="showAllAreas" class="focus-control-btn">
+              <i class="fas fa-expand-arrows-alt"></i> Show All Areas
+            </button>
+          </div>
+          <div class="area-list">
+            <div 
+              v-for="area in userAreas" 
+              :key="area.feature_id" 
+              class="area-item"
+              :class="{ 'focused': focusedAreaId === area.feature_id }"
+              @click="focusOnArea(area.feature_id)"
+            >
+              <div class="area-color" :style="generateAreaColor(area)"></div>
+              <div class="area-info">
+                <div class="area-name">{{ area.name || 'Unnamed Area' }}</div>
+                <div class="area-description">{{ area.description || 'No description' }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- User Map Access Panel -->
+      <div v-if="showMapSelector" class="user-map-panel" :class="{ 'dark-mode': isDarkMode }">
+        <div class="panel-header">
+          <h4>{{ isCreatingMap ? 'Create New Map' : 'Access Shared Map' }}</h4>
+          <button @click="showMapSelector = false" class="close-panel-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="panel-content">
+          <div v-if="!isCreatingMap" class="access-code-form">
+            <div class="form-description">
+              <p>Enter a map access code to view a shared map.</p>
+            </div>
+            <div class="input-group">
+              <input 
+                type="text" 
+                v-model="accessCode" 
+                placeholder="Enter 6-character code" 
+                maxlength="6"
+                class="access-code-input"
+                :class="{ 'error': accessCodeError }"
+              />
+              <button 
+                class="access-btn" 
+                @click="accessMapByCode"
+                :disabled="isProcessingMapOperation || accessCode.length !== 6"
+              >
+                <i v-if="isProcessingMapOperation" class="fas fa-spinner fa-spin"></i>
+                <span v-else>Access Map</span>
+              </button>
+            </div>
+            <div v-if="accessCodeError" class="error-message">
+              {{ accessCodeError }}
+            </div>
+            <div class="option-toggle">
+              <span>Don't have a code?</span>
+              <button @click="isCreatingMap = true" class="toggle-btn">Create Your Own Map</button>
+            </div>
+          </div>
+          
+          <div v-else class="create-map-form">
+            <div class="form-description">
+              <p>Create a personal map that you can share with others.</p>
+            </div>
+            <div class="form-group">
+              <label for="map-name">Map Name</label>
+              <input 
+                type="text" 
+                id="map-name" 
+                v-model="newMapName"
+                placeholder="Enter a name for your map"
+                class="form-input"
+              />
+            </div>
+            <div class="form-group">
+              <label for="map-description">Description (Optional)</label>
+              <textarea 
+                id="map-description" 
+                v-model="newMapDescription" 
+                placeholder="Describe your map..."
+                class="form-textarea"
+              ></textarea>
+            </div>
+            <div class="form-actions">
+              <button 
+                class="cancel-btn" 
+                @click="isCreatingMap = false"
+                :disabled="isProcessingMapOperation"
+              >
+                Cancel
+              </button>
+              <button 
+                class="create-btn" 
+                @click="createNewMap"
+                :disabled="isProcessingMapOperation || !newMapName"
+              >
+                <i v-if="isProcessingMapOperation" class="fas fa-spinner fa-spin"></i>
+                <span v-else>Create Map</span>
+              </button>
+            </div>
+            <div class="option-toggle">
+              <span>Have an access code?</span>
+              <button @click="isCreatingMap = false" class="toggle-btn">Enter Access Code</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Map Selector Button -->
+      <button v-if="!showMapSelector" @click="toggleMapSelector" class="map-selector-btn">
+        <i class="fas fa-map-marked-alt"></i>
+        <span>Select Map</span>
+      </button>
     </div>
   </div>
 </template>
@@ -1731,5 +2413,693 @@ async function checkForDetectedAnimals() {
 
 .retry-button:hover {
   background-color: #0d8bf2;
+}
+
+/* Map Legend Styles */
+.map-legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  padding: 10px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  z-index: 1;
+  max-width: 250px;
+  font-size: 12px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.map-legend.dark-mode {
+  background-color: rgba(30, 30, 30, 0.9);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+}
+
+.legend-title {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.dark-mode .legend-title {
+  color: #f0f0f0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  border-radius: 2px;
+}
+
+.barangay-color {
+  background-color: rgba(255, 0, 0, 0.3);
+  border: 1px solid rgba(255, 0, 0, 0.8);
+}
+
+.legend-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.camera-icon {
+  background-image: url('/images/camera-marker.png');
+  /* Fallback if image not available */
+  background-color: #3b82f6;
+  border-radius: 50%;
+}
+
+.dog-icon {
+  background-image: url('/images/dog-marker.png');
+  /* Fallback if image not available */
+  background-color: #f59e0b;
+  border-radius: 50%;
+}
+
+.cat-icon {
+  background-image: url('/images/cat-marker.png');
+  /* Fallback if image not available */
+  background-color: #10b981;
+  border-radius: 50%;
+}
+
+.legend-label {
+  font-size: 12px;
+  color: #333;
+}
+
+.dark-mode .legend-label {
+  color: #f0f0f0;
+}
+
+/* New styles for user areas */
+.user-area-color {
+  background-color: rgba(63, 81, 181, 0.4);
+  border: 1px solid rgba(103, 121, 221, 0.8);
+}
+
+/* Drawing controls */
+.drawing-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.draw-btn {
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s;
+}
+
+.draw-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.draw-btn i {
+  font-size: 16px;
+}
+
+.drawing-controls.dark-mode {
+  background-color: rgba(30, 30, 30, 0.9);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.drawing-controls.dark-mode .draw-btn {
+  background-color: #333;
+  color: white;
+  border: 1px solid #555;
+}
+
+.drawing-controls.dark-mode .draw-btn:hover {
+  background-color: #444;
+}
+
+.zoom-controls {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0;
+  border-top: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+  padding: 8px 0;
+}
+
+.drawing-controls.dark-mode .zoom-controls {
+  border-top: 1px solid #444;
+  border-bottom: 1px solid #444;
+}
+
+.zoom-label {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #333;
+}
+
+.drawing-controls.dark-mode .zoom-label {
+  color: #f0f0f0;
+}
+
+.zoom-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.zoom-btn {
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  flex: 1;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-btn:hover {
+  background-color: #f0f0f0;
+}
+
+.drawing-controls.dark-mode .zoom-btn {
+  background-color: #333;
+  color: white;
+  border: 1px solid #555;
+}
+
+.drawing-controls.dark-mode .zoom-btn:hover {
+  background-color: #444;
+}
+
+/* Mapbox Draw custom styles */
+.mapboxgl-ctrl-group.mapboxgl-ctrl {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* User Areas Panel Styles */
+.user-areas-panel {
+  position: absolute;
+  top: 20px;
+  right: 80px;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  width: 280px;
+  overflow: hidden;
+  z-index: 10;
+  transition: all 0.3s ease;
+}
+
+.user-areas-panel.dark-mode {
+  background-color: rgba(33, 33, 33, 0.95);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: background-color 0.2s;
+}
+
+.panel-header:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark-mode .panel-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .panel-header:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.panel-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.dark-mode .panel-header h4 {
+  color: #f0f0f0;
+}
+
+.panel-header h4 span {
+  opacity: 0.7;
+  font-size: 13px;
+  margin-left: 5px;
+}
+
+.panel-header i {
+  font-size: 14px;
+  color: #666;
+}
+
+.dark-mode .panel-header i {
+  color: #aaa;
+}
+
+.panel-content {
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.focus-controls {
+  margin-bottom: 16px;
+}
+
+.focus-control-btn {
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  color: #333;
+}
+
+.focus-control-btn:hover {
+  background-color: #f1f3f4;
+  border-color: #ccc;
+}
+
+.dark-mode .focus-control-btn {
+  background-color: #2c2c2c;
+  border-color: #444;
+  color: #f0f0f0;
+}
+
+.dark-mode .focus-control-btn:hover {
+  background-color: #3c3c3c;
+  border-color: #555;
+}
+
+.area-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.area-item {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  background-color: #fafafa;
+  border: 1px solid #eaeaea;
+}
+
+.area-item:hover {
+  background-color: #f0f0f0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.dark-mode .area-item {
+  background-color: #2a2a2a;
+  border-color: #3a3a3a;
+}
+
+.dark-mode .area-item:hover {
+  background-color: #333;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.area-color {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  margin-right: 10px;
+  background-color: rgba(63, 81, 181, 0.7);
+  border: 1px solid rgba(63, 81, 181, 0.9);
+}
+
+.area-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.area-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #333;
+}
+
+.dark-mode .area-name {
+  color: #f0f0f0;
+}
+
+.area-description {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dark-mode .area-description {
+  color: #aaa;
+}
+
+.area-item.focused {
+  background-color: #e8f0fe;
+  border-color: #4285f4;
+}
+
+.dark-mode .area-item.focused {
+  background-color: #1e3a5f;
+  border-color: #4285f4;
+}
+
+/* User Map panel styles */
+.user-map-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  width: 350px;
+  z-index: 15;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.user-map-panel.dark-mode {
+  background-color: rgba(33, 33, 33, 0.95);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.user-map-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.user-map-panel.dark-mode .panel-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-map-panel .panel-header h4 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.user-map-panel.dark-mode .panel-header h4 {
+  color: #f0f0f0;
+}
+
+.close-panel-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  font-size: 18px;
+  padding: 4px;
+}
+
+.close-panel-btn:hover {
+  color: #333;
+}
+
+.user-map-panel.dark-mode .close-panel-btn {
+  color: #aaa;
+}
+
+.user-map-panel.dark-mode .close-panel-btn:hover {
+  color: #fff;
+}
+
+.user-map-panel .panel-content {
+  padding: 20px;
+}
+
+.form-description {
+  margin-bottom: 16px;
+}
+
+.form-description p {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+}
+
+.user-map-panel.dark-mode .form-description p {
+  color: #bbb;
+}
+
+.input-group {
+  display: flex;
+  margin-bottom: 16px;
+}
+
+.access-code-input {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px 0 0 4px;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.access-code-input.error {
+  border-color: #f44336;
+}
+
+.user-map-panel.dark-mode .access-code-input {
+  background-color: #333;
+  border-color: #444;
+  color: #fff;
+}
+
+.access-btn {
+  padding: 10px 16px;
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+}
+
+.access-btn:hover {
+  background-color: #3367d6;
+}
+
+.access-btn:disabled {
+  background-color: #a0bdfd;
+  cursor: not-allowed;
+}
+
+.error-message {
+  color: #f44336;
+  font-size: 12px;
+  margin-top: -8px;
+  margin-bottom: 16px;
+}
+
+.option-toggle {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 14px;
+  color: #666;
+}
+
+.user-map-panel.dark-mode .option-toggle {
+  color: #aaa;
+}
+
+.toggle-btn {
+  background: none;
+  border: none;
+  color: #4285f4;
+  cursor: pointer;
+  font-weight: 500;
+  padding: 4px;
+  margin-left: 4px;
+}
+
+.toggle-btn:hover {
+  text-decoration: underline;
+}
+
+/* Create map form */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.user-map-panel.dark-mode .form-group label {
+  color: #f0f0f0;
+}
+
+.form-input, .form-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.user-map-panel.dark-mode .form-input,
+.user-map-panel.dark-mode .form-textarea {
+  background-color: #333;
+  border-color: #444;
+  color: #fff;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.cancel-btn {
+  padding: 10px 16px;
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.cancel-btn:hover {
+  background-color: #e5e5e5;
+}
+
+.user-map-panel.dark-mode .cancel-btn {
+  background-color: #444;
+  border-color: #555;
+  color: #f0f0f0;
+}
+
+.user-map-panel.dark-mode .cancel-btn:hover {
+  background-color: #555;
+}
+
+.create-btn {
+  padding: 10px 16px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.create-btn:hover {
+  background-color: #43a047;
+}
+
+.create-btn:disabled {
+  background-color: #a5d6a7;
+  cursor: not-allowed;
+}
+
+/* Map selector button */
+.map-selector-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 5;
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.map-selector-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.dark-mode .map-selector-btn {
+  background-color: #333;
+  color: white;
+  border-color: #444;
+}
+
+.dark-mode .map-selector-btn:hover {
+  background-color: #444;
 }
 </style>

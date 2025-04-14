@@ -34,4 +34,12 @@ class MapPin extends Model
         'location',
         'rtmp_key',
     ];
+
+    /**
+     * Get the user map this pin belongs to
+     */
+    public function userMap()
+    {
+        return $this->belongsTo(UserMap::class, 'user_map_id');
+    }
 }

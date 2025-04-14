@@ -24,10 +24,10 @@ class CameraPinController extends Controller
                 'coordinates' => 'required|array|size:2',
                 'coordinates.0' => 'required|numeric',
                 'coordinates.1' => 'required|numeric',
-                'camera_id' => 'required|string',
-                'camera_name' => 'required|string',
-                'hls_url' => 'required|string',
-                'conical_view' => 'sometimes|boolean',
+                'camera_id' => 'nullable|string',
+                'camera_name' => 'nullable|string',
+                'hls_url' => 'nullable|string',
+                'conical_view' => 'nullable|boolean',
                 'viewing_direction' => 'nullable|numeric',
                 'viewing_angle' => 'nullable|numeric',
                 'perception_range' => 'nullable|numeric',
@@ -36,6 +36,7 @@ class CameraPinController extends Controller
                 'cone_radius' => 'nullable|numeric',
                 'cone_direction' => 'nullable|numeric',
                 'cone_angle' => 'nullable|numeric',
+                'user_map_id' => 'nullable|exists:user_maps,id',
             ]);
             
             Log::info('Camera pin validation successful', $validated);
@@ -98,6 +99,7 @@ class CameraPinController extends Controller
                 'original_id' => $request->original_id ?? $request->camera_id,
                 'location' => $request->location ?? 'Unknown Location',
                 'rtmp_key' => $request->rtmp_key ?? $request->camera_id,
+                'user_map_id' => $request->user_map_id,
                 
                 // Add cone data
                 'cone_coordinates' => json_encode($conePoints),

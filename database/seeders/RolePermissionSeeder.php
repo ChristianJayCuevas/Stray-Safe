@@ -29,6 +29,7 @@ class RolePermissionSeeder extends Seeder
             'manage_cctv' => 'Can manage CCTV cameras and streams',
             'view_cctv' => 'Can view CCTV feeds',
             'manage_map_pins' => 'Can manage map pins and locations',
+            'manage_maps' => 'Can manage user maps and access codes',
             'view_analytics' => 'Can view analytics and reports',
             'manage_notifications' => 'Can manage notifications',
         ];
@@ -50,6 +51,7 @@ class RolePermissionSeeder extends Seeder
                 'manage_posts',
                 'view_cctv',
                 'manage_map_pins',
+                'manage_maps',
                 'manage_notifications',
             ],
             'animal_pound' => [
