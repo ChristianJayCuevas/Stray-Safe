@@ -20,18 +20,19 @@ const props = defineProps({
   userMapId: {
     type: [String, Number],
     default: null
-  }
-  ,
+  },
   mapName: {
     type: [String, Number],
     default: null
   },
-
   mapAccessCode: {
     type: [String, Number],
     default: null
+  },
+  authUser: {
+    type: Object,
+    default: null
   }
-  
 });
 
 // Define emits
@@ -1669,9 +1670,60 @@ function addConicalPerceptionRange(coordinates, rangeInMeters, direction, angle,
       layout: {},
       paint: {
         'fill-color': '#4285F4',
-        'fill-opacity': 0.25,
+        'fill-opacity': 0.35,
         'fill-outline-color': '#4285F4',
         'fill-translate': [0, 0] // Ensure no translation
+      }
+    });
+
+    // Add a line layer to make the cone edge more visible
+    map.value.addLayer({
+      id: `${coneId}-line`,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+      paint: {
+        'line-color': '#1a73e8',
+        'line-width': 2,
+        'line-opacity': 0.8
+      }
+    });
+
+    // Add a directional arrow at the tip of the cone
+    const arrowPoints = [
+      [lng, lat],
+      [
+        lng + radiusInDegrees * Math.sin(directionRad),
+        lat + radiusInDegrees * Math.cos(directionRad)
+      ]
+    ];
+
+    map.value.addSource(`${sourceId}-arrow`, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: arrowPoints
+        }
+      }
+    });
+
+    map.value.addLayer({
+      id: `${coneId}-arrow`,
+      type: 'line',
+      source: `${sourceId}-arrow`,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+      paint: {
+        'line-color': '#1a73e8',
+        'line-width': 2,
+        'line-dasharray': [2, 1]
       }
     });
 
@@ -1903,16 +1955,28 @@ function removeCone(cameraId) {
     const coneId = `cone-${cameraId}`;
     const sourceId = `cone-source-${cameraId}`;
     
-    // Remove layer first if it exists
+    // Remove layers first if they exist
     if (map.value.getLayer(coneId)) {
       map.value.removeLayer(coneId);
       console.log(`Removed cone layer: ${coneId}`);
     }
+    if (map.value.getLayer(`${coneId}-line`)) {
+      map.value.removeLayer(`${coneId}-line`);
+      console.log(`Removed cone line layer: ${coneId}-line`);
+    }
+    if (map.value.getLayer(`${coneId}-arrow`)) {
+      map.value.removeLayer(`${coneId}-arrow`);
+      console.log(`Removed cone arrow layer: ${coneId}-arrow`);
+    }
     
-    // Then remove source if it exists
+    // Then remove sources if they exist
     if (map.value.getSource(sourceId)) {
       map.value.removeSource(sourceId);
       console.log(`Removed cone source: ${sourceId}`);
+    }
+    if (map.value.getSource(`${sourceId}-arrow`)) {
+      map.value.removeSource(`${sourceId}-arrow`);
+      console.log(`Removed cone arrow source: ${sourceId}-arrow`);
     }
     
     // Remove from cone map
@@ -2261,6 +2325,26 @@ async function createNewMap() {
         <i class="fas fa-map-marked-alt"></i>
         <span>Select Map</span>
       </button>
+
+      <!-- Pin in Map Button (Super Admin Only) -->
+      <button 
+        v-if="props.authUser && props.authUser.role === 'super_admin'"
+        @click="enablePinPlacementMode"
+        class="pin-in-map-btn"
+      >
+        <i class="fas fa-map-pin"></i>
+        <span>Pin in Map</span>
+      </button>
+
+      <!-- Pin in Map Button (Super Admin Only) -->
+      <button 
+        v-if="$page.props.auth.user && $page.props.auth.user.role === 'super_admin'"
+        @click="enablePinPlacementMode"
+        class="pin-in-map-btn"
+      >
+        <i class="fas fa-map-pin"></i>
+        <span>Pin in Map</span>
+      </button>
     </div>
   </div>
 </template>
@@ -2327,8 +2411,9 @@ async function createNewMap() {
 /* Camera direction indicator */
 .camera-direction-indicator {
   position: absolute;
-  top: -8px;
+  top: -4px;
   left: 50%;
+  margin-left: -5px;
   transform-origin: bottom center;
   width: 0;
   height: 0;
@@ -2342,6 +2427,24 @@ async function createNewMap() {
 .camera-marker {
   background-color: #2c3e50;
   color: white;
+  box-shadow: 0 0 0 2px white, 0 0 0 4px #4285F4;
+}
+
+.camera-marker.has-cone {
+  background-color: #1a73e8;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(26, 115, 232, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(26, 115, 232, 0);
+  }
 }
 
 /* Popup styles */

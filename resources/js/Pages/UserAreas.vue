@@ -230,7 +230,7 @@ onMounted(() => {
   <AuthenticatedLayout>
     <template #default>
       <div class="q-pa-md">
-        <div class="text-h4 q-mb-md">User Areas</div>
+        <div class="text-3xl font-bold font-poppins">User Areas</div>
         <p class="text-subtitle1 q-mb-lg">Create and manage your custom defined areas on the map.</p>
 
         <div class="row q-col-gutter-md">

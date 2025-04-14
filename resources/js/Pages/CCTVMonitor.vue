@@ -583,7 +583,7 @@ async function sendNotification(snapshot) {
       <div class="page-header px-6">
         <div class="flex justify-between items-center">
           <div class="header-title">
-            <h1 class="text-3xl font-bold">CCTV Surveillance System</h1>
+            <h1 class="text-3xl font-bold font-poppins">CCTV Surveillance System</h1>
             <p class="text-gray-600 dark:text-gray-400">Barangay Sacred Heart</p>
           </div>
 

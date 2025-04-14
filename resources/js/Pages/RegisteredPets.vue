@@ -55,7 +55,7 @@
 
                     <div class="stat-card">
                         <div class="stat-icon dog-icon">
-                            <q-icon name="dog" size="sm" />
+                            <q-icon name="pets" size="sm" />
                         </div>
                         <div class="stat-info">
                             <div class="stat-value">{{ dogCount }}</div>
@@ -65,7 +65,7 @@
 
                     <div class="stat-card">
                         <div class="stat-icon cat-icon">
-                            <q-icon name="cat" size="sm" />
+                            <q-icon name="pets" size="sm" />
                         </div>
                         <div class="stat-info">
                             <div class="stat-value">{{ catCount }}</div>

@@ -7,7 +7,7 @@
             <div class="page-header mb-6">
                 <div class="flex justify-between items-center">
                     <div class="header-title">
-                        <h1 class="text-3xl font-bold">Role Management</h1>
+                        <h1 class="text-3xl font-bold font-poppins">Role Management</h1>
                         <p class="text-secondary">Manage roles and permissions for system users</p>
                     </div>
                 </div>
