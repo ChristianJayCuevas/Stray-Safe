@@ -71,13 +71,13 @@ async function addCustomCard() {
     alert('Please provide a name and select a stream URL');
     return;
   }
-  
+
   // Find the selected stream details
   const selectedStream = availableStreams.value.find(stream => stream.hls_url === selectedStreamUrl.value);
-  
+
   // Ensure stream URL uses https
   const secureStreamUrl = selectedStreamUrl.value ? selectedStreamUrl.value.replace('http://', 'https://') : '';
-  
+
   try {
     // Save to the backend
     const response = await axios.post('/cctvs', {
@@ -86,7 +86,7 @@ async function addCustomCard() {
       stream_url: secureStreamUrl,
       original_stream_id: selectedStream ? selectedStream.id : null
     });
-    
+
     if (response.data.success) {
       // Add the card with the ID from the server
       const newCard = {
@@ -99,13 +99,13 @@ async function addCustomCard() {
         isCustom: true,
         originalStreamId: selectedStream ? selectedStream.id : null
       };
-      
+
       // Add to custom cards
       customCards.value.push(newCard);
-      
+
       // Close the dialog
       closeCreateCardDialog();
-      
+
       console.log('Custom CCTV saved successfully:', response.data.cctv);
     } else {
       console.error('Failed to save custom CCTV:', response.data.message);
@@ -132,13 +132,13 @@ const hlsAvailable = ref(Hls.isSupported());
 const fetchStreams = async () => {
   loading.value = true;
   streamError.value = false;
-  
+
   try {
     const response = await axios.get('https://straysafe.me/api2/streams')
-    
+
     // Log the raw response for debugging
     console.log('Stream API response:', response.data);
-    
+
     // Safely extract the streams with validation
     let streams = [];
     if (response.data && Array.isArray(response.data.streams)) {
@@ -149,7 +149,7 @@ const fetchStreams = async () => {
       console.warn('Unexpected streams data format:', response.data);
       streams = [];
     }
-    
+
     // Store available streams for selection with careful validation
     availableStreams.value = streams.map(stream => {
       // Ensure we have all required properties
@@ -193,7 +193,7 @@ function useSampleData() {
       isCustom: true
     }];
   }
-  
+
   systemStats.value = {
     totalCameras: customCards.value.length,
     onlineCameras: customCards.value.length,
@@ -208,10 +208,10 @@ onMounted(() => {
   if (!hlsAvailable.value) {
     console.warn('HLS.js is not available - video playback may be limited');
   }
-  
+
   // Check authentication status
   checkAuthStatus();
-  
+
   // Initialize with custom CCTVs from props
   if (props.initialCustomCCTVs && props.initialCustomCCTVs.length > 0) {
     customCards.value = props.initialCustomCCTVs.map(cctv => ({
@@ -226,7 +226,7 @@ onMounted(() => {
       originalStreamId: cctv.original_stream_id
     }));
   }
-  
+
   fetchStreams();
   fetchRecentSnapshots();
 });
@@ -258,17 +258,17 @@ function closeDialog() {
 // Register a stream instance
 function registerStreamInstance(id, videoElement, hlsInstance) {
   console.log(`Registering stream instance for ${id}`);
-  
+
   // If we already have an instance for this stream, clean it up first
   if (activeHlsInstances.value[id] && activeHlsInstances.value[id] !== hlsInstance) {
     console.log(`Cleaning up existing HLS instance for ${id}`);
     activeHlsInstances.value[id].destroy();
   }
-  
+
   activeStreamInstances.value[id] = videoElement;
   if (hlsInstance) {
     activeHlsInstances.value[id] = hlsInstance;
-    
+
     // Set up quality levels if available
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
       if (data.levels.length > 1) {
@@ -276,11 +276,11 @@ function registerStreamInstance(id, videoElement, hlsInstance) {
         hlsInstance.currentLevel = 1;
       }
     });
-    
+
     // Monitor for stalls and automatically recover
     let lastTime = 0;
     let stallCount = 0;
-    
+
     const checkStall = setInterval(() => {
       if (videoElement && !videoElement.paused) {
         if (videoElement.currentTime === lastTime) {
@@ -296,7 +296,7 @@ function registerStreamInstance(id, videoElement, hlsInstance) {
         lastTime = videoElement.currentTime;
       }
     }, 1000);
-    
+
     // Clean up interval when HLS instance is destroyed
     hlsInstance.on(Hls.Events.DESTROYING, () => {
       clearInterval(checkStall);
@@ -342,12 +342,12 @@ async function fetchRecentSnapshots() {
     try {
         loadingSnapshots.value = true;
         const response = await axios.get('https://straysafe.me/api2/detected');
-        
+
         if (response.data && response.data.detected_animals) {
             recentSnapshots.value = response.data.detected_animals.map(animal => {
                 // Convert the image URL from detected-img to debug-img
-                const imageUrl = animal.image_url ? 
-                    animal.image_url.replace('detected-img', 'debug-img') : 
+                const imageUrl = animal.image_url ?
+                    animal.image_url.replace('detected-img', 'debug-img') :
                     'https://placehold.co/600x400/4f6642/FFFFFF/png?text=No+Image';
 
                 return {
@@ -362,7 +362,7 @@ async function fetchRecentSnapshots() {
                     notification_status: animal.notification_status || null
                 };
             });
-            
+
             // Initial filtering after fetch
             filterSnapshots();
         }
@@ -391,18 +391,18 @@ async function removeCustomCard(cardId) {
   try {
     // Delete from backend
     const response = await axios.delete(`/cctvs/${cardId}`);
-    
+
     if (response.data.success) {
       // Remove from local list
       const index = customCards.value.findIndex(card => card.id === cardId);
       if (index !== -1) {
         customCards.value.splice(index, 1);
-        
+
         // Update system stats
         systemStats.value.totalCameras = cctvs.value.length + customCards.value.length;
         systemStats.value.onlineCameras = cctvs.value.filter(cam => cam.status === 'Online').length + customCards.value.length;
       }
-      
+
       console.log('Custom CCTV deleted successfully');
     } else {
       console.error('Failed to delete custom CCTV:', response.data.message);
@@ -425,14 +425,14 @@ const snapshotNotification = ref({
 // Function to handle snapshot
 function handleSnapshot(snapshotData) {
   console.log('Snapshot received:', snapshotData);
-  
+
   snapshotNotification.value = {
     show: true,
     image: snapshotData.dataUrl,
     time: new Date().toLocaleString(),
     camera: snapshotData.cameraName || 'Unknown Camera'
   };
-  
+
   // Auto-hide the notification after 5 seconds
   setTimeout(() => {
     if (snapshotNotification.value.show) {
@@ -469,18 +469,18 @@ const paginatedSnapshots = computed(() => {
 function filterSnapshots() {
   loadingSnapshots.value = true;
   snapshotsError.value = null;
-  
+
   try {
     const filtered = recentSnapshots.value.filter(snapshot => {
       // Animal type filter
-      const typeMatch = selectedAnimalType.value === 'All' || 
+      const typeMatch = selectedAnimalType.value === 'All' ||
                        snapshot.animalType === selectedAnimalType.value;
-      
+
       // Time filter
       const snapshotDate = new Date(snapshot.timestamp);
       const now = new Date();
       let timeMatch = true;
-      
+
       if (timeFilter.value === '24h') {
         timeMatch = (now - snapshotDate) <= 24 * 60 * 60 * 1000;
       } else if (timeFilter.value === '7d') {
@@ -488,10 +488,10 @@ function filterSnapshots() {
       } else if (timeFilter.value === '30d') {
         timeMatch = (now - snapshotDate) <= 30 * 24 * 60 * 60 * 1000;
       }
-      
+
       return typeMatch && timeMatch;
     });
-    
+
     filteredSnapshots.value = filtered;
     snapshotsPagination.value.totalPages = Math.ceil(filtered.length / snapshotsPagination.value.rowsPerPage);
     snapshotsPagination.value.page = 1; // Reset to first page when filter changes
@@ -562,7 +562,7 @@ async function sendNotification(snapshot) {
         // Re-run filtering to update the view
         filterSnapshots();
       }
-      
+
       // Show success message
       alert('Notification sent to owner successfully');
     } else {
@@ -580,13 +580,13 @@ async function sendNotification(snapshot) {
   <AuthenticatedLayout>
     <div class="cctv-monitor-container px-6 py-4" :class="{ 'dark-mode': isDarkTheme }">
       <!-- Header Section -->
-      <div class="page-header">
+      <div class="page-header px-6">
         <div class="flex justify-between items-center">
           <div class="header-title">
             <h1 class="text-3xl font-bold">CCTV Surveillance System</h1>
             <p class="text-gray-600 dark:text-gray-400">Barangay Sacred Heart</p>
           </div>
-          
+
           <!-- CCTV Controls -->
           <div class="header-actions">
             <div class="system-time">
@@ -599,7 +599,7 @@ async function sendNotification(snapshot) {
       </div>
 
       <!-- Stats Grid -->
-      <div class="stats-grid">
+      <div class="stats-grid mx-6">
         <div class="stat-card">
           <div class="stat-icon">
             <i class="fas fa-video"></i>
@@ -618,7 +618,7 @@ async function sendNotification(snapshot) {
             <div class="stat-label">Online Cameras</div>
           </div>
         </div>
-        
+
         <div class="stat-card">
           <div class="stat-icon">
             <i class="fas fa-paw"></i>
@@ -640,25 +640,22 @@ async function sendNotification(snapshot) {
       </div>
 
       <!-- CCTV Grid -->
-      <div class="page-header mb-6">
-        <h2 class="text-2xl font-bold">My Custom CCTV Instances</h2>
-        <div class="header-actions">
+      <div class="page-header px-6 mb-6">
+        <div class="flex justify-between items-center">
           <div class="current-time">
-            <i class="fas fa-clock mr-2"></i>
-            {{ new Date().toLocaleTimeString() }}
+            <h2 class="text-2xl font-bold">CCTV Instances</h2>
           </div>
-          <q-btn class="primary-btn mr-2" icon="add" label="Add Camera Card" @click="openCreateCardDialog" />
-          <q-btn class="secondary-btn" icon="refresh" label="Refresh" @click="fetchStreams" />
+          <q-btn class="primary-btn" icon="add" label="Add Camera Card" @click="openCreateCardDialog" />
         </div>
       </div>
 
-      <div v-if="loading" class="loading-container">
+      <div v-if="loading" class="loading-container mx-6">
         <q-spinner color="primary" size="3em" />
         <p class="mt-2">Loading CCTV streams...</p>
       </div>
 
       <!-- Error message -->
-      <div v-else-if="streamError" class="error-container">
+      <div v-else-if="streamError" class="error-container mx-6">
         <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
         <p class="mb-2">Unable to connect to the stream server.</p>
         <p class="mb-4">Using fallback camera configuration.</p>
@@ -667,9 +664,9 @@ async function sendNotification(snapshot) {
           <q-btn class="primary-btn" icon="open_in_new" label="Test Stream in Browser" @click="openStreamInBrowser" />
         </div>
       </div>
-      
+
       <!-- Empty streams message -->
-      <div v-else-if="availableStreams.length === 0 && customCards.length === 0" class="error-container">
+      <div v-else-if="availableStreams.length === 0 && customCards.length === 0" class="error-container mx-6">
         <i class="fas fa-video-slash text-yellow-500 text-3xl mb-2"></i>
         <p class="mb-2">No CCTV streams are currently available.</p>
         <p class="mb-4">You can add a custom CCTV card with your own stream URL.</p>
@@ -679,15 +676,15 @@ async function sendNotification(snapshot) {
         </div>
       </div>
 
-      <div v-else class="cctv-grid">
+      <div v-else class="cctv-grid mx-6">
         <div v-for="(cctv, index) in paginatedCCTVs" :key="cctv.id" class="cctv-card" @click="openDialog(cctv)">
           <div class="live-indicator">
             <span class="pulse"></span>
             <span class="live-text">LIVE</span>
           </div>
           <div class="cctv-feed">
-            <StreamPlayer 
-              :streamUrl="cctv.videoSrc[0]" 
+            <StreamPlayer
+              :streamUrl="cctv.videoSrc[0]"
               @snapshot="handleSnapshot"
             />
           </div>
@@ -706,7 +703,7 @@ async function sendNotification(snapshot) {
       </div>
 
       <!-- Pagination Controls -->
-      <div class="flex justify-center mt-6 mb-6">
+      <div class="pagination-container mx-6">
         <q-pagination
           v-model="pagination.page"
           :max="pagination.totalPages"
@@ -734,63 +731,67 @@ async function sendNotification(snapshot) {
       </div>
 
       <!-- Recent Detections Section -->
-      <div class="page-header mb-6">
-        <h2 class="text-2xl font-bold">Recent Detections</h2>
-        <div class="header-actions">
-          <div class="filter-controls">
-            <q-select
-              v-model="selectedAnimalType"
-              :options="['All', 'Dog', 'Cat', 'Other']"
-              label="Filter by type"
-              dense
-              outlined
-              class="mr-2"
-              style="min-width: 150px"
-            />
-            <q-btn-group outline>
-              <q-btn
-                :color="timeFilter === '24h' ? 'primary' : 'grey'"
-                label="24h"
-                @click="timeFilter = '24h'"
-              />
-              <q-btn
-                :color="timeFilter === '7d' ? 'primary' : 'grey'"
-                label="7d"
-                @click="timeFilter = '7d'"
-              />
-              <q-btn
-                :color="timeFilter === '30d' ? 'primary' : 'grey'"
-                label="30d"
-                @click="timeFilter = '30d'"
-              />
-            </q-btn-group>
+      <div class="page-header px-6 mb-6">
+        <div class="flex justify-between items-center">
+          <div class="current-time">
+            <h2 class="text-2xl font-bold">Recent Detections</h2>
           </div>
-          <q-btn class="secondary-btn ml-4" icon="refresh" label="Refresh" @click="fetchRecentSnapshots" />
+          <div class="header-actions">
+            <div class="filter-controls">
+              <q-select
+                v-model="selectedAnimalType"
+                :options="['All', 'Dog', 'Cat', 'Other']"
+                label="Filter by type"
+                dense
+                outlined
+                class="mr-2"
+                style="min-width: 150px"
+              />
+              <q-btn-group outline>
+                <q-btn
+                  :color="timeFilter === '24h' ? 'primary' : 'grey'"
+                  label="24h"
+                  @click="timeFilter = '24h'"
+                />
+                <q-btn
+                  :color="timeFilter === '7d' ? 'primary' : 'grey'"
+                  label="7d"
+                  @click="timeFilter = '7d'"
+                />
+                <q-btn
+                  :color="timeFilter === '30d' ? 'primary' : 'grey'"
+                  label="30d"
+                  @click="timeFilter = '30d'"
+                />
+              </q-btn-group>
+            </div>
+            <q-btn class="secondary-btn ml-4" icon="refresh" label="Refresh" @click="fetchRecentSnapshots" />
+          </div>
         </div>
       </div>
 
       <!-- Loading State -->
-      <div v-if="loadingSnapshots" class="loading-container">
+      <div v-if="loadingSnapshots" class="loading-container mx-6">
         <q-spinner color="primary" size="3em" />
         <p class="mt-2">Loading recent detections...</p>
       </div>
 
       <!-- Error State -->
-      <div v-else-if="snapshotsError" class="error-container">
+      <div v-else-if="snapshotsError" class="error-container mx-6">
         <i class="fas fa-exclamation-triangle text-red-500 text-3xl mb-2"></i>
         <p class="mb-2">{{ snapshotsError }}</p>
         <q-btn class="secondary-btn" icon="refresh" label="Try Again" @click="fetchRecentSnapshots" />
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="filteredSnapshots.length === 0" class="empty-container">
+      <div v-else-if="filteredSnapshots.length === 0" class="empty-container mx-6">
         <i class="fas fa-camera text-gray-400 text-3xl mb-2"></i>
         <p class="mb-2">No detections found for the selected filters.</p>
         <p class="text-sm text-gray-500">Try adjusting your filters or checking back later.</p>
       </div>
 
       <!-- Detection Grid -->
-      <div v-else class="detection-grid">
+      <div v-else class="detection-grid mx-6">
         <div v-for="snapshot in paginatedSnapshots" :key="snapshot.id" class="detection-card">
           <div class="detection-image-container">
             <img :src="snapshot.imageUrl" class="detection-image" :alt="snapshot.animalType" />
@@ -832,12 +833,12 @@ async function sendNotification(snapshot) {
               <q-tooltip>Share</q-tooltip>
             </q-btn>
             <!-- Temporarily disabled
-            <q-btn 
+            <q-btn
               v-if="snapshot.owner_id && !snapshot.notification_sent"
-              flat 
-              round 
-              size="sm" 
-              icon="notifications" 
+              flat
+              round
+              size="sm"
+              icon="notifications"
               @click.stop="sendNotification(snapshot)"
             >
               <q-tooltip>Send Notification to Owner</q-tooltip>
@@ -848,7 +849,7 @@ async function sendNotification(snapshot) {
       </div>
 
       <!-- Snapshots Pagination -->
-      <div v-if="filteredSnapshots.length > snapshotsPagination.rowsPerPage" class="flex justify-center mt-6 mb-6">
+      <div v-if="filteredSnapshots.length > snapshotsPagination.rowsPerPage" class="pagination-container mx-6">
         <q-pagination
           v-model="snapshotsPagination.page"
           :max="snapshotsPagination.totalPages"
@@ -860,7 +861,7 @@ async function sendNotification(snapshot) {
       </div>
     </div>
   </AuthenticatedLayout>
-  
+
   <!-- CCTV Detail Dialog -->
   <q-dialog v-model="dialogVisible" backdrop-filter="blur(4px) saturate(150%)">
     <q-card class="cctv-dialog-card">
@@ -870,7 +871,7 @@ async function sendNotification(snapshot) {
           <q-btn flat round icon="close" @click="closeDialog" />
         </div>
       </q-card-section>
-      
+
       <q-card-section class="dialog-content">
         <div class="dialog-video-container">
           <StreamPlayer v-if="selectedCCTV" :streamUrl="selectedCCTV.videoSrc[0]" />
@@ -921,7 +922,7 @@ async function sendNotification(snapshot) {
       </q-card-section>
     </q-card>
   </q-dialog>
-  
+
   <!-- Create CCTV Card Dialog -->
   <q-dialog v-model="createCardDialogVisible" backdrop-filter="blur(4px) saturate(150%)">
     <q-card class="create-card-dialog">
@@ -931,7 +932,7 @@ async function sendNotification(snapshot) {
           <q-btn flat round icon="close" @click="closeCreateCardDialog" />
         </div>
       </q-card-section>
-      
+
       <q-card-section>
         <div class="mb-4">
           <label class="block text-sm font-medium mb-2">Camera Name</label>
@@ -942,7 +943,7 @@ async function sendNotification(snapshot) {
             placeholder="Enter camera name"
           />
         </div>
-        
+
         <div class="mb-4">
           <label class="block text-sm font-medium mb-2">Location (Optional)</label>
           <input
@@ -952,7 +953,7 @@ async function sendNotification(snapshot) {
             placeholder="Enter camera location"
           />
         </div>
-        
+
         <div class="mb-4">
           <label class="block text-sm font-medium mb-2">Stream URL</label>
           <select
@@ -966,7 +967,7 @@ async function sendNotification(snapshot) {
           </select>
         </div>
       </q-card-section>
-      
+
       <q-card-section class="dialog-actions" align="right">
         <q-btn flat label="Cancel" @click="closeCreateCardDialog" />
         <q-btn class="primary-btn" label="Add Card" @click="addCustomCard" />

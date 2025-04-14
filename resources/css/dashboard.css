@@ -2,8 +2,14 @@
 
 /* Container */
 .dashboard-container {
-    background-color: var(--bg-primary);
     min-height: calc(100vh - 64px);
+    width: 100%;
+    transition: all 0.3s ease;
+}
+
+.dark-mode.dashboard-container {
+    background-color: var(--bg-dark, #121212);
+    color: white;
 }
 
 /* Header Styles */
@@ -14,15 +20,28 @@
     margin-bottom: 20px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;
+    width: 100%;
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .dark-mode .page-header {
     background-color: #1e293b !important;
+    color: white;
 }
 
 .header-title h1 {
     color: var(--text-primary);
     margin-bottom: 5px;
+}
+
+.dark-mode .header-title h1 {
+    color: white;
+}
+
+.dark-mode .header-title p {
+    color: #e2e8f0;
 }
 
 .header-actions {
@@ -92,6 +111,7 @@
 
 .dark-mode .stat-card {
     background-color: #1e293b !important;
+    color: white;
 }
 
 .stat-icon {
@@ -123,6 +143,14 @@
     color: var(--text-secondary);
 }
 
+.dark-mode .stat-value {
+    color: white;
+}
+
+.dark-mode .stat-label {
+    color: #e2e8f0;
+}
+
 /* Chart Cards */
 .theme-card {
     background-color: #d4d8bd !important;
@@ -135,6 +163,46 @@
 
 .dark-mode .theme-card {
     background-color: #1e293b !important;
+    color: white;
+}
+
+/* Sighting cards in dark mode */
+.dark-mode .sighting-card .text-lg,
+.dark-mode .sighting-card .text-sm,
+.dark-mode .sighting-card .text-h6,
+.dark-mode .sighting-card .text-subtitle2,
+.dark-mode .sighting-card .q-card__section,
+.dark-mode .q-card__section,
+.dark-mode .q-card__section *,
+.dark-mode .theme-card .q-card__section,
+.dark-mode .theme-card .q-card__section div {
+    color: white !important;
+}
+
+.dark-mode .sighting-card .text-gray-500,
+.dark-mode .text-gray-500,
+.dark-mode .text-gray-600,
+.dark-mode .q-card__section .text-gray-500 {
+    color: #cbd5e1 !important;
+}
+
+/* Add explicit styling for all text in cards */
+.dark-mode .q-card,
+.dark-mode .q-card * {
+    color: white;
+}
+
+.dark-mode .q-card .text-gray-500,
+.dark-mode .q-card .text-gray-600 {
+    color: #cbd5e1 !important;
+}
+
+/* Target font color directly */
+.dark-mode .theme-card,
+.dark-mode .stat-card,
+.dark-mode .q-table__card,
+.dark-mode .q-card {
+    color-scheme: dark;
 }
 
 /* ApexCharts Customization */
@@ -152,4 +220,44 @@
 
 :deep(.apexcharts-canvas .apexcharts-yaxis-label) {
     fill: var(--text-secondary) !important;
+}
+
+.dark-mode :deep(.apexcharts-canvas .apexcharts-title-text),
+.dark-mode :deep(.apexcharts-canvas .apexcharts-legend-text) {
+    fill: white !important;
+    color: white !important;
+}
+
+.dark-mode :deep(.apexcharts-canvas .apexcharts-xaxis-label),
+.dark-mode :deep(.apexcharts-canvas .apexcharts-yaxis-label) {
+    fill: #e2e8f0 !important;
+}
+
+/* Additional direct ApexCharts selectors for dark mode */
+.dark-mode .apexcharts-title-text {
+    fill: white !important;
+    color: white !important;
+}
+
+.dark-mode .apexcharts-text,
+.dark-mode .apexcharts-title,
+.dark-mode .apexcharts-legend-text,
+.dark-mode .apexcharts-xaxis-label,
+.dark-mode .apexcharts-yaxis-label,
+.dark-mode .apexcharts-datalabel,
+.dark-mode .apexcharts-datalabel-label,
+.dark-mode .apexcharts-tooltip {
+    fill: white !important;
+    color: white !important;
+}
+
+/* Force SVG text elements in dark mode */
+.dark-mode .apexcharts-canvas text {
+    fill: white !important;
+}
+
+/* Target internal SVG elements */
+.dark-mode .apexcharts-title foreignObject span,
+.dark-mode .apexcharts-subtitle foreignObject span {
+    color: white !important;
 }

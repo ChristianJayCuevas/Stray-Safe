@@ -164,132 +164,119 @@ const updateMobileState = () => {
 onMounted(() => {
     window.addEventListener('resize', updateMobileState);
     updateMobileState(); // Initial check
-    
+
     // Initialize carousel
     setTimeout(() => {
         scrollTeamCarousel();
     }, 100);
 });
-// Create original team members array
 const originalTeamMembers = ref([
-    {
-        name: "Jane Doe",
-        title: "Lead Developer",
-        bio: "AI specialist with expertise in computer vision and machine learning models for animal recognition.",
-        image: "/storage/images/team-member-1.jpg", // Replace with actual image path
-        linkedin: "https://linkedin.com/",
-        github: "https://github.com/"
-    },
-    {
-        name: "John Smith",
-        title: "UX/UI Designer",
-        bio: "Creating intuitive interfaces for both web and mobile applications focused on animal welfare.",
-        image: "/storage/images/team-member-2.jpg", // Replace with actual image path
-        linkedin: "https://linkedin.com/",
-        github: "https://github.com/"
-    },
-    {
-        name: "Emily Johnson",
-        title: "Project Manager",
-        bio: "Coordinating between tech and animal welfare organizations to ensure maximum impact.",
-        image: "/storage/images/team-member-3.jpg", // Replace with actual image path
-        linkedin: "https://linkedin.com/"
-    },
-    {
-        name: "Michael Chen",
-        title: "Backend Developer",
-        bio: "Building robust systems for real-time data processing and notification delivery.",
-        image: "/storage/images/team-member-4.jpg", // Replace with actual image path
-        linkedin: "https://linkedin.com/",
-        github: "https://github.com/"
-    },
-    {
-        name: "Sarah Williams",
-        title: "Animal Behavior Specialist",
-        bio: "Ensuring our technology considers animal welfare and behavior in all aspects.",
-        image: "/storage/images/team-member-5.jpg", // Replace with actual image path
-        linkedin: "https://linkedin.com/"
-    }
+  {
+    name: "Christian Cuevas",
+    title: "Full Stack Developer",
+    bio: "Creating intuitive interfaces for both web and mobile applications focused on animal welfare.",
+    image: "/storage/images/chris.png",
+    linkedin: "https://linkedin.com/",
+    github: "https://github.com/"
+  },
+  {
+    name: "Alexander Jake Dela Cruz",
+    title: "AI/ML Engineer",
+    bio: "AI specialist with expertise in computer vision and machine learning models for animal recognition.",
+    image: "/storage/images/alex.png",
+    linkedin: "https://linkedin.com/",
+    github: "https://github.com/"
+  },
+  {
+    name: "Daniel Cruz",
+    title: "Mobile App Developer",
+    bio: "Developing mobile applications for both iOS and Android platforms.",
+    image: "/storage/images/daniel.png",
+    linkedin: "https://linkedin.com/"
+  },
+  {
+    name: "John Christian Macan",
+    title: "UI/UX Designer",
+    bio: "Designing user-friendly interfaces for both web and mobile applications.",
+    image: "/storage/images/john.png",
+    linkedin: "https://linkedin.com/",
+    github: "https://github.com/"
+  },
+  {
+    name: "Justine Flores",
+    title: "Project Manager",
+    bio: "Coordinating between tech and animal welfare organizations to ensure maximum impact.",
+    image: "/storage/images/justine.png",
+    linkedin: "https://linkedin.com/"
+  }
 ]);
 
-// Add clone of first card at the end and last card at the beginning for infinite loop effect
+
 const teamMembers = computed(() => {
-    if (originalTeamMembers.value.length === 0) return [];
-
-    const firstClone = { ...originalTeamMembers.value[0], clone: true };
-    const lastClone = { ...originalTeamMembers.value[originalTeamMembers.value.length - 1], clone: true };
-
-    return [lastClone, ...originalTeamMembers.value, firstClone];
+  const firstClone = { ...originalTeamMembers.value[0], clone: true };
+  const lastClone = { ...originalTeamMembers.value[originalTeamMembers.value.length - 1], clone: true };
+  return [lastClone, ...originalTeamMembers.value, firstClone];
 });
-// Function to scroll the carousel
+
 const scrollTeamCarousel = () => {
-    if (!teamCarousel.value) return;
+  if (!teamCarousel.value) return;
+  const card = teamCarousel.value.querySelector('.team-card');
+  if (!card) return;
+  const cardWidth = card.offsetWidth;
+  const gap = 20;
+  const scrollTo = currentTeamIndex.value * (cardWidth + gap);
 
-    const cardWidth = isMobile.value ? teamCarousel.value.offsetWidth : 280;
-    const gap = 20; // Space between cards
-
-    const scrollPosition = currentTeamIndex.value * (cardWidth + gap);
-
-    teamCarousel.value.style.scrollBehavior = "smooth"; 
-    teamCarousel.value.scrollLeft = scrollPosition;
+  teamCarousel.value.style.scrollBehavior = 'smooth';
+  teamCarousel.value.scrollLeft = scrollTo;
 };
 
-// Watch for changes to currentTeamIndex and scroll the carousel
 watch(currentTeamIndex, () => {
-    scrollTeamCarousel();
+  scrollTeamCarousel();
 });
 
-// Watch for changes to isMobile and update carousel
 watch(isMobile, () => {
-    scrollTeamCarousel();
+  scrollTeamCarousel();
 });
 
-// Go to a specific team member
 const goToTeamMember = (index) => {
-    // Add 1 to account for the clone at the beginning
-    currentTeamIndex.value = index + 1;
-    scrollTeamCarousel();
+  currentTeamIndex.value = index + 1;
 };
 
-// Next team member with proper looping
 const nextTeamMember = () => {
-    if (isScrolling.value) return;
-    isScrolling.value = true;
+  if (isScrolling.value) return;
+  isScrolling.value = true;
+  currentTeamIndex.value++;
 
-    currentTeamIndex.value++;
-
+  setTimeout(() => {
     if (currentTeamIndex.value >= teamMembers.value.length - 1) {
-        setTimeout(() => {
-            teamCarousel.value.style.transition = "none"; // Remove transition for instant jump
-            currentTeamIndex.value = 1; // Jump to real first card
-            scrollTeamCarousel();
-            setTimeout(() => (teamCarousel.value.style.transition = "all 0.3s ease"), 50);
-        }, 300);
+      teamCarousel.value.style.transition = 'none';
+      currentTeamIndex.value = 1;
+      scrollTeamCarousel();
+      setTimeout(() => {
+        teamCarousel.value.style.transition = 'all 0.3s ease';
+      }, 50);
     }
-
-    scrollTeamCarousel();
-    setTimeout(() => (isScrolling.value = false), 300);
+    isScrolling.value = false;
+  }, 350);
 };
 
 const prevTeamMember = () => {
-    if (isScrolling.value) return;
-    isScrolling.value = true;
+  if (isScrolling.value) return;
+  isScrolling.value = true;
+  currentTeamIndex.value--;
 
-    currentTeamIndex.value--;
-
+  setTimeout(() => {
     if (currentTeamIndex.value <= 0) {
-        setTimeout(() => {
-            teamCarousel.value.style.transition = "none"; // Remove transition for instant jump
-            currentTeamIndex.value = teamMembers.value.length - 2; // Jump to real last card
-            scrollTeamCarousel();
-            setTimeout(() => (teamCarousel.value.style.transition = "all 0.3s ease"), 50);
-        }, 300);
+      teamCarousel.value.style.transition = 'none';
+      currentTeamIndex.value = teamMembers.value.length - 2;
+      scrollTeamCarousel();
+      setTimeout(() => {
+        teamCarousel.value.style.transition = 'all 0.3s ease';
+      }, 50);
     }
-
-    scrollTeamCarousel();
-    setTimeout(() => (isScrolling.value = false), 300);
+    isScrolling.value = false;
+  }, 350);
 };
-
 
 // Function to determine if a card is active (for mobile view)
 const isActiveCard = (index) => {
@@ -546,6 +533,8 @@ const isActiveCard = (index) => {
                 </div>
             </div>
 
+
+            <!-- DEMO SECTION -->
             <div id="demo">
                 <div class="demo-section">
                     <div class="section-heading">
@@ -624,10 +613,10 @@ const isActiveCard = (index) => {
 
                         <div class="team-carousel" ref="teamCarousel">
                             <!-- All cards including clones for infinite loop effect -->
-                            <div 
-                                v-for="(member, index) in teamMembers" 
-                                :key="index" 
-                                class="team-card" 
+                            <div
+                                v-for="(member, index) in teamMembers"
+                                :key="index"
+                                class="team-card"
                                 :class="{ 'active': isActiveCard(index) }"
                             >
                                 <div class="member-image">
@@ -653,12 +642,12 @@ const isActiveCard = (index) => {
                             <i class="fa-solid fa-chevron-right"></i>
                         </button>
                     </div>
-                    
+
                     <div class="carousel-dots">
-                        <span 
-                            v-for="(_, index) in originalTeamMembers" 
-                            :key="index" 
-                            class="carousel-dot" 
+                        <span
+                            v-for="(_, index) in originalTeamMembers"
+                            :key="index"
+                            class="carousel-dot"
                             :class="{ 'active': currentTeamIndex === index + 1 }"
                             @click="goToTeamMember(index)"
                         ></span>

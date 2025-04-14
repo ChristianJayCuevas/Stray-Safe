@@ -1,26 +1,26 @@
 <template>
     <AuthenticatedLayout>
-        <div class="registered-pets-container px-6 py-4">
+        <div class="registered-pets-container px-6 py-4" :class="{ 'dark-mode': isDarkMode }">
             <!-- Standardized Header Section -->
-            <div class="page-header mx-6 mt-6 mb-6">
+            <div class="page-header px-6">
                 <div class="flex justify-between items-center">
                     <div class="header-title">
                         <h1 class="text-3xl font-bold font-poppins">Registered Animals</h1>
-                        <p class="text-gray-600 dark:text-gray-400">Barangay Sacred Heart</p>
+                        <p class="text-gray-600 dark:text-gray-400">{{ user.name }}</p>
                     </div>
-                    
+
                     <!-- Action Buttons -->
                     <div class="header-actions flex gap-3">
-                        <q-btn 
+                        <q-btn
                             class="primary-btn"
-                            icon-right="add" 
-                            label="Register New" 
+                            icon-right="add"
+                            label="Register New"
                         >
                             <q-tooltip>Add a new animal registration</q-tooltip>
                         </q-btn>
-                        <q-btn 
+                        <q-btn
                             class="secondary-btn"
-                            icon="refresh" 
+                            icon="refresh"
                             @click="fetchRegisteredAnimals"
                         >
                             <q-tooltip>Refresh animal data</q-tooltip>
@@ -28,174 +28,176 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Statistics Cards -->
-            <div class="stats-section grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div class="stat-card">
-                    <div class="stat-icon total-icon">
-                        <q-icon name="pets" size="sm" />
+
+            <!-- Main Content with consistent padding -->
+
+                <!-- Statistics Cards -->
+                <div class="stats-section grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="stat-card">
+                        <div class="stat-icon total-icon">
+                            <q-icon name="pets" size="sm" />
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value">{{ totalRegistered }}</div>
+                            <div class="stat-label">Total Registered</div>
+                        </div>
                     </div>
-                    <div class="stat-info">
-                        <div class="stat-value">{{ totalRegistered }}</div>
-                        <div class="stat-label">Total Registered</div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon today-icon">
+                            <q-icon name="today" size="sm" />
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value">{{ registeredToday }}</div>
+                            <div class="stat-label">Registered Today</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon dog-icon">
+                            <q-icon name="dog" size="sm" />
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value">{{ dogCount }}</div>
+                            <div class="stat-label">Dogs</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon cat-icon">
+                            <q-icon name="cat" size="sm" />
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value">{{ catCount }}</div>
+                            <div class="stat-label">Cats</div>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="stat-card">
-                    <div class="stat-icon today-icon">
-                        <q-icon name="today" size="sm" />
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value">{{ registeredToday }}</div>
-                        <div class="stat-label">Registered Today</div>
-                    </div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-icon dog-icon">
-                        <q-icon name="dog" size="sm" />
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value">{{ dogCount }}</div>
-                        <div class="stat-label">Dogs</div>
-                    </div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-icon cat-icon">
-                        <q-icon name="cat" size="sm" />
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value">{{ catCount }}</div>
-                        <div class="stat-label">Cats</div>
-                    </div>
-                </div>
+
+                <!-- Search and Filter Bar -->
+                <q-card flat class="filter-card mb-6">
+                    <q-card-section>
+                        <div class="filter-section flex flex-wrap gap-4">
+                            <q-input
+                                v-model="searchText"
+                                placeholder="Search by owner or animal type..."
+                                class="search-input"
+                                bg-color="white"
+                            >
+                                <template v-slot:prepend>
+                                    <q-icon name="search" />
+                                </template>
+                            </q-input>
+
+                            <q-select
+                                v-model="animalTypeFilter"
+                                :options="['All Types', 'Dog', 'Cat', 'Other']"
+                                label="Animal Type"
+                                class="filter-select"
+                                bg-color="white"
+                            >
+                                <template v-slot:prepend>
+                                    <q-icon name="pets" />
+                                </template>
+                            </q-select>
+
+                            <q-select
+                                v-model="statusFilter"
+                                :options="['All Status', 'Active', 'Inactive']"
+                                label="Status"
+                                class="filter-select"
+                                bg-color="white"
+                            >
+                                <template v-slot:prepend>
+                                    <q-icon name="check_circle" />
+                                </template>
+                            </q-select>
+
+                            <q-btn
+                                class="reset-btn self-end"
+                                label="Reset Filters"
+                                @click="resetFilters"
+                            >
+                                <q-tooltip>Clear all filters</q-tooltip>
+                            </q-btn>
+                        </div>
+                    </q-card-section>
+                </q-card>
+
+                <!-- Registered Animals Table -->
+                <q-card flat class="theme-card mb-6">
+                    <q-card-section>
+                        <q-table
+                            :rows="filteredAnimals"
+                            :columns="columns"
+                            row-key="id"
+                            :loading="loading"
+                            :pagination="pagination"
+                            :rows-per-page-options="[10, 15, 20]"
+                            no-data-label="No registered animals to display."
+                            :dark="isDarkMode"
+
+                        >
+                            <template v-slot:loading>
+                                <q-inner-loading showing color="primary">
+                                    <q-spinner-dots size="50px" color="primary" />
+                                </q-inner-loading>
+                            </template>
+
+                            <!-- Custom Picture Cell -->
+                            <template v-slot:body-cell-picture="props">
+                                <q-td :props="props">
+                                    <div class="avatar-wrapper">
+                                        <q-avatar size="60px" class="pet-avatar">
+                                            <img :src="props.row.picture" :alt="props.row.owner" />
+                                        </q-avatar>
+                                    </div>
+                                </q-td>
+                            </template>
+
+                            <!-- Custom Animal Type Cell -->
+                            <template v-slot:body-cell-animal_type="props">
+                                <q-td :props="props">
+                                    <q-chip
+                                        :color="getAnimalTypeColor(props.row.animal_type)"
+                                        text-color="white"
+                                        size="sm"
+                                        class="animal-chip"
+                                    >
+                                        <q-icon :name="getAnimalTypeIcon(props.row.animal_type)" class="q-mr-xs" />
+                                        {{ props.row.animal_type }}
+                                    </q-chip>
+                                </q-td>
+                            </template>
+
+                            <!-- Custom Status Cell -->
+                            <template v-slot:body-cell-status="props">
+                                <q-td :props="props">
+                                    <q-badge
+                                        :color="props.row.status === 'Active' ? 'positive' : 'negative'"
+                                        :label="props.row.status"
+                                        class="status-badge"
+                                    />
+                                </q-td>
+                            </template>
+
+                            <!-- Custom Actions Cell -->
+                            <template v-slot:body-cell-actions="props">
+                                <q-td :props="props">
+                                    <div class="flex gap-2">
+                                        <q-btn flat round size="sm" color="info" icon="visibility">
+                                            <q-tooltip>View details</q-tooltip>
+                                        </q-btn>
+                                        <q-btn flat round size="sm" color="warning" icon="edit">
+                                            <q-tooltip>Edit registration</q-tooltip>
+                                        </q-btn>
+                                    </div>
+                                </q-td>
+                            </template>
+                        </q-table>
+                    </q-card-section>
+                </q-card>
             </div>
-            
-            <!-- Search and Filter Bar -->
-            <q-card flat class="filter-card mb-6">
-                <q-card-section>
-                    <div class="filter-section flex flex-wrap gap-4">
-                        <q-input 
-                            v-model="searchText" 
-                            placeholder="Search by owner or animal type..." 
-                            class="search-input"
-                            bg-color="white"
-                        >
-                            <template v-slot:prepend>
-                                <q-icon name="search" />
-                            </template>
-                        </q-input>
-                        
-                        <q-select
-                            v-model="animalTypeFilter"
-                            :options="['All Types', 'Dog', 'Cat', 'Other']"
-                            label="Animal Type"
-                            class="filter-select"
-                            bg-color="white"
-                        >
-                            <template v-slot:prepend>
-                                <q-icon name="pets" />
-                            </template>
-                        </q-select>
-                        
-                        <q-select
-                            v-model="statusFilter"
-                            :options="['All Status', 'Active', 'Inactive']"
-                            label="Status"
-                            class="filter-select"
-                            bg-color="white"
-                        >
-                            <template v-slot:prepend>
-                                <q-icon name="check_circle" />
-                            </template>
-                        </q-select>
-                        
-                        <q-btn 
-                            class="reset-btn self-end"
-                            label="Reset Filters" 
-                            @click="resetFilters"
-                        >
-                            <q-tooltip>Clear all filters</q-tooltip>
-                        </q-btn>
-                    </div>
-                </q-card-section>
-            </q-card>
-            
-            <!-- Registered Animals Table -->
-            <q-card flat class="theme-card">
-                <q-card-section>
-                    <q-table
-                        :rows="filteredAnimals"
-                        :columns="columns"
-                        row-key="id"
-                        :loading="loading"
-                        :pagination="pagination"
-                        class="pets-table"
-                        :rows-per-page-options="[10, 15, 20]"
-                        no-data-label="No registered animals to display."
-                        :dark="isDarkMode"
-                    >
-                        <template v-slot:loading>
-                            <q-inner-loading showing color="primary">
-                                <q-spinner-dots size="50px" color="primary" />
-                            </q-inner-loading>
-                        </template>
-                        
-                        <!-- Custom Picture Cell -->
-                        <template v-slot:body-cell-picture="props">
-                            <q-td :props="props">
-                                <div class="avatar-wrapper">
-                                    <q-avatar size="60px" class="pet-avatar">
-                                        <img :src="props.row.picture" :alt="props.row.owner" />
-                                    </q-avatar>
-                                </div>
-                            </q-td>
-                        </template>
-                        
-                        <!-- Custom Animal Type Cell -->
-                        <template v-slot:body-cell-animal_type="props">
-                            <q-td :props="props">
-                                <q-chip
-                                    :color="getAnimalTypeColor(props.row.animal_type)"
-                                    text-color="white"
-                                    size="sm"
-                                    class="animal-chip"
-                                >
-                                    <q-icon :name="getAnimalTypeIcon(props.row.animal_type)" class="q-mr-xs" />
-                                    {{ props.row.animal_type }}
-                                </q-chip>
-                            </q-td>
-                        </template>
-                        
-                        <!-- Custom Status Cell -->
-                        <template v-slot:body-cell-status="props">
-                            <q-td :props="props">
-                                <q-badge
-                                    :color="props.row.status === 'Active' ? 'positive' : 'negative'"
-                                    :label="props.row.status"
-                                    class="status-badge"
-                                />
-                            </q-td>
-                        </template>
-                        
-                        <!-- Custom Actions Cell -->
-                        <template v-slot:body-cell-actions="props">
-                            <q-td :props="props">
-                                <div class="flex gap-2">
-                                    <q-btn flat round size="sm" color="info" icon="visibility">
-                                        <q-tooltip>View details</q-tooltip>
-                                    </q-btn>
-                                    <q-btn flat round size="sm" color="warning" icon="edit">
-                                        <q-tooltip>Edit registration</q-tooltip>
-                                    </q-btn>
-                                </div>
-                            </q-td>
-                        </template>
-                    </q-table>
-                </q-card-section>
-            </q-card>
-        </div>
     </AuthenticatedLayout>
 </template>
 
@@ -221,6 +223,7 @@ const loading = ref(true);
 const searchText = ref('');
 const animalTypeFilter = ref('All Types');
 const statusFilter = ref('All Status');
+const user = ref({ name: 'User' }); // Added user data reference
 
 // Pagination settings
 const pagination = ref({
@@ -242,13 +245,13 @@ const columns = [
 
 // Computed properties
 const dogCount = computed(() => {
-    return registeredAnimals.value.filter(animal => 
+    return registeredAnimals.value.filter(animal =>
         animal.animal_type.toLowerCase() === 'dog'
     ).length;
 });
 
 const catCount = computed(() => {
-    return registeredAnimals.value.filter(animal => 
+    return registeredAnimals.value.filter(animal =>
         animal.animal_type.toLowerCase() === 'cat'
     ).length;
 });
@@ -256,18 +259,18 @@ const catCount = computed(() => {
 const filteredAnimals = computed(() => {
     return registeredAnimals.value.filter(animal => {
         // Text search
-        const searchMatch = searchText.value === '' || 
+        const searchMatch = searchText.value === '' ||
             animal.owner.toLowerCase().includes(searchText.value.toLowerCase()) ||
             animal.animal_type.toLowerCase().includes(searchText.value.toLowerCase());
-        
+
         // Animal type filter
-        const typeMatch = animalTypeFilter.value === 'All Types' || 
+        const typeMatch = animalTypeFilter.value === 'All Types' ||
             animal.animal_type.toLowerCase() === animalTypeFilter.value.toLowerCase();
-        
+
         // Status filter
-        const statusMatch = statusFilter.value === 'All Status' || 
+        const statusMatch = statusFilter.value === 'All Status' ||
             animal.status === statusFilter.value;
-        
+
         return searchMatch && typeMatch && statusMatch;
     });
 });
@@ -301,7 +304,7 @@ async function fetchRegisteredAnimals() {
             type: 'negative',
             message: 'Failed to fetch registered animals.',
         });
-        
+
         // Mock data for development
         registeredAnimals.value = [
             {
@@ -335,7 +338,7 @@ async function fetchRegisteredAnimals() {
                 actions: null
             }
         ];
-        
+
         totalRegistered.value = registeredAnimals.value.length;
         registeredToday.value = 2;
     } finally {
@@ -368,6 +371,17 @@ function getAnimalTypeIcon(type) {
 // Fetch data when component is mounted
 onMounted(() => {
     fetchRegisteredAnimals();
+
+    // Fetch current user data
+    try {
+        axios.get('/api/user').then(response => {
+            if (response.data) {
+                user.value = response.data;
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching user data:', error);
+    }
 });
 </script>
 
