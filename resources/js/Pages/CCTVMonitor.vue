@@ -216,7 +216,7 @@ onMounted(() => {
   if (props.initialCustomCCTVs && props.initialCustomCCTVs.length > 0) {
     customCards.value = props.initialCustomCCTVs.map(cctv => ({
       id: cctv.id,
-      name: cctv.name,
+      name: cctv.camera_name,
       location: cctv.location,
       status: cctv.status,
       // Ensure the URL uses https
@@ -925,7 +925,7 @@ async function sendNotification(snapshot) {
 
   <!-- Create CCTV Card Dialog -->
   <q-dialog v-model="createCardDialogVisible" backdrop-filter="blur(4px) saturate(150%)">
-    <q-card class="create-card-dialog">
+    <q-card class="create-card-dialog" :dark="isDarkTheme">
       <q-card-section class="dialog-header">
         <div class="flex justify-between items-center">
           <h2 class="dialog-title">Add Camera Card</h2>
@@ -935,30 +935,33 @@ async function sendNotification(snapshot) {
 
       <q-card-section>
         <div class="mb-4">
-          <label class="block text-sm font-medium mb-2">Camera Name</label>
+          <label class="block text-sm font-medium mb-2" :class="isDarkTheme ? 'text-gray-300' : 'text-gray-700'">Camera Name</label>
           <input
             v-model="newCardName"
             type="text"
-            class="form-input w-full rounded-md border border-gray-300 p-2"
+            class="form-input w-full rounded-md p-2"
+            :class="isDarkTheme ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'"
             placeholder="Enter camera name"
           />
         </div>
 
         <div class="mb-4">
-          <label class="block text-sm font-medium mb-2">Location (Optional)</label>
+          <label class="block text-sm font-medium mb-2" :class="isDarkTheme ? 'text-gray-300' : 'text-gray-700'">Location (Optional)</label>
           <input
             v-model="newCardLocation"
             type="text"
-            class="form-input w-full rounded-md border border-gray-300 p-2"
+            class="form-input w-full rounded-md p-2"
+            :class="isDarkTheme ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'"
             placeholder="Enter camera location"
           />
         </div>
 
         <div class="mb-4">
-          <label class="block text-sm font-medium mb-2">Stream URL</label>
+          <label class="block text-sm font-medium mb-2" :class="isDarkTheme ? 'text-gray-300' : 'text-gray-700'">Stream URL</label>
           <select
             v-model="selectedStreamUrl"
-            class="form-select w-full rounded-md border border-gray-300 p-2"
+            class="form-select w-full rounded-md p-2"
+            :class="isDarkTheme ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'"
           >
             <option value="" disabled>Select a stream</option>
             <option v-for="stream in availableStreams" :key="stream.id" :value="stream.hls_url">
@@ -969,7 +972,7 @@ async function sendNotification(snapshot) {
       </q-card-section>
 
       <q-card-section class="dialog-actions" align="right">
-        <q-btn flat label="Cancel" @click="closeCreateCardDialog" />
+        <q-btn flat :text-color="isDarkTheme ? 'white' : 'black'" label="Cancel" @click="closeCreateCardDialog" />
         <q-btn class="primary-btn" label="Add Card" @click="addCustomCard" />
       </q-card-section>
     </q-card>

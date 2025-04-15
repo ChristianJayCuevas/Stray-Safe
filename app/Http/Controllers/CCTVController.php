@@ -31,12 +31,12 @@ class CCTVController extends Controller
     {
         // Load custom CCTVs from the database
         $customCCTVs = CCTV::all();
-        
+
         return inertia('CCTVMonitor', [
             'initialCustomCCTVs' => $customCCTVs
         ]);
     }
-    
+
     /**
      * Store a new custom CCTV.
      */
@@ -48,36 +48,36 @@ class CCTVController extends Controller
             'stream_url' => 'required|string|max:255',
             'original_stream_id' => 'nullable|string|max:255',
         ]);
-        
+
         $cctv = CCTV::create([
-            'name' => $validated['name'],
+            'camera_name' => $validated['name'],
             'location' => $validated['location'],
             'stream_url' => $validated['stream_url'],
             'original_stream_id' => $validated['original_stream_id'],
             'status' => 'Online',
             'is_custom' => true,
         ]);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'CCTV created successfully',
             'cctv' => $cctv
         ]);
     }
-    
+
     /**
      * Get all custom CCTVs.
      */
     public function getCustomCCTVs()
     {
         $cctvs = CCTV::all();
-        
+
         return response()->json([
             'success' => true,
             'cctvs' => $cctvs
         ]);
     }
-    
+
     /**
      * Delete a custom CCTV.
      */
@@ -85,7 +85,7 @@ class CCTVController extends Controller
     {
         $cctv = CCTV::findOrFail($id);
         $cctv->delete();
-        
+
         return response()->json([
             'success' => true,
             'message' => 'CCTV deleted successfully'
