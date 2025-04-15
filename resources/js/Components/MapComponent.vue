@@ -3842,7 +3842,7 @@ const calculateConeCenter = (cameraLng, cameraLat, perceptionRange, viewingDirec
 .user-map-panel {
   position: absolute;
   top: 70px;
-  right: 20px;
+  right: 400px;
   transform: none;
   background-color: rgba(255, 255, 255, 0.95);
   border-radius: 8px;
